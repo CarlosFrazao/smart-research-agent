@@ -8,12 +8,19 @@ services:
       - FIRECRAWL_BASE_URL=http://firecrawl-api-new:3002
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
+      - SEARXNG_URL=http://firecrawl-searxng:8080
     ports:
       - "3458:3458"
     volumes:
       - ./reports:/app/reports
       - ./.cache:/app/.cache
       - ./kuzu_data:/app/kuzu_data
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./prompts:/app/prompts
+      - ./hooks:/app/hooks
+      - ./static:/app/static
+      - ./test_sources.py:/app/test_sources.py
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
