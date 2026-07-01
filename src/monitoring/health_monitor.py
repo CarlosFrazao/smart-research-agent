@@ -182,6 +182,9 @@ class HealthMonitor:
         # Referência ao orchestrator (injetada externamente se necessário)
         self.orchestrator: Optional[Any] = None
 
+        # Contador de falhas por fonte de busca (MEL-6.2)
+        self.failure_counts: Dict[str, int] = {}
+
     # ── Verificação Principal ─────────────────────────────────────────────────
 
     async def check_all(self) -> HealthSnapshot:
@@ -352,3 +355,34 @@ class HealthMonitor:
     def get_last_snapshot(self) -> Optional[HealthSnapshot]:
         """Retorna o snapshot mais recente ou None."""
         return self._history[-1] if self._history else None
+
+    def report_failure(self, source: str, error: str) -> None:
+        """Incrementa contador de falhas consecutivas de uma fonte de busca e desabilita se >= 3."""
+        self.failure_counts[source] = self.failure_counts.get(source, 0) + 1
+        logger.warning(
+            f"HealthMonitor: falha relatada na fonte '{source}'. "
+            f"Contador: {self.failure_counts[source]}/3. Erro: {error}"
+        )
+        
+        if self.failure_counts[source] >= 3:
+            logger.error(
+                f"🚨 HealthMonitor: DESABILITANDO FONTE '{source.upper()}' temporariamente devido a falhas consecutivas!"
+            )
+            print(f"\n[Aviso HealthMonitor] 🚨 Desabilitando fonte '{source.upper()}' devido a falhas repetidas: {error}\n")
+            
+            if self.orchestrator and hasattr(self.orchestrator, "searchers"):
+                searcher = self.orchestrator.searchers.get(source)
+                if searcher:
+                    searcher.enabled = False
+
+    def get_active_sources(self) -> List[str]:
+        """Retorna os nomes de fontes de busca que estão ativas e não desabilitadas."""
+        if self.orchestrator and hasattr(self.orchestrator, "searchers"):
+            return [
+                name for name, searcher in self.orchestrator.searchers.items()
+                if searcher.enabled
+            ]
+        
+        # Fallback se orchestrator não estiver disponível
+        all_sources = ["hackernews", "github", "reddit", "arxiv", "producthunt", "awesome", "web", "firecrawl"]
+        return [s for s in all_sources if self.failure_counts.get(s, 0) < 3]

@@ -135,4 +135,6 @@ kuzu_data/
 scratch/
 *.bak
 clean_repo.ps1
+logs/
+*.jsonl
 

@@ -406,6 +406,12 @@ class Orchestrator:
                 break
 
             logger.info(f"  Gap detectado (iter {iteration + 1}): {gap.missing_aspects}")
+            from src.utils.logger import structured_logger
+            structured_logger.log_gap(
+                gap_description=", ".join(gap.missing_aspects),
+                query_used=", ".join(gap.new_queries),
+                iteration=iteration + 1
+            )
             gap_queries = [
                 ExpandedQuery(query=q, type="gap_fill", priority="alta", rationale="gap detection")
                 for q in gap.new_queries
@@ -531,7 +537,14 @@ class Orchestrator:
         return report
 
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
-        res = await self._search_with_timeout(searcher, query, domain)
+        from src.utils.logger import structured_logger
+        error_msg = None
+        res = []
+        try:
+            res = await self._search_with_timeout(searcher, query, domain)
+        except Exception as e:
+            error_msg = str(e)
+        structured_logger.log_search(source_name, query, len(res), error_msg)
         return source_name, query, res
 
     async def _parallel_search(self, queries: List[ExpandedQuery], plan, intent):
@@ -572,6 +585,12 @@ class Orchestrator:
             if not searcher or not searcher.enabled:
                 continue
             for eq in source_queries:
+                from src.query_validator import QueryValidator
+                sanitized = QueryValidator.sanitize(eq.query)
+                if not QueryValidator.is_valid(sanitized):
+                    logger.warning(f"Query desconsiderada por ser inválida ou malformada: '{eq.query[:50]}'")
+                    continue
+                eq.query = sanitized
                 cache_key = f"{source_name}:{eq.query}"
                 cached = self.cache.get("search", cache_key)
                 if cached is not None:
@@ -616,8 +635,16 @@ class Orchestrator:
             )
         except asyncio.TimeoutError:
             logger.warning(f"Timeout em {searcher.__class__.__name__}")
+            if self.health_monitor:
+                cls_name = searcher.__class__.__name__.lower()
+                source_name = "hackernews" if "hn" in cls_name else cls_name.replace("searcher", "")
+                self.health_monitor.report_failure(source_name, "TimeoutError")
             return searcher.fallback(query)
         except Exception as e:
             logger.error(f"Erro em {searcher.__class__.__name__}: {e}")
+            if self.health_monitor:
+                cls_name = searcher.__class__.__name__.lower()
+                source_name = "hackernews" if "hn" in cls_name else cls_name.replace("searcher", "")
+                self.health_monitor.report_failure(source_name, str(e))
             return []
 

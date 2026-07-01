@@ -33,3 +33,48 @@ def setup_logger(name: str = "smart_research", level: str = "INFO") -> logging.L
         logger.addHandler(handler)
 
     return logger
+
+
+import os
+import json
+from datetime import datetime
+
+class StructuredLogger:
+    def __init__(self, log_dir: str = "logs"):
+        self.log_dir = log_dir
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.log_file = os.path.join(self.log_dir, "sra_structured.jsonl")
+
+    def _write_log(self, data: dict):
+        try:
+            data["timestamp"] = datetime.now().isoformat()
+            with open(self.log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+        except Exception:
+            pass  # Fail-safe
+
+    def log_search(self, source: str, query: str, results_count: int, error: str = None):
+        self._write_log({
+            "event": "search",
+            "source": source,
+            "query": query,
+            "results_count": results_count,
+            "error": error
+        })
+
+    def log_gap(self, gap_description: str, query_used: str, iteration: int):
+        self._write_log({
+            "event": "gap_detection",
+            "gap_description": gap_description,
+            "query_used": query_used,
+            "iteration": iteration
+        })
+        
+    def log_event(self, event_name: str, **kwargs):
+        self._write_log({
+            "event": event_name,
+            **kwargs
+        })
+
+structured_logger = StructuredLogger()
+
