@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  smart-research-agent:
+    build: .
+    env_file: .env
+    environment:
+      - FIRECRAWL_BASE_URL=http://firecrawl-api-new:3002
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+    ports:
+      - "3458:3458"
+    volumes:
+      - ./reports:/app/reports
+      - ./.cache:/app/.cache
+      - ./kuzu_data:/app/kuzu_data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - firecrawl_net
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: sra-chromadb
+    ports:
+      - "3024:8000"
+    volumes:
+      - ./chroma_data:/chroma/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/data
+    networks:
+      - default
+      - firecrawl_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  firecrawl:
+    image: ghcr.io/firecrawl/firecrawl:latest
+    ports:
+      - "3002:3002"
+    environment:
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - with-firecrawl
+
+networks:
+  firecrawl_net:
+    external: true
+    name: firecrawl_backend

@@ -1,0 +1,18 @@
+# misinformation_domains.yaml — Bloco 4.4
+# Lista de sites não-confiáveis ou conhecidos por espalhar desinformação técnica,
+# clickbait, ou baixa credibilidade científica/tecnológica.
+# O penalty indica o multiplicador aplicado ao score final do resultado (0.0 a 1.0).
+
+misinformation_domains:
+  - domain: "fake-tech-news.com"
+    reason: "Satirical or proven fake technical news site"
+    penalty: 0.1
+  - domain: "unreliable-blog.org"
+    reason: "SEO spam and low quality content farm"
+    penalty: 0.5
+  - domain: "clickbait-science.net"
+    reason: "Pseudoscience and speculative tech news without peer review"
+    penalty: 0.3
+  - domain: "buzz-tech-rumors.xyz"
+    reason: "Unverified leaks and tech gossip"
+    penalty: 0.4

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SRA Dashboard — Smart Research Agent</title>
+  <meta name="description" content="Dashboard premium do Smart Research Agent ARES-V4.3. Pesquisa profunda e chat com IAs."/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/index.css"/>
+</head>
+<body>
+  <div id="app">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <div id="logo">
+          <span id="logo-icon">⚡</span>
+          <span id="logo-text">SRA<span id="logo-version">v4.3</span></span>
+        </div>
+        <div id="agent-status">
+          <span id="status-dot"></span>
+          <span id="status-label">Verificando...</span>
+        </div>
+      </div>
+
+      <div id="sidebar-modes">
+        <button class="mode-btn active" id="btn-research" onclick="setMode('research')">
+          🔍 Pesquisa ARES
+        </button>
+        <button class="mode-btn" id="btn-chat" onclick="setMode('chat')">
+          💬 Chat Direto
+        </button>
+      </div>
+
+      <div id="sidebar-section">
+        <h3 class="sidebar-title">📂 Histórico</h3>
+        <div id="reports-list">
+          <div class="loading-reports">Carregando...</div>
+        </div>
+      </div>
+
+      <div id="sidebar-footer">
+        <div id="settings-row">
+          <select id="model-select" title="Modelo de linguagem para Chat Direto">
+            <option value="auto">🤖 Auto (SmartRouter)</option>
+            <option value="openrouter/meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B (Free)</option>
+            <option value="openrouter/anthropic/claude-haiku-20240307">Claude Haiku</option>
+            <option value="openrouter/anthropic/claude-sonnet-4">Claude Sonnet 4</option>
+            <option value="gemini/gemini-2.5-flash">Gemini 2.5 Flash</option>
+          </select>
+        </div>
+        <div id="sidebar-bottom-row">
+          <div id="sidebar-version">ARES-V4.3 · Self-Hosted</div>
+          <button id="btn-settings" onclick="openSettings()" title="Configurar API Keys">⚙️</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main id="main">
+      <!-- RESEARCH MODE -->
+      <div id="panel-research" class="panel active">
+        <div id="research-header">
+          <h1>Smart Research Agent</h1>
+          <p id="research-subtitle">Pipeline ARES-V4.3 · 9 passos · 8 fontes paralelas</p>
+        </div>
+
+        <div id="search-container">
+          <div id="search-box">
+            <span id="search-icon">🔍</span>
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Pesquise qualquer tecnologia, ferramenta ou framework..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="search-btn" onclick="startResearch()" title="Iniciar pesquisa">
+              <span id="search-btn-icon">→</span>
+            </button>
+          </div>
+          <div id="search-suggestions">
+            <span class="suggestion" onclick="suggestQuery('alternativas self-hosted ao Notion com banco relacional')">alternativas ao Notion</span>
+            <span class="suggestion" onclick="suggestQuery('melhores frameworks Python para APIs REST 2026')">frameworks Python 2026</span>
+            <span class="suggestion" onclick="suggestQuery('ferramentas de automação open source alternativa n8n')">alternativas ao n8n</span>
+          </div>
+        </div>
+
+        <div id="progress-bar-container" class="hidden">
+          <div id="progress-steps">
+            <div class="step" data-step="1">Analisando intenção</div>
+            <div class="step" data-step="2">Expandindo queries</div>
+            <div class="step" data-step="3">Planejando fontes</div>
+            <div class="step" data-step="4">Buscando em paralelo</div>
+            <div class="step" data-step="5">Ranqueando</div>
+            <div class="step" data-step="6">Detectando gaps</div>
+            <div class="step" data-step="7">Re-pesquisando</div>
+            <div class="step" data-step="8">Sintetizando</div>
+            <div class="step" data-step="9">Gerando relatório</div>
+          </div>
+          <div id="progress-track">
+            <div id="progress-fill"></div>
+          </div>
+          <div id="progress-label">Iniciando pesquisa...</div>
+        </div>
+
+        <div id="report-container" class="hidden">
+          <div id="report-actions">
+            <button class="action-btn" id="btn-feedback-up" onclick="sendFeedback('positive')" title="Relatório útil">👍 Útil</button>
+            <button class="action-btn" id="btn-feedback-down" onclick="sendFeedback('negative')" title="Relatório ruim">👎 Ruim</button>
+            <button class="action-btn" onclick="saveToObsidian()" title="Salvar no Obsidian">📓 Obsidian</button>
+            <button class="action-btn" onclick="copyReport()" title="Copiar Markdown">📋 Copiar</button>
+            <button class="action-btn" onclick="downloadReport()" title="Baixar relatório como arquivo .md">📥 Baixar</button>
+          </div>
+          <div id="report-content"></div>
+        </div>
+      </div>
+
+      <!-- CHAT MODE -->
+      <div id="panel-chat" class="panel">
+        <div id="chat-header">
+          <div id="chat-header-row">
+            <div>
+              <h1>Chat Direto</h1>
+              <p id="chat-subtitle">Converse com IAs do OpenRouter e Gemini sem pipeline de pesquisa</p>
+            </div>
+            <button class="action-btn" id="btn-download-chat" onclick="downloadChat()" title="Baixar conversa como Markdown">📥 Exportar Chat</button>
+          </div>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="attachment-preview" class="hidden"></div>
+        <div id="chat-input-area">
+          <input type="file" id="chat-file-input" style="display:none;" accept=".txt,.md,.json,.csv" onchange="handleFileAttach(event)" />
+          <div id="chat-input-wrapper">
+            <button id="chat-attach-btn" onclick="document.getElementById('chat-file-input').click()" title="Anexar arquivo (.txt, .md, .json, .csv)">📎</button>
+            <textarea
+              id="chat-input"
+              placeholder="Digite sua mensagem..."
+              rows="3"
+              onkeydown="handleChatKey(event)"
+            ></textarea>
+            <button id="chat-send-btn" onclick="sendChatMessage()" title="Enviar mensagem">→</button>
+          </div>
+          <div id="chat-hints">
+            <span>Enter para enviar · Shift+Enter para nova linha · 📎 para anexar documento</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL: Configurações de API Keys -->
+  <div id="settings-modal" class="modal hidden" role="dialog" aria-labelledby="settings-modal-title" aria-modal="true">
+    <div class="modal-backdrop" onclick="closeSettings()"></div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="settings-modal-title">⚙️ Configurações de API</h2>
+        <button class="modal-close-btn" onclick="closeSettings()" title="Fechar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="settings-provider">Provedor LLM</label>
+          <select id="settings-provider">
+            <option value="">Padrão do servidor (.env)</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="settings-api-key">API Key</label>
+          <input type="password" id="settings-api-key" placeholder="sk-or-... ou AIza..." autocomplete="off" />
+          <p class="form-hint">Salva localmente no navegador. Nunca enviada aos logs do servidor.</p>
+        </div>
+        <div class="form-group">
+          <label for="settings-model">Modelo preferido</label>
+          <input type="text" id="settings-model" placeholder="Ex: openrouter/anthropic/claude-sonnet-4" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeSettings()">Cancelar</button>
+        <button class="btn-primary" onclick="saveSettings()">💾 Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/index.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+weights:
+  github:
+    stars: 0.30
+    forks: 0.20
+    recency: 0.20
+    releases: 0.15
+    license: 0.10
+    documentation: 0.05
+  reddit:
+    upvotes: 0.40
+    comments: 0.30
+    recency: 0.20
+    subreddit_relevance: 0.10
+  hackernews:
+    points: 0.45
+    comments: 0.25
+    recency: 0.20
+    author_reputation: 0.10
+  firecrawl:
+    content_quality: 0.35
+    freshness: 0.25
+    authority: 0.25
+    relevance: 0.15
+  awesome:
+    list_stars: 0.40
+    position_in_list: 0.30
+    recency: 0.30
+  producthunt:
+    votes: 0.40
+    comments: 0.30
+    recency: 0.30
+  arxiv:
+    citations: 0.50
+    recency: 0.30
+    relevance: 0.20

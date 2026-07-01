@@ -1,0 +1,29 @@
+domains:
+  saas_b2b:
+    primary: [github, producthunt, reddit]
+    secondary: [hackernews, awesome, firecrawl]
+    github_qualifiers: "stars:>50 sort:stars"
+  dev_tools:
+    primary: [github, hackernews, reddit]
+    secondary: [awesome, arxiv, firecrawl]
+    github_qualifiers: "stars:>100 sort:updated"
+  ai_ml:
+    primary: [arxiv, github, hackernews]
+    secondary: [reddit, firecrawl, producthunt]
+    github_qualifiers: "stars:>200 sort:stars"
+  automation:
+    primary: [github, reddit, producthunt]
+    secondary: [hackernews, awesome, firecrawl]
+    github_qualifiers: "stars:>30 sort:stars"
+  infrastructure:
+    primary: [github, hackernews, awesome]
+    secondary: [reddit, arxiv, firecrawl]
+    github_qualifiers: "stars:>100 sort:updated"
+  open_source:
+    primary: [github, awesome, hackernews]
+    secondary: [reddit, producthunt, firecrawl]
+    github_qualifiers: "stars:>10 sort:stars"
+  general:
+    primary: [github, reddit, hackernews, firecrawl]
+    secondary: [producthunt, arxiv, awesome]
+    github_qualifiers: "sort:stars"

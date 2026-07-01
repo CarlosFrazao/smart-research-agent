@@ -1,0 +1,54 @@
+sources:
+  github:
+    enabled: true
+    timeout: 30
+    max_results: 20
+    base_url: https://api.github.com/search/repositories
+  reddit:
+    enabled: true
+    timeout: 20
+    max_results: 20
+    base_url: https://www.reddit.com/search.json
+  hackernews:
+    enabled: true
+    timeout: 20
+    max_results: 20
+    base_url: https://hn.algolia.com/api/v1/search
+  arxiv:
+    enabled: true
+    timeout: 30
+    max_results: 10
+    base_url: http://export.arxiv.org/api/query
+  producthunt:
+    enabled: true
+    timeout: 20
+    max_results: 10
+    base_url: https://api.producthunt.com/v2/api/graphql
+  awesome:
+    enabled: true
+    timeout: 30
+    max_results: 30
+  firecrawl:
+    enabled: true
+    timeout: 45
+    max_results: 10
+  web:
+    enabled: true
+    timeout: 45
+    max_results: 10
+  semantic_scholar:
+    enabled: true
+    timeout: 30
+    max_results: 10
+    base_url: https://api.semanticscholar.org/graph/v1/paper/search
+  pubmed:
+    enabled: true
+    timeout: 30
+    max_results: 10
+    base_url: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/
+  youtube:
+    enabled: true
+    timeout: 20
+    max_results: 5
+    base_url: https://www.googleapis.com/youtube/v3/
+
