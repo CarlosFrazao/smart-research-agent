@@ -1,4 +1,6 @@
 from typing import List, Dict, Any
+import asyncio
+import time
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
@@ -12,8 +14,22 @@ class HNSearcher(BaseSearcher):
         super().__init__(config)
         self.base_url = "https://hn.algolia.com/api/v1/search"
         self.http = HTTPClient(timeout=self.timeout)
+        self.last_request_time = 0.0
+        self.min_interval = 3.6  # segundos entre requests
+        self._cache: Dict[str, List[SearchResult]] = {}
 
     async def search(self, query: str, **kwargs) -> List[SearchResult]:
+        cache_key = f"{query}:{self.max_results}"
+        if cache_key in self._cache:
+            logger.info(f"HN search cache hit para: '{query}'")
+            return self._cache[cache_key]
+
+        elapsed = time.time() - self.last_request_time
+        if elapsed < self.min_interval:
+            wait_time = self.min_interval - elapsed
+            logger.info(f"HN search rate-limit throttle: aguardando {wait_time:.2f}s")
+            await asyncio.sleep(wait_time)
+
         params = {
             "query": query,
             "tags": "story",
@@ -23,7 +39,10 @@ class HNSearcher(BaseSearcher):
         try:
             data = await self.http.get(self.base_url, params=params)
             hits = data.get("hits", [])
-            return [self.normalize(hit) for hit in hits]
+            results = [self.normalize(hit) for hit in hits]
+            self.last_request_time = time.time()
+            self._cache[cache_key] = results
+            return results
         except Exception as e:
             logger.error(f"HN search erro: {e}")
             return self.fallback(query)

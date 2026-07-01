@@ -29,49 +29,36 @@ class ScrapingRaceClient:
             self._wrap_task("direct_http", self._scrape_direct_http(url))
         ))
         
-        # Orquestrador da corrida
-        done, pending = await asyncio.wait(
-            tasks, 
-            return_when=asyncio.FIRST_COMPLETED,
-            timeout=self.timeout
-        )
+        # 3. Tarefa Competidora C: Jina Reader API (Gratuito, robusto, ideal para bypass de Cloudflare)
+        tasks.append(asyncio.create_task(
+            self._wrap_task("jina_reader", self._scrape_via_jina(url))
+        ))
         
         result = {}
         winner_name = None
         
-        # Processa a primeira tarefa que concluiu
-        for task in done:
-            try:
-                task_result = task.result()
-                if task_result and task_result.get("success"):
-                    # Valida se o conteúdo é substancial (não é página de erro vazia)
-                    content = task_result.get("markdown", "") or task_result.get("html", "")
-                    if len(content.strip()) > 150:
-                        result = task_result
-                        winner_name = task_result.get("engine")
-                        break
-            except Exception as e:
-                logger.debug(f"Competidor da corrida falhou com exceção: {e}")
-        
-        # Se a primeira concluída não for válida, processa as restantes conforme terminarem
-        if not result and done:
-            for task in done:
+        try:
+            for future in asyncio.as_completed(tasks, timeout=self.timeout):
                 try:
-                    task_result = task.result()
+                    task_result = await future
                     if task_result and task_result.get("success"):
-                        result = task_result
-                        winner_name = task_result.get("engine")
-                        break
-                except Exception:
-                    pass
-
-        # Cancela todos os competidores lentos/pendentes imediatamente
-        for task in pending:
-            task.cancel()
+                        content = task_result.get("markdown", "") or task_result.get("html", "")
+                        if len(content.strip()) > 150:
+                            result = task_result
+                            winner_name = task_result.get("engine")
+                            break
+                except Exception as e:
+                    logger.debug(f"Competidor da corrida falhou com exceção: {e}")
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout na corrida de scraping para {url}")
             
+        # Cancela todos os competidores que ainda não concluíram
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+                
         # Garante o encerramento seguro no event loop
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
             
         if result:
             logger.info(f"🏆 Corrida de scraping concluída! Vencedor: {winner_name} para URL: {url}")
@@ -103,7 +90,6 @@ class ScrapingRaceClient:
                 }
         except Exception as e:
             logger.error(f"Erro fatal no fallback final de scraping para {url}: {e}")
-            
         return {"success": False, "markdown": "", "error": "Todos os motores de scraping falharam."}
 
     async def _wrap_task(self, name: str, coro) -> Dict[str, Any]:
@@ -187,3 +173,26 @@ class ScrapingRaceClient:
         text = re.sub(r'\n\s*\n+', '\n\n', text)
         
         return text.strip()
+
+    async def _scrape_via_jina(self, url: str) -> Dict[str, Any]:
+        """Raspagem via Jina Reader API (https://r.jina.ai/<url>)."""
+        jina_url = f"https://r.jina.ai/{url}"
+        headers = {
+            "Accept": "text/markdown",
+            "User-Agent": "curl/8.6.0"
+        }
+        timeout = aiohttp.ClientTimeout(total=20.0, connect=5.0)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(jina_url, headers=headers) as response:
+                    if response.status == 200:
+                        content = await response.text()
+                        if content and len(content.strip()) > 150:
+                            return {
+                                "success": True,
+                                "markdown": content
+                            }
+                    logger.debug(f"Jina Reader returned status {response.status} for {url}")
+        except Exception as e:
+            logger.debug(f"Jina Reader failed in race: {e}")
+        return {"success": False}
