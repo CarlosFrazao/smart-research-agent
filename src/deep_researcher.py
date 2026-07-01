@@ -191,6 +191,8 @@ class DeepResearcher:
             intent = type("IntentResult", (), {
                 "domain": type("Domain", (), {"value": "general"})(),
                 "intention": type("Intention", (), {"value": "discover"})(),
+                "urgency": "nao",
+                "confidence": "alta",
             })()
             source_plan = self.orchestrator.source_planner.plan(intent, expanded_queries)
             results = await self.orchestrator._parallel_search(

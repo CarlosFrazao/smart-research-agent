@@ -163,8 +163,14 @@ class ResearchAuditor:
 
         # Fallback: extrai frases que começam com dados numéricos ou termos factuais
         import re
-        sentences = re.findall(r"[A-Z][^.!?]{20,150}[.!?]", report_text)
-        return [AuditClaim(text=s.strip()) for s in sentences[:20]]
+        sentences = re.findall(r"[A-Z][^.!?\n]{20,150}[.!?]", report_text)
+        filtered_sentences = []
+        for s in sentences:
+            s_clean = s.strip()
+            if "> Gerado em" in s_clean or "##" in s_clean or "---" in s_clean or not s_clean:
+                continue
+            filtered_sentences.append(s_clean)
+        return [AuditClaim(text=s) for s in filtered_sentences[:20]]
 
     # ── Validação de Claims ──────────────────────────────────────────────────
 
@@ -240,6 +246,8 @@ class ResearchAuditor:
                 intent = type("IntentResult", (), {
                     "domain": type("Domain", (), {"value": "general"})(),
                     "intention": type("Intention", (), {"value": "verify"})(),
+                    "urgency": "nao",
+                    "confidence": "alta",
                 })()
 
                 source_plan = self.orchestrator.source_planner.plan(intent, expanded)
