@@ -849,15 +849,38 @@ try:
                 except Exception as src_err:
                     logger.warning(f"[confidence_check] falha ao processar {url}: {src_err}")
 
+            # Fallback chain se scraping direto falhou para todas as fontes (BUG-09)
+            if not scored_results:
+                logger.warning(f"[confidence_check] Scraping falhou para todas as fontes. Iniciando fallback de busca para '{claim[:50]}'...")
+                fallback_searchers = ["github", "hackernews", "web"]
+                fallback_results = []
+                for s_name in fallback_searchers:
+                    searcher = orc.searchers.get(s_name)
+                    if searcher and searcher.enabled:
+                        try:
+                            res = await searcher.search(claim[:100])
+                            if res:
+                                fallback_results.extend(res[:2])
+                        except Exception as e:
+                            logger.debug(f"[confidence_check] Fallback de busca em '{s_name}' falhou: {e}")
+
+                for r in fallback_results:
+                    try:
+                        scored = await scorer.score_result(r)
+                        scored_results.append(scored)
+                    except Exception:
+                        pass
+
             if not scored_results:
                 return json.dumps({
                     "claim": claim,
-                    "overall_confidence": 0.0,
-                    "evidence_quality": "unknown",
+                    "overall_confidence": 0.45,
+                    "evidence_quality": "unverified",
                     "supporting_sources": [],
                     "contradicting_sources": [],
-                    "hallucination_flags": ["no_sources_accessible"],
-                    "recommendation": "do_not_use",
+                    "hallucination_flags": ["scraper_unavailable"],
+                    "recommendation": "verify_further",
+                    "note": "Scrapers indisponiveis e busca de fallback nao retornou resultados. Verificacao manual recomendada."
                 })
 
             scores = [r.confidence_score for r in scored_results]
