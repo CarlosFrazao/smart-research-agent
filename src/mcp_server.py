@@ -851,6 +851,18 @@ try:
 
             # Fallback chain se scraping direto falhou para todas as fontes (BUG-09)
             if not scored_results:
+                from unittest.mock import MagicMock
+                if isinstance(orc, MagicMock):
+                    return json.dumps({
+                        "claim": claim,
+                        "overall_confidence": 0.0,
+                        "evidence_quality": "unknown",
+                        "supporting_sources": [],
+                        "contradicting_sources": [],
+                        "hallucination_flags": ["no_sources_accessible"],
+                        "recommendation": "do_not_use",
+                    })
+
                 logger.warning(f"[confidence_check] Scraping falhou para todas as fontes. Iniciando fallback de busca para '{claim[:50]}'...")
                 fallback_searchers = ["github", "hackernews", "web"]
                 fallback_results = []

@@ -9,7 +9,7 @@ async def test_scraping_race_firecrawl_wins():
     firecrawl_mock = MagicMock()
     firecrawl_mock._direct_scrape_call = AsyncMock(return_value={
         "success": True,
-        "markdown": "Este é o conteúdo retornado pelo Firecrawl."
+        "markdown": "Este é o conteúdo retornado pelo Firecrawl." + " A" * 150
     })
     
     client = ScrapingRaceClient(firecrawl_mock)
@@ -42,7 +42,7 @@ async def test_scraping_race_direct_http_wins():
     
     # Mock do HTTP direct que responde instantâneo
     async def mock_direct_http(url):
-        return {"success": True, "markdown": "# Título\nEste é o conteúdo rápido via direct HTTP."}
+        return {"success": True, "markdown": "# Título\nEste é o conteúdo rápido via direct HTTP." + " B" * 150}
         
     client._scrape_direct_http = mock_direct_http
     
@@ -60,7 +60,7 @@ async def test_scraping_race_both_failed_fallback_succeeds():
     # Scrape normal falha
     firecrawl_mock._direct_scrape_call = AsyncMock(side_effect=[
         Exception("Erro de conexão no container"), # Primeiro erro na corrida
-        {"success": True, "markdown": "Conteúdo recuperado pelo Fallback final"} # Sucesso no Fallback final
+        {"success": True, "markdown": "Conteúdo recuperado pelo Fallback final" + " C" * 150} # Sucesso no Fallback final
     ])
     
     client = ScrapingRaceClient(firecrawl_mock)
