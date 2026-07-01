@@ -72,7 +72,15 @@ class ResearchScoreAggregator:
             coverage = 1.0
 
         # 2. Diversidade (Diversity)
-        sources_used = set(r.source for r in results if r.source)
+        sources_used = set()
+        for r in results:
+            r_sources = getattr(r, "sources", None)
+            if isinstance(r_sources, list):
+                sources_used.update(src for src in r_sources if src)
+            else:
+                r_source = getattr(r, "source", None)
+                if r_source:
+                    sources_used.add(r_source)
         total_sources_used = len(sources_used)
         if planned_sources:
             unique_planned = set(planned_sources)
@@ -84,7 +92,10 @@ class ResearchScoreAggregator:
             diversity = min(1.0, total_sources_used / 5.0)
 
         # 3. Qualidade (Quality)
-        quality = sum(getattr(r, "confidence_score", 0.0) for r in results) / len(results)
+        quality = sum(
+            getattr(r, "confidence_score", getattr(r, "combined_score", getattr(r, "score", 0.0)))
+            for r in results
+        ) / len(results)
 
         # 4. Confiabilidade (Reliability)
         verified_count = sum(
@@ -99,7 +110,7 @@ class ResearchScoreAggregator:
         
         recent_count = 0
         for r in results:
-            fetched = getattr(r, "fetched_at", None)
+            fetched = getattr(r, "fetched_at", getattr(r, "last_seen", getattr(r, "first_seen", None)))
             if fetched:
                 # Converter para naive se for naive no fetched_at
                 if fetched.tzinfo is not None and now.tzinfo is None:
