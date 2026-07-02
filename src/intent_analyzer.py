@@ -54,11 +54,34 @@ class IntentAnalyzer:
         repos = re.findall(r"\b[\w-]+/[\w-]+\b", query)
         return list(set(entities + repos))
 
-    async def analyze(self, query: str) -> IntentResult:
+    async def analyze(self, query: str, force_llm: bool = False) -> IntentResult:
         domain = self._heuristic_domain(query)
         intention = self._heuristic_intention(query)
         urgency = self._heuristic_urgency(query)
         entities = self._extract_entities_heuristic(query)
+
+        # ── Curto-circuito heurístico (economiza chamada LLM) ──────────────
+        # Se domínio não é GENERAL e a intenção foi detectada com clareza,
+        # as heurísticas já são suficientes — pula o LLM para evitar rate-limit.
+        from src.types import Domain, Intention
+        heuristic_is_confident = (
+            domain != Domain.GENERAL
+            or intention != Intention.DISCOVER
+            or len(entities) >= 1
+        )
+        if heuristic_is_confident and not force_llm:
+            logger.debug(
+                f"IntentAnalyzer: curto-circuito heurístico ativo "
+                f"(domain={domain.value}, intention={intention.value}, entities={entities}). "
+                "Chamada LLM omitida."
+            )
+            return IntentResult(
+                domain=domain,
+                entities=entities,
+                intention=intention,
+                urgency=urgency,
+                confidence="media",
+            )
 
         prompt_text = (
             "Voce e um analisador de intencao especializado em tecnologia.\n"

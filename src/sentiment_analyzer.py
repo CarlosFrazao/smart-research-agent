@@ -101,6 +101,10 @@ class SentimentAnalyzer:
         if self.has_vader:
             try:
                 scores = self.vader.polarity_scores(text)
+                if scores["compound"] == 0.0:
+                    fb = self._fallback_score(text)
+                    if fb["compound"] != 0.0:
+                        return fb
                 return {
                     "pos": scores["pos"],
                     "neg": scores["neg"],
@@ -123,23 +127,26 @@ class SentimentAnalyzer:
 
         if self.has_vader:
             try:
-                # O VADER é otimizado para frases curtas, então pegamos uma amostra
-                # ou calculamos a polaridade média dos parágrafos principais.
                 paragraphs = [p.strip() for p in report.split("\n\n") if len(p.strip()) > 30]
                 if not paragraphs:
                     scores = self.vader.polarity_scores(report[:2000])
+                    if scores["compound"] == 0.0:
+                        fb = self._fallback_score(report[:2000])
+                        return round(1.0 - abs(fb["compound"]), 3)
                     return round(1.0 - abs(scores["compound"]), 3)
                 
                 compounds = []
-                for p in paragraphs[:15]:  # Amostra das primeiras seções
-                    compounds.append(self.vader.polarity_scores(p)["compound"])
+                for p in paragraphs[:15]:
+                    p_score = self.vader.polarity_scores(p)["compound"]
+                    if p_score == 0.0:
+                        p_score = self._fallback_score(p)["compound"]
+                    compounds.append(p_score)
                 
                 mean_compound = sum(compounds) / len(compounds)
                 return round(1.0 - abs(mean_compound), 3)
             except Exception as e:
                 logger.warning(f"SentimentAnalyzer: Erro no VADER ao medir neutralidade: {e}")
         
-        # Fallback
         scores = self._fallback_score(report)
         return round(1.0 - abs(scores["compound"]), 3)
 

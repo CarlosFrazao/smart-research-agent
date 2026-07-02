@@ -71,14 +71,17 @@ class DOCXExporter:
                 doc.add_heading(self._strip_md(stripped[4:]), level=3)
             elif stripped.startswith("---"):
                 # Linha horizontal — paragraph com borda inferior
+                from docx.oxml import OxmlElement
                 p = doc.add_paragraph()
                 pPr = p._p.get_or_add_pPr()
-                pBdr = pPr.get_or_add_pBdr()
-                bottom = pBdr.get_or_add_bottom()
+                pBdr = OxmlElement('w:pBdr')
+                bottom = OxmlElement('w:bottom')
                 bottom.set(qn("w:val"), "single")
                 bottom.set(qn("w:sz"), "6")
                 bottom.set(qn("w:space"), "1")
                 bottom.set(qn("w:color"), "AAAAAA")
+                pBdr.append(bottom)
+                pPr.append(pBdr)
             elif stripped.startswith("> "):
                 # Blockquote como parágrafo indentado
                 p = doc.add_paragraph(self._strip_md(stripped[2:]))

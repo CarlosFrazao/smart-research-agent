@@ -136,6 +136,9 @@ class TemporalAnalyzer:
         seen = set()
         unique_timeline = []
         for dt, proj, desc in timeline:
+            # Garante que dt seja naive para evitar erros de timezone na ordenação e RAG
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
             # Normaliza descrição para evitar ruídos de offset do regex
             desc_norm = re.sub(r"\s+", " ", desc)[:30]
             key = (dt.date(), proj, desc_norm)

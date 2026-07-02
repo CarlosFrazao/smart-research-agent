@@ -61,7 +61,12 @@ class Orchestrator:
             router = get_router(openrouter_api_key=getattr(self.config, "openrouter_api_key", None))
             logger.info("SmartModelRouter ativo — roteamento de custo habilitado")
 
-        self.llm = LLMClient(LLMProvider(self.config.llm_provider), llm_config, model_router=router)
+        self.llm = LLMClient(
+            LLMProvider(self.config.llm_provider),
+            llm_config,
+            model_router=router,
+            fallback_configs=self.config.get_all_llm_configs(),
+        )
 
         self.memory: Optional[OrvixMemoryV2] = None
         if getattr(self.config, "memory_enabled", True):
@@ -287,7 +292,7 @@ class Orchestrator:
 
         return []
 
-    async def research(self, query: str) -> str:
+    async def research(self, query: str, formats: Optional[List[Any]] = None) -> str:
         start_time = datetime.now()
         logger.info(f"Iniciando pesquisa: '{query}' [modo: {self.operation_mode.name}]")
 
@@ -309,7 +314,7 @@ class Orchestrator:
             
             # Salvar e sincronizar
             duration = (datetime.now() - start_time).total_seconds()
-            filepath = self.report_generator.save_report(report, query, self.config.output_dir)
+            filepath = self.report_generator.save_report(report, query, self.config.output_dir, formats=formats)
             logger.info(f"Debate completo em {round(duration, 1)}s. Relatorio: {filepath}")
 
             if getattr(self.config, "obsidian_vault_path", None) and getattr(self.config, "obsidian_auto_sync", False):
@@ -507,7 +512,7 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"PeerReviewAgent falhou (não crítico): {e}")
 
-        filepath = self.report_generator.save_report(report, query, self.config.output_dir)
+        filepath = self.report_generator.save_report(report, query, self.config.output_dir, formats=formats)
         logger.info(f"Pesquisa completa em {round(duration, 1)}s. Relatorio: {filepath}")
 
         if getattr(self.config, "obsidian_vault_path", None) and getattr(self.config, "obsidian_auto_sync", False):

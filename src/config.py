@@ -9,6 +9,7 @@ class LLMProvider(str, Enum):
     OPENAI = "openai"
     GEMINI = "gemini"
     OPENROUTER = "openrouter"
+    GROQ = "groq"
     OLLAMA = "ollama"
 
 
@@ -19,9 +20,11 @@ class Config(BaseSettings):
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4.1"
     openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "anthropic/claude-sonnet-4"
+    openrouter_model: str = "google/gemma-4-26b-a4b-it:free"
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-2.5-pro"
+    gemini_model: str = "gemini-2.5-flash"  # free tier
+    groq_api_key: Optional[str] = None
+    groq_model: str = "llama-3.3-70b-versatile"  # free tier
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
 
@@ -85,6 +88,20 @@ class Config(BaseSettings):
             return {"api_key": self.openrouter_api_key, "model": self.openrouter_model}
         elif self.llm_provider == LLMProvider.GEMINI:
             return {"api_key": self.gemini_api_key, "model": self.gemini_model}
+        elif self.llm_provider == LLMProvider.GROQ:
+            return {"api_key": self.groq_api_key, "model": self.groq_model}
         elif self.llm_provider == LLMProvider.OLLAMA:
             return {"base_url": self.ollama_base_url, "model": self.ollama_model}
         raise ValueError(f"Provider nao suportado: {self.llm_provider}")
+
+    def get_all_llm_configs(self) -> dict:
+        """Retorna configs de todos os providers para uso no failover automatico."""
+        configs = {}
+        if self.openrouter_api_key:
+            configs["openrouter"] = {"api_key": self.openrouter_api_key, "model": self.openrouter_model}
+        if self.gemini_api_key:
+            configs["gemini"] = {"api_key": self.gemini_api_key, "model": self.gemini_model}
+        if self.groq_api_key:
+            configs["groq"] = {"api_key": self.groq_api_key, "model": self.groq_model}
+        configs["ollama"] = {"base_url": self.ollama_base_url, "model": self.ollama_model}
+        return configs

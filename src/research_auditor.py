@@ -170,7 +170,7 @@ class ResearchAuditor:
             if "> Gerado em" in s_clean or "##" in s_clean or "---" in s_clean or not s_clean:
                 continue
             filtered_sentences.append(s_clean)
-        return [AuditClaim(text=s) for s in filtered_sentences[:20]]
+        return [AuditClaim(text=s) for s in filtered_sentences[:5]]  # máx 5 claims para economizar LLM calls
 
     # ── Validação de Claims ──────────────────────────────────────────────────
 

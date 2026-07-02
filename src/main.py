@@ -31,6 +31,10 @@ def create_parser() -> argparse.ArgumentParser:
         default="standard",
         help="Modo de pesquisa: standard (rapido) ou deep (raciocinio em arvore, ~5-10x mais caro)",
     )
+    research_parser.add_argument(
+        "--formats",
+        help="Formatos de relatorio adicionais a exportar, separados por virgula (ex: pdf,docx,pptx)",
+    )
 
     from src.operation_modes import OperationModes
     research_parser.add_argument(
@@ -108,7 +112,18 @@ async def cmd_research(args):
                 )
             )
         else:
-            report = await orchestrator.research(args.query)
+            formats = []
+            if getattr(args, "formats", None):
+                from src.types import ReportFormat
+                for fmt in args.formats.split(","):
+                    fmt_strip = fmt.strip().lower()
+                    if fmt_strip == "pdf":
+                        formats.append(ReportFormat.PDF)
+                    elif fmt_strip == "docx":
+                        formats.append(ReportFormat.DOCX)
+                    elif fmt_strip == "pptx":
+                        formats.append(ReportFormat.PPTX)
+            report = await orchestrator.research(args.query, formats=formats)
 
         if args.output:
             with open(args.output, "w", encoding="utf-8") as f:
@@ -119,7 +134,7 @@ async def cmd_research(args):
             sys.stdout.buffer.write((report + "\n").encode("utf-8", errors="replace"))
             sys.stdout.buffer.flush()
     except Exception as e:
-        logger.error(f"Erro durante pesquisa: {e}")
+        logger.exception("Erro durante pesquisa")
         sys.exit(1)
 
 

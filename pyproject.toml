@@ -21,6 +21,8 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "mcp>=1.0",
+    "chromadb>=0.5.0",
+    "kuzu>=0.11.0",
 ]
 
 [project.optional-dependencies]

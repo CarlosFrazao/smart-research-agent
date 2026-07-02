@@ -98,16 +98,28 @@ async def list_reports():
 
 @app.get("/api/reports/{filename}")
 async def get_report(filename: str):
-    """Retorna o conteúdo de um relatório Markdown específico."""
+    """Retorna o conteúdo de um relatório (Markdown, PDF, DOCX, PPTX)."""
     safe_name = os.path.basename(filename)
-    if not safe_name.endswith(".md") or safe_name.startswith("_"):
+    allowed_extensions = (".md", ".pdf", ".docx", ".pptx")
+    if not any(safe_name.endswith(ext) for ext in allowed_extensions) or safe_name.startswith("_"):
         return PlainTextResponse("Arquivo inválido.", status_code=400)
     file_path = os.path.join(_REPORTS_DIR, safe_name)
     if not os.path.isfile(file_path):
         return PlainTextResponse("Relatório não encontrado.", status_code=404)
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    return PlainTextResponse(content, media_type="text/markdown")
+    
+    if safe_name.endswith(".md"):
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return PlainTextResponse(content, media_type="text/markdown")
+        
+    mime_types = {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    }
+    ext = os.path.splitext(safe_name)[1].lower()
+    media_type = mime_types.get(ext, "application/octet-stream")
+    return FileResponse(file_path, media_type=media_type, filename=safe_name)
 
 
 @app.post("/api/chat")

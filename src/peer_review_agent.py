@@ -253,7 +253,10 @@ Relatório de Pesquisa:
                 sev = severity_labels.get(issue.severity, issue.severity)
                 # Escapa pipes do Markdown
                 desc_clean = issue.description.replace("|", "\\|")
-                loc_clean = f" *\"{issue.location.replace('|', '\\|')}\"*" if issue.location else ""
+                loc_clean = ""
+                if issue.location:
+                    loc_escaped = issue.location.replace('|', '\\|')
+                    loc_clean = f" *\"{loc_escaped}\"*"
                 sug_clean = issue.suggestion.replace("|", "\\|")
                 
                 lines.append(f"| {issue.category} | {sev} | {desc_clean}{loc_clean} | {sug_clean} |")

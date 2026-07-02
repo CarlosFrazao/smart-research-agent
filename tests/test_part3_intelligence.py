@@ -65,7 +65,7 @@ async def test_intent_analyzer_uses_llm(mock_llm_client):
     })
     from src.intent_analyzer import IntentAnalyzer
     analyzer = IntentAnalyzer(mock_llm_client)
-    result = await analyzer.analyze("GPT vs Claude")
+    result = await analyzer.analyze("GPT vs Claude", force_llm=True)
     assert result.domain == Domain.AI_ML
     assert result.confidence == "alta"
     assert "GPT" in result.entities
