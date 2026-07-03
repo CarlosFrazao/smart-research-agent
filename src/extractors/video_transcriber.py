@@ -1,7 +1,11 @@
 from __future__ import annotations
-import asyncio, logging, os, tempfile
+
+import asyncio
+import logging
+import os
+import tempfile
 from pathlib import Path
-from typing import Optional, Union
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +23,7 @@ class VideoTranscriber:
         self._model = None
         self._model_loaded = False
 
-    def _get_model(self) -> Optional[object]:
+    def _get_model(self) -> object | None:
         '''Carrega modelo Whisper de forma lazy. Retorna None se indisponivel.'''
         if self._model_loaded:
             return self._model
@@ -33,7 +37,7 @@ class VideoTranscriber:
             logger.warning(f'VideoTranscriber: Whisper indisponivel ({exc}). Fallback ativo.')
         return self._model
 
-    async def _download_audio(self, url: str) -> Optional[str]:
+    async def _download_audio(self, url: str) -> str | None:
         '''Baixa audio de URL via yt-dlp. Retorna caminho do arquivo ou None.'''
         try:
             import yt_dlp
@@ -64,7 +68,7 @@ class VideoTranscriber:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
 
-    async def transcribe_file(self, path: Union[str, Path]) -> Optional[str]:
+    async def transcribe_file(self, path: str | Path) -> str | None:
         '''Transcreve audio de arquivo local. Retorna texto ou None.'''
         model = await asyncio.to_thread(self._get_model)
         if model is None:
@@ -76,7 +80,7 @@ class VideoTranscriber:
             logger.warning(f'VideoTranscriber.transcribe_file falhou em {path}: {exc}')
             return None
 
-    async def transcribe_url(self, url: str) -> Optional[str]:
+    async def transcribe_url(self, url: str) -> str | None:
         '''Baixa audio de URL e transcreve. Retorna texto ou None.'''
         model = await asyncio.to_thread(self._get_model)
         if model is None:

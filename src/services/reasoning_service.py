@@ -1,7 +1,7 @@
 import logging
-from statistics import mean
 from datetime import datetime
-from typing import List, Any, Optional
+from statistics import mean
+from typing import Any
 
 logger = logging.getLogger("orchestrator.reasoning_service")
 
@@ -62,10 +62,10 @@ class ReasoningService:
     async def analyze_intent(self, query: str) -> Any:
         return await self.intent_analyzer.analyze(query)
 
-    async def expand_queries(self, query: str, intent) -> List[Any]:
+    async def expand_queries(self, query: str, intent) -> list[Any]:
         return await self.query_expander.expand(query, intent)
 
-    async def rank(self, results: List[Any], query: Optional[str] = None) -> List[Any]:
+    async def rank(self, results: list[Any], query: str | None = None) -> list[Any]:
         """
         Ranqueia os resultados pelo score de qualidade clássico (ranker).
         Se `query` for informado, aplica re-ranking semântico em seguida via SemanticReranker.
@@ -90,7 +90,7 @@ class ReasoningService:
         return ranked
 
 
-    async def calculate_overall_confidence(self, results: List[Any]) -> float:
+    async def calculate_overall_confidence(self, results: list[Any]) -> float:
         """
         Calcula a confiança geral com base nos scores individuais,
         diversidade de fontes e qualidade relativa dos resultados.
@@ -111,7 +111,7 @@ class ReasoningService:
         base_confidence = mean(individual_scores)
         return round(min(base_confidence * diversity_bonus * (0.5 + 0.5 * quality_ratio), 1.0), 4)
 
-    async def run_debate_mode(self, query: str, start_time: datetime, formats: Optional[List[Any]] = None) -> str:
+    async def run_debate_mode(self, query: str, start_time: datetime, formats: list[Any] | None = None) -> str:
         """
         Executa o debate científico entre duas hipóteses concorrentes e gera o relatório veredito.
         """

@@ -1,5 +1,4 @@
 import re
-from typing import List
 
 TECH_STOPWORDS = {
     "the", "a", "an", "is", "are", "what", "which", "best",
@@ -23,7 +22,7 @@ class QueryCleaner:
         return " ".join(words)
 
     @staticmethod
-    def disambiguate(query: str) -> List[str]:
+    def disambiguate(query: str) -> list[str]:
         words = query.lower().split()
         variants = []
         for word in words:

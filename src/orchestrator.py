@@ -1,61 +1,58 @@
-import asyncio
-import logging
 import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-from src.config import Config
-from src.types import ResearchMetadata, ExpandedQuery
-from src.clients.llm_client import LLMClient, LLMProvider
-from src.intent_analyzer import IntentAnalyzer
-from src.query_expander import QueryExpander
-from src.source_planner import SourcePlanner
-from src.ranker import QualityRanker
-from src.confidence_scorer_v2 import ConfidenceScorerV2
-from src.gap_detector import GapDetector
-from src.synthesizer import Synthesizer
-from src.report_generator import ReportGenerator
-from src.search.github_searcher import GitHubSearcher
-from src.search.reddit_searcher import RedditSearcher
-from src.search.hn_searcher import HNSearcher
-from src.search.awesome_searcher import AwesomeSearcher
-from src.search.arxiv_searcher import ArxivSearcher
-from src.search.producthunt_searcher import ProductHuntSearcher
-from src.search.web_searcher import WebSearcher
-from src.search.firecrawl_searcher import FirecrawlSearcher
-from src.search.spider_searcher import SpiderSearcher
-from src.search.steel_searcher import SteelSearcher
-from src.search.rss_searcher import RSSSearcher
-from src.search.jina_searcher import JinaSearcher
-from src.search.searxng_searcher import SearXNGSearcher
-from src.search.stackoverflow_searcher import StackOverflowSearcher
-from src.search.wayback_searcher import WaybackSearcher
-from src.search.semantic_scholar_searcher import SemanticScholarSearcher
-from src.search.pubmed_searcher import PubMedSearcher
-from src.search.youtube_searcher import YouTubeSearcher
-from src.search.playwright_searcher import PlaywrightSearcher
 from src.anti_blocking.residential_proxy import ResidentialProxyProvider
-from src.clients.smart_model_router import SmartModelRouter, get_router
-from src.memory.orvix_memory_v2 import OrvixMemoryV2
+from src.clients.llm_client import LLMClient, LLMProvider
+from src.clients.smart_model_router import get_router
 from src.confidence_scorer_v2 import ConfidenceScorerV2
-from src.link_verifier import LinkVerifier
-from src.operation_modes import OperationModes, OperationConfig
-from src.research_auditor import ResearchAuditor
-from src.monitoring.health_monitor import HealthMonitor
-from src.research_score import ResearchScoreAggregator
+from src.config import Config
 from src.conflict_detector import ConflictDetector
-from src.peer_review_agent import PeerReviewAgent
 from src.evidence_graph import EvidenceGraph
-from src.utils.cache import Cache
-from src.utils.logging import setup_logger
-from src.utils.dead_letter_queue import DeadLetterQueue
+from src.gap_detector import GapDetector
+from src.intent_analyzer import IntentAnalyzer
+from src.link_verifier import LinkVerifier
+from src.memory.orvix_memory_v2 import OrvixMemoryV2
+from src.monitoring.health_monitor import HealthMonitor
+from src.operation_modes import OperationConfig, OperationModes
+from src.peer_review_agent import PeerReviewAgent
+from src.query_expander import QueryExpander
+from src.ranker import QualityRanker
+from src.report_generator import ReportGenerator
+from src.research_auditor import ResearchAuditor
+from src.research_score import ResearchScoreAggregator
+from src.search.arxiv_searcher import ArxivSearcher
+from src.search.awesome_searcher import AwesomeSearcher
+from src.search.firecrawl_searcher import FirecrawlSearcher
+from src.search.github_searcher import GitHubSearcher
+from src.search.hn_searcher import HNSearcher
+from src.search.jina_searcher import JinaSearcher
+from src.search.playwright_searcher import PlaywrightSearcher
+from src.search.producthunt_searcher import ProductHuntSearcher
+from src.search.pubmed_searcher import PubMedSearcher
+from src.search.reddit_searcher import RedditSearcher
+from src.search.rss_searcher import RSSSearcher
+from src.search.searxng_searcher import SearXNGSearcher
+from src.search.semantic_reranker import SemanticReranker
+from src.search.semantic_scholar_searcher import SemanticScholarSearcher
+from src.search.spider_searcher import SpiderSearcher
+from src.search.stackoverflow_searcher import StackOverflowSearcher
+from src.search.steel_searcher import SteelSearcher
+from src.search.wayback_searcher import WaybackSearcher
+from src.search.web_searcher import WebSearcher
+from src.search.youtube_searcher import YouTubeSearcher
+from src.services.memory_service import MemoryService
+from src.services.reasoning_service import ReasoningService
+from src.services.report_service import ReportService
 
 # Importações dos novos serviços
 from src.services.search_service import SearchService
-from src.services.reasoning_service import ReasoningService
-from src.services.memory_service import MemoryService
-from src.services.report_service import ReportService
-from src.search.semantic_reranker import SemanticReranker
+from src.source_planner import SourcePlanner
+from src.synthesizer import Synthesizer
+from src.types import ExpandedQuery, ResearchMetadata
+from src.utils.cache import Cache
+from src.utils.dead_letter_queue import DeadLetterQueue
+from src.utils.logging import setup_logger
 
 logger = setup_logger("orchestrator")
 
@@ -83,7 +80,7 @@ class Orchestrator:
             fallback_configs=self.config.get_all_llm_configs(),
         )
 
-        self.memory: Optional[OrvixMemoryV2] = None
+        self.memory: OrvixMemoryV2 | None = None
         if getattr(self.config, "memory_enabled", True):
             try:
                 self.memory = OrvixMemoryV2(db_path=getattr(self.config, "memory_db_path", None))
@@ -180,7 +177,7 @@ class Orchestrator:
         self.health_monitor.register_fallback("fallback_to_duckduckgo", fallback_to_duckduckgo)
         self.health_monitor.register_fallback("disable_cache", fallback_disable_cache)
 
-    def _init_searchers(self) -> Dict[str, Any]:
+    def _init_searchers(self) -> dict[str, Any]:
         cfg = {
             "timeout": self.config.timeout_per_source,
             "max_results": self.config.max_results_per_source,
@@ -283,7 +280,7 @@ class Orchestrator:
 
         return searchers
 
-    async def research(self, query: str, formats: Optional[List[Any]] = None) -> str:
+    async def research(self, query: str, formats: list[Any] | None = None) -> str:
         start_time = datetime.now()
         logger.info(f"Iniciando pesquisa: '{query}' [modo: {self.operation_mode.name}]")
 
@@ -495,10 +492,10 @@ class Orchestrator:
 
     # ── Retrocompatibilidade / Delegados do Facade ───────────────────────
 
-    async def _select_scraper_for_url(self, url: str) -> List[Any]:
+    async def _select_scraper_for_url(self, url: str) -> list[Any]:
         return await self.search.select_scraper_for_url(url)
 
-    async def _parallel_search(self, queries: List[ExpandedQuery], plan, intent):
+    async def _parallel_search(self, queries: list[ExpandedQuery], plan, intent):
         return await self.search.execute(queries, plan, intent)
 
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
@@ -507,7 +504,7 @@ class Orchestrator:
     async def _search_with_timeout(self, searcher, query: str, domain: str):
         return await self.search._search_with_timeout(searcher, query, domain)
 
-    async def _calculate_overall_confidence(self, results: List) -> float:
+    async def _calculate_overall_confidence(self, results: list) -> float:
         return await self.reasoning.calculate_overall_confidence(results)
 
     # ── Lazy-loaded Service Properties ─────────────────────────────────────

@@ -6,9 +6,9 @@ Custo: ~500ms-3s por página. Use apenas como fallback de último recurso.
 O browser é inicializado apenas na primeira chamada (lazy init) e reutilizado entre requests.
 """
 import asyncio
-import random
 import logging
-from typing import Any, Dict, List, Optional
+import random
+from typing import Any
 
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
@@ -27,11 +27,11 @@ class PlaywrightSearcher(BaseSearcher):
     - Suporte opcional a proxy residencial rotativo
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self._browser = None
         self._playwright = None
-        self._proxy_url: Optional[str] = config.get("proxy_url")
+        self._proxy_url: str | None = config.get("proxy_url")
         self._headless: bool = config.get("playwright_headless", True)
 
     async def _get_browser(self):
@@ -54,7 +54,7 @@ class PlaywrightSearcher(BaseSearcher):
             )
         return self._browser
 
-    async def scrape(self, url: str, wait_for: str = "networkidle") -> Optional[str]:
+    async def scrape(self, url: str, wait_for: str = "networkidle") -> str | None:
         """
         Extrai o HTML completo de uma URL com anti-detecção stealth.
 
@@ -109,7 +109,7 @@ class PlaywrightSearcher(BaseSearcher):
                 await page.close()
             await context.close()
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         """
         Implementação do contrato BaseSearcher.
         'query' é tratado como URL direta para scraping via Playwright.

@@ -1,9 +1,7 @@
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
-import re
 
-from src.types import RankedResult, SearchResult, ResearchMetadata, GapAnalysis
+from src.types import GapAnalysis, RankedResult, ResearchMetadata, SearchResult
 
 
 @dataclass
@@ -35,11 +33,11 @@ class ResearchScoreAggregator:
 
     def calculate(
         self,
-        results: List[RankedResult],
+        results: list[RankedResult],
         metadata: ResearchMetadata,
-        all_raw_results: List[SearchResult],
-        gap_analysis: Optional[GapAnalysis] = None,
-        planned_sources: Optional[List[str]] = None,
+        all_raw_results: list[SearchResult],
+        gap_analysis: GapAnalysis | None = None,
+        planned_sources: list[str] | None = None,
     ) -> ResearchScore:
         """
         Calcula as pontuações e gera o ResearchScore agregado para a pesquisa.

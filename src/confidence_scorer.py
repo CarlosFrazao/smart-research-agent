@@ -1,7 +1,7 @@
-import re
-from typing import List, Dict
-from src.types import SearchResult
 import logging
+import re
+
+from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class ConfidenceScorer:
     async def score_result(self, result: SearchResult) -> SearchResult:
         """Scores a single SearchResult and returns it with confidence fields filled."""
         score: float = 0.5
-        flags: List[str] = []
+        flags: list[str] = []
         content = result.description or ""
         url = result.url or ""
         word_count = len(content.split())
@@ -119,9 +119,9 @@ class ConfidenceScorer:
 
     async def score_batch(
         self,
-        results: List[SearchResult],
+        results: list[SearchResult],
         cross_validate: bool = True,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Scores a list of SearchResults.
         When cross_validate=True, also checks for contradictions between results.
@@ -142,8 +142,8 @@ class ConfidenceScorer:
         return scored
 
     def _detect_contradictions(
-        self, results: List[SearchResult]
-    ) -> Dict[str, List[str]]:
+        self, results: list[SearchResult]
+    ) -> dict[str, list[str]]:
         """
         Detects when two results make opposing claims about the same subject.
         Uses simple heuristic: same title keywords + opposing sentiment signals.
@@ -160,7 +160,7 @@ class ConfidenceScorer:
             re.IGNORECASE,
         )
 
-        contradictions: Dict[str, List[str]] = {}
+        contradictions: dict[str, list[str]] = {}
 
         for i, r1 in enumerate(results):
             for j, r2 in enumerate(results):

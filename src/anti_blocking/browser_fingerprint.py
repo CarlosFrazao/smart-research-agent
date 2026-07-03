@@ -1,8 +1,7 @@
 """Gera perfis completos de browser fingerprint para anti-detecção."""
 import random
-from typing import Dict, List
 
-BROWSER_PROFILES: List[Dict] = [
+BROWSER_PROFILES: list[dict] = [
     {
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -41,7 +40,7 @@ BROWSER_PROFILES: List[Dict] = [
 
 class BrowserFingerprintGenerator:
     @staticmethod
-    def generate() -> Dict:
+    def generate() -> dict:
         """Retorna um perfil aleatório completo de browser."""
         return random.choice(BROWSER_PROFILES)
 
@@ -51,6 +50,6 @@ class BrowserFingerprintGenerator:
         return random.choice(BROWSER_PROFILES)["user_agent"]
 
     @staticmethod
-    def random_viewport() -> Dict:
+    def random_viewport() -> dict:
         """Retorna o viewport de um perfil aleatório."""
         return random.choice(BROWSER_PROFILES)["viewport"]

@@ -1,6 +1,6 @@
 import re
-from typing import List
 from difflib import SequenceMatcher
+from typing import Any
 
 
 class Deduplicator:
@@ -52,8 +52,8 @@ class Deduplicator:
         return False
 
     @classmethod
-    def deduplicate(cls, results: List) -> List:
-        unique = []
+    def deduplicate(cls, results: list) -> list:
+        unique: list[Any] = []
         for r in results:
             if not any(cls.is_duplicate(r, u) for u in unique):
                 unique.append(r)

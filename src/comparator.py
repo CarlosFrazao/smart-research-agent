@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 from src.types import SynthesizedResult
 
@@ -60,9 +59,9 @@ class EntityProfile:
     name: str
     result_count: int = 0
     avg_score: float = 0.0
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
     total_stars: int = 0
-    top_titles: List[str] = field(default_factory=list)
+    top_titles: list[str] = field(default_factory=list)
     avg_recency: float = 0.0   # 0-1 normalised
     avg_sentiment: float = 0.0  # -1 to +1
 
@@ -80,7 +79,7 @@ class Comparator:
 
     def detect_comparison_query(
         self, query: str
-    ) -> Tuple[bool, List[str]]:
+    ) -> tuple[bool, list[str]]:
         """
         Check whether the query is a comparison and extract the entities.
 
@@ -108,19 +107,19 @@ class Comparator:
 
     def build_entity_profiles(
         self,
-        entities: List[str],
-        results: List[SynthesizedResult],
-    ) -> List[EntityProfile]:
+        entities: list[str],
+        results: list[SynthesizedResult],
+    ) -> list[EntityProfile]:
         """
         For each entity, aggregate stats from the results that mention it.
 
         Matching is case-insensitive substring match on title + snippet.
         """
-        profiles: List[EntityProfile] = []
+        profiles: list[EntityProfile] = []
         for entity in entities:
             profile = EntityProfile(name=entity)
             entity_lower = entity.lower()
-            matched: List[SynthesizedResult] = []
+            matched: list[SynthesizedResult] = []
 
             for r in results:
                 urls_str = " ".join(r.urls) if hasattr(r, "urls") and r.urls else ""
@@ -188,7 +187,7 @@ class Comparator:
     def generate_comparison_section(
         self,
         query: str,
-        results: List[SynthesizedResult],
+        results: list[SynthesizedResult],
     ) -> str:
         """
         Full Markdown section: header + summary prose + comparison table.
@@ -201,7 +200,7 @@ class Comparator:
 
         profiles = self.build_entity_profiles(entities, results)
 
-        lines: List[str] = [
+        lines: list[str] = [
             "## ⚖️ Comparação Side-by-Side",
             "",
             f"A query **\"{query}\"** é comparativa. Abaixo um confronto direto entre as opções identificadas:",
@@ -272,7 +271,7 @@ class Comparator:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _extract_entities(query: str) -> List[str]:
+    def _extract_entities(query: str) -> list[str]:
         """
         Split the query on comparison keywords and return cleaned tokens.
 
@@ -302,7 +301,7 @@ class Comparator:
         return []
 
     @staticmethod
-    def _pick_winner(profiles: List[EntityProfile]) -> Optional[str]:
+    def _pick_winner(profiles: list[EntityProfile]) -> str | None:
         """Return the name of the profile with the highest composite score."""
         if not profiles:
             return None

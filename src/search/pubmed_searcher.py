@@ -7,10 +7,10 @@ Processo de Busca:
 Rate-limits: NCBI limita a 3 requisições/s sem API key.
 Fallback: Conecta ao WebSearcher se retornar < 2 resultados.
 """
-import re
-import logging
 import asyncio
-from typing import List, Dict, Any, Optional
+import logging
+import re
+from typing import Any
 
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
@@ -28,13 +28,13 @@ class PubMedSearcher(BaseSearcher):
     Realiza busca em duas etapas (esearch -> esummary) e suporta fallback.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.http = HTTPClient(timeout=self.timeout)
-        self.api_key: Optional[str] = config.get("ncbi_api_key")
+        self.api_key: str | None = config.get("ncbi_api_key")
         self.web_fallback = None  # Injetado pelo Orchestrator se disponível
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         headers = {}
         
         # 1. ESearch — Buscar IDs
@@ -97,7 +97,7 @@ class PubMedSearcher(BaseSearcher):
             logger.error(f"PubMed search error: {e}")
             return self.fallback(query)
 
-    def _parse_summary(self, uid: str, info: Dict[str, Any]) -> Optional[SearchResult]:
+    def _parse_summary(self, uid: str, info: dict[str, Any]) -> SearchResult | None:
         """
         Converte as informações brutas do ESummary da NCBI em SearchResult.
         """
@@ -148,7 +148,7 @@ class PubMedSearcher(BaseSearcher):
             logger.warning(f"PubMedSearcher: erro ao parsear uid {uid}: {e}")
             return None
 
-    async def _run_web_fallback(self, query: str) -> List[SearchResult]:
+    async def _run_web_fallback(self, query: str) -> list[SearchResult]:
         """
         Executa busca na web como fallback se o PubMed falhar ou retornar vazio.
         """

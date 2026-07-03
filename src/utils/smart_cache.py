@@ -5,8 +5,8 @@ Suporta invalidação por ETag/Last-Modified para fontes que suportam HTTP cachi
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional, Any, Dict
+from datetime import datetime, timedelta, UTC
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,9 @@ class SmartCache:
         "default": 3600,       # 1 hora
     }
 
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: str | None = None):
         self.redis = None
-        self.memory: Dict[str, dict] = {}
+        self.memory: dict[str, dict] = {}
         if redis_url:
             try:
                 import redis.asyncio as redis_lib
@@ -43,14 +43,14 @@ class SmartCache:
         self,
         key: str,
         check_etag: bool = False,
-        etag_url: Optional[str] = None
-    ) -> Optional[Any]:
+        etag_url: str | None = None
+    ) -> Any | None:
         cached = await self._get_raw(key)
         if cached is None:
             return None
 
         expires = datetime.fromisoformat(cached["expires"])
-        if expires < datetime.now(timezone.utc):
+        if expires < datetime.now(UTC):
             await self.delete(key)
             return None
 
@@ -67,12 +67,12 @@ class SmartCache:
         self,
         key: str,
         value: Any,
-        ttl_seconds: Optional[int] = None,
+        ttl_seconds: int | None = None,
         source_type: str = "default",
-        etag: Optional[str] = None,
+        etag: str | None = None,
     ) -> None:
         ttl = ttl_seconds or self.TTL_STRATEGIES.get(source_type, self.TTL_STRATEGIES["default"])
-        expires = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        expires = datetime.now(UTC) + timedelta(seconds=ttl)
         data = {
             "value": value,
             "expires": expires.isoformat(),
@@ -90,7 +90,7 @@ class SmartCache:
                 pass
         self.memory.pop(key, None)
 
-    async def _get_raw(self, key: str) -> Optional[dict]:
+    async def _get_raw(self, key: str) -> dict | None:
         if self.redis:
             try:
                 raw = await self.redis.get(f"sra:{key}")
@@ -116,7 +116,7 @@ class SmartCache:
         content = json.dumps(value, sort_keys=True, default=str)
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
-    async def _fetch_etag(self, url: str) -> Optional[str]:
+    async def _fetch_etag(self, url: str) -> str | None:
         try:
             import httpx
             async with httpx.AsyncClient(timeout=5) as client:

@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import logging
-from typing import List, Dict, Optional, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ class KnowledgeGraph:
         self._driver = None
         self._enabled = bool(getattr(config, "neo4j_uri", None))
 
-    async def _get_driver(self) -> Optional[Any]:
+    async def _get_driver(self) -> Any | None:
         if not self._enabled:
             return None
         if self._driver is None:
@@ -35,7 +36,7 @@ class KnowledgeGraph:
         subject: str,
         predicate: str,
         obj: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         source: str = ""
     ) -> bool:
         driver = await self._get_driver()
@@ -66,7 +67,7 @@ class KnowledgeGraph:
             logger.warning(f"KnowledgeGraph.add_fact falhou: {e}")
             return False
 
-    async def query_entity(self, entity_name: str) -> List[Dict[str, Any]]:
+    async def query_entity(self, entity_name: str) -> list[dict[str, Any]]:
         driver = await self._get_driver()
         if driver is None:
             return []

@@ -1,6 +1,6 @@
-from typing import Optional, Dict, Any, List
 import asyncio
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +8,7 @@ _RETRY_DELAYS = [1.0, 2.0, 4.0]
 
 
 class FirecrawlClient:
-    def __init__(self, api_key: str, base_url: Optional[str] = None, config: Optional[Any] = None):
+    def __init__(self, api_key: str, base_url: str | None = None, config: Any | None = None):
         self.api_key = api_key
         self.base_url = base_url
         self.config = config
@@ -40,7 +40,7 @@ class FirecrawlClient:
         return any(k in msg for k in ("429", "rate limit", "timeout", "503", "502", "connection"))
 
     async def _with_retry(self, coro_fn, *args, **kwargs):
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt, delay in enumerate(_RETRY_DELAYS, start=1):
             try:
                 return await coro_fn(*args, **kwargs)
@@ -52,7 +52,7 @@ class FirecrawlClient:
                 await asyncio.sleep(delay)
         raise last_exc  # type: ignore[misc]
 
-    def _normalize_search_results(self, results) -> List[Dict[str, Any]]:
+    def _normalize_search_results(self, results) -> list[dict[str, Any]]:
         """Normaliza resposta do SDK v4 para lista de dicts."""
         if results is None:
             return []
@@ -74,7 +74,7 @@ class FirecrawlClient:
             return results.get("data", [])
         return []
 
-    def _normalize_scrape_result(self, result) -> Dict[str, Any]:
+    def _normalize_scrape_result(self, result) -> dict[str, Any]:
         """Normaliza resposta de scrape do SDK v4 para dict."""
         if result is None:
             return {}
@@ -84,7 +84,7 @@ class FirecrawlClient:
             return result.get("data", result)
         return {}
 
-    async def search(self, query: str, limit: int = 10, stealth: bool = True) -> List[Dict[str, Any]]:
+    async def search(self, query: str, limit: int = 10, stealth: bool = True) -> list[dict[str, Any]]:
         if not self.app:
             return []
         try:
@@ -123,7 +123,7 @@ class FirecrawlClient:
                 logger.error(f"Firecrawl search erro (todos os retries esgotados): {e2}")
                 return []
 
-    async def search_simplified(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def search_simplified(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Tenta busca com query simplificada (primeiras 3 palavras) como bypass de bloqueio."""
         simplified = " ".join(query.split()[:3])
         if simplified == query:
@@ -131,11 +131,11 @@ class FirecrawlClient:
         logger.info(f"Tentando query simplificada: '{simplified}'")
         return await self.search(simplified, limit=limit)
 
-    async def scrape(self, url: str, formats: Optional[List[str]] = None, stealth: bool = True) -> Dict[str, Any]:
+    async def scrape(self, url: str, formats: list[str] | None = None, stealth: bool = True) -> dict[str, Any]:
         """Realiza a raspagem concorrente (Scraping Race) para máxima velocidade e taxa de sucesso."""
         return await self.race_client.scrape(url, formats=formats)
 
-    async def _direct_scrape_call(self, url: str, formats: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def _direct_scrape_call(self, url: str, formats: list[str] | None = None) -> dict[str, Any]:
         """Chamada de scraping direta à API local/remota do Firecrawl sem concorrência da corrida."""
         if not self.app:
             return {}
@@ -173,7 +173,7 @@ class FirecrawlClient:
                 logger.error(f"Firecrawl scrape erro em {url} (todos os retries esgotados): {e2}")
                 return {}
 
-    async def search_research_index(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def search_research_index(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Busca no Firecrawl Research Index (3M+ papers arXiv + GitHub code)."""
         if not self.app:
             return []
@@ -190,7 +190,7 @@ class FirecrawlClient:
             logger.warning(f"Firecrawl Research Index falhou ({e}).")
             return []
 
-    async def crawl(self, url: str, limit: int = 50) -> List[Dict[str, Any]]:
+    async def crawl(self, url: str, limit: int = 50) -> list[dict[str, Any]]:
         if not self.app:
             return []
         try:
@@ -206,7 +206,7 @@ class FirecrawlClient:
             logger.error(f"Firecrawl crawl erro em {url}: {e}")
             return []
 
-    async def map_urls(self, url: str) -> List[str]:
+    async def map_urls(self, url: str) -> list[str]:
         if not self.app:
             return []
         try:
@@ -226,7 +226,7 @@ class FirecrawlClient:
     # Agent Mode (Plano SRA v6.0 → item 3.5)
     # ------------------------------------------------------------------
 
-    async def _post(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def _post(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Chamada HTTP POST genérica à API Firecrawl. Retorna {} se API key ausente."""
         if not self.api_key:
             return {}
@@ -251,7 +251,7 @@ class FirecrawlClient:
         task: str,
         max_steps: int = 10,
         timeout: int = 60,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Firecrawl Agent Mode — pesquisa baseada em tarefa com raciocínio multi-step.
         Retorna dict com 'answer', 'sources', 'steps'. Retorna {} sem crash se API key ausente.
@@ -279,9 +279,9 @@ class FirecrawlClient:
     async def interact(
         self,
         url: str,
-        instructions: List[str],
+        instructions: list[str],
         wait_ms: int = 1000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Firecrawl Interact — executa sequência de instruções de browser num site.
         Retorna dict com 'result', 'screenshots'. Retorna {} sem crash se API key ausente.
@@ -304,7 +304,7 @@ class FirecrawlClient:
         payload = {"url": url, "instructions": instructions, "wait": wait_ms}
         return await self._post("/v1/interact", payload)
 
-    async def map_domain(self, url: str, limit: int = 1000) -> List[str]:
+    async def map_domain(self, url: str, limit: int = 1000) -> list[str]:
         """
         Firecrawl map completo de domínio — retorna lista de URLs encontradas.
         Retorna [] sem crash se API key ausente.
@@ -333,10 +333,10 @@ class FirecrawlClient:
 
     async def batch_scrape(
         self,
-        urls: List[str],
-        formats: Optional[List[str]] = None,
+        urls: list[str],
+        formats: list[str] | None = None,
         concurrency: int = 5,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Scraping paralelo de múltiplas URLs. Retorna lista de dicts com resultado de cada URL.
         Retorna [] sem crash se API key ausente.
@@ -355,7 +355,7 @@ class FirecrawlClient:
         import asyncio as _aio
         sem = _aio.Semaphore(concurrency)
 
-        async def _one(url: str) -> Dict[str, Any]:
+        async def _one(url: str) -> dict[str, Any]:
             async with sem:
                 try:
                     return await self._direct_scrape_call(url, formats=formats)

@@ -1,16 +1,17 @@
+import logging
 import math
 from datetime import datetime
-from typing import List, Dict, Any
-from src.types import SearchResult, RankedResult
+from typing import Any
+
 from src.clients.llm_client import LLMClient
 from src.misinformation_detector import MisinformationDetector
-import logging
+from src.types import RankedResult, SearchResult
 
 logger = logging.getLogger(__name__)
 
 
 class QualityRanker:
-    def __init__(self, llm_client: LLMClient = None, config: Dict[str, Any] = None):
+    def __init__(self, llm_client: LLMClient = None, config: dict[str, Any] = None):
         self.llm = llm_client
         self.config = config or {}
         self.detector = MisinformationDetector()
@@ -93,7 +94,7 @@ class QualityRanker:
     def _generic_score(self, result: SearchResult) -> float:
         return 50.0
 
-    async def rank(self, results: List[SearchResult]) -> List[RankedResult]:
+    async def rank(self, results: list[SearchResult]) -> list[RankedResult]:
         ranked = []
         for result in results:
             if result.source == "github":

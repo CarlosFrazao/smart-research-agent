@@ -5,19 +5,22 @@ Dependência opcional: pip install reportlab
 Se reportlab não estiver instalado, o exporter emite um aviso e retorna None.
 """
 import logging
-import textwrap
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("pdf_exporter")
 
 try:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
     from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
     from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+        HRFlowable,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
     )
     _REPORTLAB_AVAILABLE = True
 except ImportError:
@@ -37,7 +40,7 @@ class PDFExporter:
     def __init__(self):
         self.available = _REPORTLAB_AVAILABLE
 
-    def export(self, markdown_content: str, filepath: str) -> Optional[str]:
+    def export(self, markdown_content: str, filepath: str) -> str | None:
         """
         Gera o PDF a partir do conteúdo Markdown e o salva em `filepath`.
 

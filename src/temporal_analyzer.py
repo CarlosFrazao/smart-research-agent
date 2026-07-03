@@ -4,10 +4,10 @@ temporal_analyzer.py — Análise Temporal e Tendências (Bloco 4.1)
 Extrai informações de data dos resultados da pesquisa, constrói uma linha do tempo (timeline),
 computa um histograma de interesse e detecta a tendência geral usando regressão linear simples.
 """
-import re
 import logging
+import re
 from datetime import datetime
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any
 
 logger = logging.getLogger("temporal_analyzer")
 
@@ -36,12 +36,12 @@ class TemporalAnalyzer:
     def __init__(self):
         pass
 
-    def extract_timeline(self, results: List[Any]) -> List[Tuple[datetime, str, str]]:
+    def extract_timeline(self, results: list[Any]) -> list[tuple[datetime, str, str]]:
         """
         Extrai referências temporais dos resultados.
         Retorna uma lista de tuplas (data, titulo_projeto, contexto_ou_descricao) ordenadas por data.
         """
-        timeline: List[Tuple[datetime, str, str]] = []
+        timeline: list[tuple[datetime, str, str]] = []
 
         for r in results:
             title = getattr(r, "title", "(sem título)")
@@ -150,12 +150,12 @@ class TemporalAnalyzer:
         unique_timeline.sort(key=lambda x: x[0])
         return unique_timeline
 
-    def compute_histogram(self, timeline: List[Tuple[datetime, str, str]]) -> Dict[str, int]:
+    def compute_histogram(self, timeline: list[tuple[datetime, str, str]]) -> dict[str, int]:
         """
         Agrupa os eventos em um histograma por ano (ou YYYY-MM se o intervalo for muito curto).
         Retorna dicionário { "YYYY": contagem } ordenado por ano.
         """
-        histogram: Dict[str, int] = {}
+        histogram: dict[str, int] = {}
         for dt, _, _ in timeline:
             key = str(dt.year)
             histogram[key] = histogram.get(key, 0) + 1
@@ -163,7 +163,7 @@ class TemporalAnalyzer:
         # Ordena por ano string
         return dict(sorted(histogram.items()))
 
-    def detect_trend(self, histogram: Dict[str, int]) -> str:
+    def detect_trend(self, histogram: dict[str, int]) -> str:
         """
         Mapeia a tendência temporal com base em regressão linear simples (mínimos quadrados ordinários).
         Retorna "crescente" | "decrescente" | "estável" | "dados insuficientes".
@@ -204,7 +204,7 @@ class TemporalAnalyzer:
         else:
             return "estável"
 
-    def generate_timeline_section(self, results: List[Any]) -> str:
+    def generate_timeline_section(self, results: list[Any]) -> str:
         """
         Gera uma seção Markdown pronta para ser injetada no relatório.
         """

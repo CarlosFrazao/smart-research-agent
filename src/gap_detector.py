@@ -1,7 +1,7 @@
-from typing import List
-from src.types import RankedResult, GapAnalysis, IntentResult
-from src.clients.llm_client import LLMClient
 import logging
+
+from src.clients.llm_client import LLMClient
+from src.types import GapAnalysis, IntentResult, RankedResult
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ class GapDetector:
         self.max_iterations = 3
 
     async def detect(
-        self, results: List[RankedResult], query: str, intent: IntentResult
+        self, results: list[RankedResult], query: str, intent: IntentResult
     ) -> GapAnalysis:
         source_coverage = len(set(r.source for r in results))
         top_projects = len(set(self._extract_project(r.title) for r in results[:20]))

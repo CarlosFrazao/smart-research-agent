@@ -3,9 +3,9 @@ Integração com serviços de CAPTCHA solving.
 Suporta: 2captcha, anticaptcha, capsolver.
 """
 import asyncio
-import httpx
 import logging
-from typing import Optional
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class CaptchaSolver:
         self.api_key = api_key
         self.client = httpx.AsyncClient(timeout=30)
 
-    async def solve_recaptcha_v2(self, site_key: str, page_url: str) -> Optional[str]:
+    async def solve_recaptcha_v2(self, site_key: str, page_url: str) -> str | None:
         if not self.api_key:
             logger.error("CAPTCHA API key não configurada.")
             return None
@@ -30,7 +30,7 @@ class CaptchaSolver:
         logger.warning(f"Provider de CAPTCHA '{self.provider}' não suportado")
         return None
 
-    async def _solve_2captcha(self, site_key: str, page_url: str) -> Optional[str]:
+    async def _solve_2captcha(self, site_key: str, page_url: str) -> str | None:
         try:
             r = await self.client.post(
                 "https://2captcha.com/in.php",
@@ -63,7 +63,7 @@ class CaptchaSolver:
         logger.warning("2captcha: timeout ou erro ao resolver CAPTCHA")
         return None
 
-    async def _solve_capsolver(self, site_key: str, page_url: str) -> Optional[str]:
+    async def _solve_capsolver(self, site_key: str, page_url: str) -> str | None:
         try:
             r = await self.client.post(
                 "https://api.capsolver.com/createTask",

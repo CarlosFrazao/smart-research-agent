@@ -1,8 +1,10 @@
-from typing import List, Dict, Any
+import logging
+from typing import Any
+
 import aiohttp
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +17,12 @@ _GRAPHQL_QUERY = (
 
 
 class ProductHuntSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.token = config.get("producthunt_token")
         self.base_url = "https://api.producthunt.com/v2/api/graphql"
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         if not self.token:
             logger.warning("ProductHunt token nao configurado. Pulando.")
             return self.fallback(query)

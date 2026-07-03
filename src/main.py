@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
-import sys
 import logging
-from src.orchestrator import Orchestrator
-from src.deep_researcher import DeepResearcher
+import sys
+
 from src.config import Config
+from src.deep_researcher import DeepResearcher
+from src.orchestrator import Orchestrator
 from src.utils.logging import setup_logger
 
 logger = setup_logger("main")

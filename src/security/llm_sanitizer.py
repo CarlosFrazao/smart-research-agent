@@ -1,7 +1,7 @@
 """Filtra conteúdo raspado para remover tentativas de prompt injection."""
-from dataclasses import dataclass
 import asyncio
 import logging
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 

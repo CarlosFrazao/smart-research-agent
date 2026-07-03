@@ -6,7 +6,7 @@ Rate-limit: 100 req/5min sem API key, 1000 req/5min com key.
 Fallback: WebSearcher quando a API retorna < 2 resultados.
 """
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
@@ -26,13 +26,13 @@ class SemanticScholarSearcher(BaseSearcher):
     e fallback automático para WebSearcher quando a API retorna poucos resultados.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.http = HTTPClient(timeout=self.timeout)
-        self.api_key: Optional[str] = config.get("semantic_scholar_api_key")
+        self.api_key: str | None = config.get("semantic_scholar_api_key")
         self.web_fallback = None  # Injetado pelo Orchestrator se disponível
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         params = {
             "query": query,
             "fields": _FIELDS,
@@ -69,7 +69,7 @@ class SemanticScholarSearcher(BaseSearcher):
             logger.error(f"SemanticScholar search error: {e}")
             return self.fallback(query)
 
-    def _parse_paper(self, paper: Dict) -> Optional[SearchResult]:
+    def _parse_paper(self, paper: dict) -> SearchResult | None:
         """
         Converte um paper da API Semantic Scholar em SearchResult.
         """

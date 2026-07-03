@@ -5,9 +5,9 @@ Analisa o sentimento de cada resultado de pesquisa e do relatório sintetizado g
 detectando vieses emocionais ou falta de neutralidade técnica.
 Suporta vaderSentiment (se instalado) com fallback baseado em léxico estático.
 """
-import re
 import logging
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any
 
 logger = logging.getLogger("sentiment_analyzer")
 
@@ -55,7 +55,7 @@ class SentimentAnalyzer:
             self.has_vader = False
             logger.debug("SentimentAnalyzer: VADER não instalado — usando analisador léxico de fallback.")
 
-    def _fallback_score(self, text: str) -> Dict[str, float]:
+    def _fallback_score(self, text: str) -> dict[str, float]:
         """Análise de sentimento simplificada baseada em léxico de fallback."""
         if not text:
             return {"pos": 0.0, "neg": 0.0, "neu": 1.0, "compound": 0.0}
@@ -89,7 +89,7 @@ class SentimentAnalyzer:
             "compound": round(compound, 3)
         }
 
-    def score_result(self, result: Any) -> Dict[str, float]:
+    def score_result(self, result: Any) -> dict[str, float]:
         """
         Calcula o sentimento de um SearchResult com base no título e descrição.
         Retorna dicionário com polaridades (pos, neg, neu, compound).
@@ -150,7 +150,7 @@ class SentimentAnalyzer:
         scores = self._fallback_score(report)
         return round(1.0 - abs(scores["compound"]), 3)
 
-    def check_bias(self, results: List[Any]) -> Optional[str]:
+    def check_bias(self, results: list[Any]) -> str | None:
         """
         Analisa o viés coletivo dos resultados.
         Se a média de compound for muito positiva ou negativa, aponta um viés.
@@ -180,7 +180,7 @@ class SentimentAnalyzer:
         else:
             return None
 
-    def generate_sentiment_section(self, results: List[Any]) -> str:
+    def generate_sentiment_section(self, results: list[Any]) -> str:
         """
         Gera a seção Markdown formatada pronta para injeção no relatório.
         """
@@ -188,7 +188,7 @@ class SentimentAnalyzer:
             return "## 🎭 Análise de Sentimento\n\nNenhum dado disponível para análise de sentimento.\n"
 
         # Coleta sentimentos individuais das fontes
-        sources_sentiment: Dict[str, List[float]] = {}
+        sources_sentiment: dict[str, list[float]] = {}
         for r in results:
             source = getattr(r, "source", None)
             if not source and getattr(r, "sources", None):

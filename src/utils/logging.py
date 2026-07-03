@@ -1,10 +1,11 @@
 from __future__ import annotations
-import logging
-import sys
-import os
+
 import json
+import logging
+import os
+import sys
 from datetime import datetime
-from typing import Optional
+
 
 class ColoredFormatter(logging.Formatter):
     COLORS = {
@@ -82,7 +83,7 @@ structured_logger = StructuredLogger()
 def setup_logging(
     level: str = "INFO",
     json_output: bool = True,
-    log_file: Optional[str] = None,
+    log_file: str | None = None,
 ) -> None:
     """
     Configura o logging estruturado.

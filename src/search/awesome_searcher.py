@@ -1,21 +1,22 @@
+import logging
 import re
-from typing import List, Dict, Any
+from typing import Any
+
 from src.search.base_searcher import BaseSearcher
 from src.search.github_searcher import GitHubSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class AwesomeSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.github = GitHubSearcher(config)
         self.http = HTTPClient(timeout=self.timeout)
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         awesome_query = f"awesome-{query}"
         repos = await self.github.search(awesome_query)
 
@@ -54,7 +55,7 @@ class AwesomeSearcher(BaseSearcher):
                 continue
         return ""
 
-    def _extract_links(self, readme: str) -> List[Dict]:
+    def _extract_links(self, readme: str) -> list[dict]:
         links = []
         lines = readme.split("\n")
 

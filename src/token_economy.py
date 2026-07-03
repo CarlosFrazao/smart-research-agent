@@ -18,13 +18,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # ── Tabela de Preços (USD por 1K tokens) ─────────────────────────────────────
 # Valores de referência; atualize conforme pricing oficial.
-MODEL_PRICING: Dict[str, Dict[str, float]] = {
+MODEL_PRICING: dict[str, dict[str, float]] = {
     # OpenAI
     "gpt-4o":              {"input": 0.005,  "output": 0.015},
     "gpt-4o-mini":         {"input": 0.00015,"output": 0.0006},
@@ -82,7 +81,7 @@ class Budget:
     max_cost_usd_per_call: float = 0.05
     max_cost_usd_session: float = 2.00
     session_spent_usd: float = field(default=0.0, init=False)
-    session_records: List[UsageRecord] = field(default_factory=list, init=False)
+    session_records: list[UsageRecord] = field(default_factory=list, init=False)
 
     def record(self, rec: UsageRecord) -> None:
         self.session_spent_usd += rec.estimated_cost_usd
@@ -91,7 +90,7 @@ class Budget:
     def is_over_session_budget(self) -> bool:
         return self.session_spent_usd >= self.max_cost_usd_session
 
-    def session_summary(self) -> Dict:
+    def session_summary(self) -> dict:
         return {
             "total_calls": len(self.session_records),
             "total_input_tokens": sum(r.input_tokens for r in self.session_records),
@@ -114,14 +113,14 @@ class TokenEconomy:
     def __init__(
         self,
         default_model: str = "gpt-4o-mini",
-        budget: Optional[Budget] = None,
+        budget: Budget | None = None,
     ) -> None:
         self.default_model = default_model
         self.budget = budget or Budget()
 
     # ── Contagem ─────────────────────────────────────────────────────────────
 
-    def count_tokens(self, text: str, model: Optional[str] = None) -> int:
+    def count_tokens(self, text: str, model: str | None = None) -> int:
         """Conta tokens de `text` usando tiktoken (ou heurística 4 chars/token)."""
         enc = _get_encoding(model or self.default_model)
         if enc is None:
@@ -133,9 +132,9 @@ class TokenEconomy:
     def estimate_cost(
         self,
         text: str,
-        model: Optional[str] = None,
+        model: str | None = None,
         output_tokens: int = 0,
-    ) -> Tuple[int, float]:
+    ) -> tuple[int, float]:
         """
         Retorna (input_tokens, custo_USD) para o texto fornecido.
         Custo de output é calculado se `output_tokens` > 0.
@@ -152,8 +151,8 @@ class TokenEconomy:
     def smart_truncate(
         self,
         text: str,
-        max_tokens: Optional[int] = None,
-        model: Optional[str] = None,
+        max_tokens: int | None = None,
+        model: str | None = None,
         head_ratio: float = 0.6,
     ) -> str:
         """
@@ -196,7 +195,7 @@ class TokenEconomy:
 
     # ── Budget Enforcement ────────────────────────────────────────────────────
 
-    def check_budget(self, text: str, model: Optional[str] = None) -> bool:
+    def check_budget(self, text: str, model: str | None = None) -> bool:
         """
         Retorna True se a chamada for dentro do orçamento.
         Loga aviso se próximo do limite.
@@ -231,7 +230,7 @@ class TokenEconomy:
         self,
         input_tokens: int,
         output_tokens: int,
-        model: Optional[str] = None,
+        model: str | None = None,
         query_hint: str = "",
     ) -> UsageRecord:
         """Registra uso real de tokens após uma chamada LLM."""
@@ -251,10 +250,10 @@ class TokenEconomy:
 
     # ── Relatório ─────────────────────────────────────────────────────────────
 
-    def session_summary(self) -> Dict:
+    def session_summary(self) -> dict:
         return self.budget.session_summary()
 
-    def top_calls(self, n: int = 5) -> List[UsageRecord]:
+    def top_calls(self, n: int = 5) -> list[UsageRecord]:
         """Retorna os N calls mais caros da sessão."""
         return sorted(
             self.budget.session_records,

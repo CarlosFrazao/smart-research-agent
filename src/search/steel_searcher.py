@@ -1,8 +1,9 @@
-from typing import List, Dict, Any
+import logging
+from typing import Any
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +18,13 @@ class SteelSearcher(BaseSearcher):
 
     BASE_URL = "https://api.steel.dev/v1"
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.api_key = config.get("steel_api_key", "")
         self.base_url = config.get("steel_base_url", self.BASE_URL)
         self.http = HTTPClient(timeout=self.timeout)
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         """
         Scrapes a URL using Steel.dev's Quick Actions API (/v1/scrape).
         The query parameter is treated as the target URL.
@@ -90,7 +91,7 @@ class SteelSearcher(BaseSearcher):
             raw=raw,
         )
 
-    def fallback(self, query: str) -> List[SearchResult]:
+    def fallback(self, query: str) -> list[SearchResult]:
         """
         Returns empty list with a warning.
         Does not propagate to further scrapers — caller (orchestrator cascade) handles that.

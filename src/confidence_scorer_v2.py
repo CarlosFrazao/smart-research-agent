@@ -8,13 +8,12 @@ Novos recursos sobre o ConfidenceScorer v1:
 
 Mantém backward-compat total com ConfidenceScorer v1.
 """
-import re
-import asyncio
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Tuple
-from src.types import SearchResult
-from src.confidence_scorer import ConfidenceScorer
 import logging
+import re
+from datetime import datetime, UTC
+
+from src.confidence_scorer import ConfidenceScorer
+from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,7 @@ _FRESHNESS_PENALTY_YEARS = 3
 
 def _get_current_year() -> int:
     """Retorna o ano atual em UTC. Avaliado em tempo de chamada para evitar valores congelados."""
-    return datetime.now(timezone.utc).year
+    return datetime.now(UTC).year
 
 
 class ConfidenceScorerV2(ConfidenceScorer):
@@ -115,10 +114,10 @@ class ConfidenceScorerV2(ConfidenceScorer):
 
     async def score_batch(
         self,
-        results: List[SearchResult],
+        results: list[SearchResult],
         cross_validate: bool = True,
         detect_circularity: bool = True,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Pontua um lote com todas as melhorias do V2, incluindo detecção de circularidade.
         """
@@ -160,7 +159,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
     # Classificação Factual
     # ------------------------------------------------------------------
 
-    def _classify_claim(self, content: str, title: str) -> Tuple[str, float]:
+    def _classify_claim(self, content: str, title: str) -> tuple[str, float]:
         """
         Classifica o conteúdo como 'fact', 'opinion' ou 'statistics'.
 
@@ -194,7 +193,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
     # Cálculo de Frescor
     # ------------------------------------------------------------------
 
-    def _calculate_freshness(self, content: str) -> Tuple[float, Optional[int]]:
+    def _calculate_freshness(self, content: str) -> tuple[float, int | None]:
         """
         Detecta o ano mais recente mencionado no conteúdo e calcula um score
         de frescor (0.0 = muito antigo | 1.0 = atual).
@@ -230,8 +229,8 @@ class ConfidenceScorerV2(ConfidenceScorer):
     # ------------------------------------------------------------------
 
     def _detect_link_circularity(
-        self, results: List[SearchResult]
-    ) -> Dict[str, List[str]]:
+        self, results: list[SearchResult]
+    ) -> dict[str, list[str]]:
         """
         Detecta circularidade: quando múltiplas fontes se referenciam mutuamente,
         formando um "echo chamber" que infla artificialmente a confiança.
@@ -246,7 +245,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
         """
         _url_re = re.compile(r"https?://[^\s\"'<>]+")
         # Mapa: url_do_resultado -> conjunto de urls citadas no seu conteúdo
-        citation_graph: Dict[str, set] = {}
+        citation_graph: dict[str, set] = {}
 
         all_result_urls = {r.url for r in results if r.url}
 
@@ -266,7 +265,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
             cited_internal = cited & all_result_urls - {result.url}
             citation_graph[result.url] = cited_internal
 
-        circular: Dict[str, List[str]] = {}
+        circular: dict[str, list[str]] = {}
 
         urls = list(citation_graph.keys())
         for i, url_a in enumerate(urls):

@@ -5,11 +5,11 @@ Fornece extração de triplas (regex + LLM), persistência no KuzuDB e exportaç
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
-import json
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger("knowledge_graph")
 
@@ -71,7 +71,7 @@ class SemanticKnowledgeGraph:
 
     # ── Extração de Triplas ───────────────────────────────────────────────────
 
-    def extract_triples(self, text: str) -> List[Triple]:
+    def extract_triples(self, text: str) -> list[Triple]:
         """
         Extração heurística de triplas baseada em regex case-insensitive.
         """
@@ -93,7 +93,7 @@ class SemanticKnowledgeGraph:
                         ))
         return triples
 
-    async def extract_triples_with_llm(self, text: str) -> List[Triple]:
+    async def extract_triples_with_llm(self, text: str) -> list[Triple]:
         """
         Usa o cliente LLM para realizar extração semântica profunda de triplas.
         """
@@ -230,10 +230,10 @@ class SemanticKnowledgeGraph:
 
     def query_graph(
         self,
-        subject: Optional[str] = None,
-        relation: Optional[str] = None,
-        object: Optional[str] = None
-    ) -> List[Triple]:
+        subject: str | None = None,
+        relation: str | None = None,
+        object: str | None = None
+    ) -> list[Triple]:
         """
         Consulta o grafo de relações semânticas e retorna uma lista de triplas.
         Filtros opcionais por subject, relation e object.
@@ -281,7 +281,7 @@ class SemanticKnowledgeGraph:
 
         return triples
 
-    def get_related_entities(self, entity: str) -> List[str]:
+    def get_related_entities(self, entity: str) -> list[str]:
         """
         Retorna nomes únicos de entidades diretamente ligadas a uma entidade.
         """
@@ -328,7 +328,7 @@ class SemanticKnowledgeGraph:
 
         return "\n".join(lines)
 
-    def export_json(self) -> Dict[str, Any]:
+    def export_json(self) -> dict[str, Any]:
         """
         Exporta as triplas no formato estruturado JSON de grafos (nós e links).
         """

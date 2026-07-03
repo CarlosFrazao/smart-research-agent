@@ -5,12 +5,10 @@ Constrói um grafo semântico de claims extraídas dos resultados de pesquisa,
 detecta relações CONFIRMS/CONTRADICTS via similaridade Jaccard e exporta
 nos formatos Graphviz, D3.js e Cytoscape.js.
 """
-import re
-import uuid
 import hashlib
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Tuple, Optional, Any
 
 from src.types import SearchResult
 
@@ -42,7 +40,7 @@ class Claim:
     source: str                      # URL da fonte
     source_name: str                 # Nome curto da fonte (ex: "arxiv")
     confidence: float = 0.0
-    tokens: List[str] = field(default_factory=list)
+    tokens: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -62,12 +60,12 @@ class EvidenceGraph:
                  contradict_threshold: float = _CONTRADICT_THRESHOLD):
         self.confirm_threshold = confirm_threshold
         self.contradict_threshold = contradict_threshold
-        self.claims: List[Claim] = []
-        self.relations: List[ClaimRelation] = []
+        self.claims: list[Claim] = []
+        self.relations: list[ClaimRelation] = []
 
     # ── Entry Point ───────────────────────────────────────────────────────────
 
-    def build_from_results(self, results: List[SearchResult]) -> "EvidenceGraph":
+    def build_from_results(self, results: list[SearchResult]) -> "EvidenceGraph":
         """
         Extrai claims de cada resultado e detecta relações entre elas.
         Retorna self para encadeamento.
@@ -102,13 +100,13 @@ class EvidenceGraph:
         source: str,
         source_name: str,
         confidence: float,
-    ) -> List[Claim]:
+    ) -> list[Claim]:
         """
         Segmenta o texto em frases candidatas a claim (comprimento entre 40 e 300 chars).
         """
         # Quebra por pontuação de fim de frase
         raw_sentences = re.split(r"(?<=[.!?])\s+", text)
-        claims: List[Claim] = []
+        claims: list[Claim] = []
 
         for sentence in raw_sentences:
             sentence = sentence.strip()
@@ -132,13 +130,13 @@ class EvidenceGraph:
 
     # ── Detecção de Relações ──────────────────────────────────────────────────
 
-    def detect_relations(self, claims: List[Claim]) -> List[ClaimRelation]:
+    def detect_relations(self, claims: list[Claim]) -> list[ClaimRelation]:
         """
         Compara pares de claims entre fontes diferentes.
         Detecta CONFIRMS (alta sobreposição, mesma polaridade) ou
         CONTRADICTS (sobreposição moderada + negação oposta).
         """
-        relations: List[ClaimRelation] = []
+        relations: list[ClaimRelation] = []
         n = len(claims)
 
         for i in range(n):
@@ -180,7 +178,7 @@ class EvidenceGraph:
 
         return relations
 
-    def _compute_similarity(self, tokens_a: List[str], tokens_b: List[str]) -> float:
+    def _compute_similarity(self, tokens_a: list[str], tokens_b: list[str]) -> float:
         """
         Calcula similaridade Jaccard entre dois conjuntos de tokens.
         """
@@ -192,7 +190,7 @@ class EvidenceGraph:
         union = set_a | set_b
         return len(intersection) / len(union) if union else 0.0
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """
         Tokeniza o texto removendo stopwords e pontuação.
         """
@@ -209,7 +207,7 @@ class EvidenceGraph:
 
     # ── Consulta de Conflitos ─────────────────────────────────────────────────
 
-    def get_conflicting_claims(self) -> List[Tuple[Claim, Claim, float]]:
+    def get_conflicting_claims(self) -> list[tuple[Claim, Claim, float]]:
         """
         Retorna os pares de claims que se contradizem, ordenados por peso.
         """
@@ -246,7 +244,7 @@ class EvidenceGraph:
         lines.append("}")
         return "\n".join(lines)
 
-    def export_d3_json(self) -> Dict:
+    def export_d3_json(self) -> dict:
         """
         Exporta o grafo no formato JSON compatível com D3.js force-directed.
         """
@@ -271,11 +269,11 @@ class EvidenceGraph:
             ],
         }
 
-    def export_cytoscape_json(self) -> Dict:
+    def export_cytoscape_json(self) -> dict:
         """
         Exporta o grafo no formato JSON compatível com Cytoscape.js.
         """
-        elements: List[Dict] = []
+        elements: list[dict] = []
 
         for c in self.claims:
             elements.append({

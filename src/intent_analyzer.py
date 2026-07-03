@@ -1,8 +1,8 @@
-import re
-from typing import List
-from src.types import IntentResult, Domain, Intention
-from src.clients.llm_client import LLMClient
 import logging
+import re
+
+from src.clients.llm_client import LLMClient
+from src.types import Domain, Intention, IntentResult
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class IntentAnalyzer:
         urgent = ["2026", "2025", "new", "latest", "trending", "recent", "now", "this year"]
         return "sim" if any(u in query.lower() for u in urgent) else "nao"
 
-    def _extract_entities_heuristic(self, query: str) -> List[str]:
+    def _extract_entities_heuristic(self, query: str) -> list[str]:
         entities = re.findall(r"\b[A-Z][a-zA-Z0-9]+\b", query)
         repos = re.findall(r"\b[\w-]+/[\w-]+\b", query)
         return list(set(entities + repos))

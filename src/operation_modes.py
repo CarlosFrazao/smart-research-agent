@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +18,8 @@ class OperationConfig:
     """Configuração completa de um modo de operação."""
     name: str
     description: str
-    searchers: List[str]
-    scrapers: List[str]
+    searchers: list[str]
+    scrapers: list[str]
     confidence_threshold: float
     max_depth: int
     enable_auditor: bool
@@ -31,7 +31,7 @@ class OperationConfig:
     # Bloco 3.1 — Multi-Agent Debate
     enable_debate: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -58,7 +58,7 @@ class OperationModes:
         orchestrator.apply_mode(config)
     """
 
-    MODES: Dict[str, OperationConfig] = {
+    MODES: dict[str, OperationConfig] = {
 
         "guerrilha": OperationConfig(
             name="guerrilha",
@@ -200,7 +200,7 @@ class OperationModes:
         return mode
 
     @classmethod
-    def list_modes(cls) -> List[str]:
+    def list_modes(cls) -> list[str]:
         """Lista todos os nomes de modos disponíveis."""
         return list(cls.MODES.keys())
 
@@ -240,7 +240,7 @@ class OperationModes:
         return cls.DEFAULT_MODE
 
     @classmethod
-    def get_all_descriptions(cls) -> Dict[str, str]:
+    def get_all_descriptions(cls) -> dict[str, str]:
         """Retorna dicionário {nome: descrição} de todos os modos."""
         return {name: cfg.description for name, cfg in cls.MODES.items()}
 
@@ -251,7 +251,7 @@ class OperationModes:
         Levanta ValueError com detalhes se alguma configuração for inválida.
         Deve ser chamado no startup ou em testes de sanidade.
         """
-        errors: List[str] = []
+        errors: list[str] = []
         for mode_name, cfg in cls.MODES.items():
             if not cfg.searchers:
                 errors.append(f"Modo '{mode_name}': lista de searchers está vazia.")

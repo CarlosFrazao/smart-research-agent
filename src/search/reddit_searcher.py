@@ -1,15 +1,16 @@
-from datetime import datetime
-from typing import List, Dict, Any, Optional
+import json
+import logging
 import os
+import urllib.parse
+from datetime import datetime
+from typing import Any
+
+from src.clients.firecrawl_client import FirecrawlClient
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
+from src.utils.circuit_breaker import CircuitBreakerOpen, CircuitBreakerRegistry
 from src.utils.http_client import HTTPClient
-from src.clients.firecrawl_client import FirecrawlClient
-from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
-from src.utils.retry import with_retry, RetryConfig
-import logging
-import urllib.parse
-import json
+from src.utils.retry import RetryConfig, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +42,12 @@ _UA = (
 
 
 class RedditSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.base_url = "https://www.reddit.com/search.json"
         self.http = HTTPClient(timeout=self.timeout)
         # Use Firecrawl client to bypass Reddit's bot detection
-        self._firecrawl: Optional[FirecrawlClient] = None
+        self._firecrawl: FirecrawlClient | None = None
         fc_key = config.get("firecrawl_api_key", "")
         fc_url = config.get("firecrawl_base_url")
         if fc_key or fc_url:
@@ -58,7 +59,7 @@ class RedditSearcher(BaseSearcher):
             "reddit_api", failure_threshold=3, recovery_timeout=300
         )
 
-    async def search(self, query: str, domain: str = "general", **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, domain: str = "general", **kwargs) -> list[SearchResult]:
         if not hasattr(self, "circuit"):
             self.circuit = CircuitBreakerRegistry.get(
                 "reddit_api", failure_threshold=3, recovery_timeout=300
@@ -71,7 +72,7 @@ class RedditSearcher(BaseSearcher):
             return self.fallback(query)
 
     @with_retry(_RETRY_CONFIG)
-    async def _search_pipeline(self, query: str, domain: str) -> List[SearchResult]:
+    async def _search_pipeline(self, query: str, domain: str) -> list[SearchResult]:
         # Strategy 1: Firecrawl-powered Reddit search (bypasses bot detection)
         results = await self._search_via_firecrawl(query, domain)
         if results:
@@ -125,7 +126,7 @@ class RedditSearcher(BaseSearcher):
         m = re.search(r"reddit\.com/r/([^/]+)", url)
         return m.group(1) if m else "unknown"
 
-    async def _search_via_firecrawl(self, query: str, domain: str) -> List[SearchResult]:
+    async def _search_via_firecrawl(self, query: str, domain: str) -> list[SearchResult]:
         """Use Firecrawl to scrape Reddit search results (bypasses bot detection)."""
         if not self._firecrawl:
             return []
@@ -165,7 +166,7 @@ class RedditSearcher(BaseSearcher):
             logger.debug(f"Reddit Firecrawl falhou: {e}")
         return []
 
-    async def _search_direct_api(self, query: str, domain: str) -> List[SearchResult]:
+    async def _search_direct_api(self, query: str, domain: str) -> list[SearchResult]:
         """Direct Reddit JSON API with browser-like headers and fresh session."""
         import aiohttp
         params = {
@@ -206,7 +207,7 @@ class RedditSearcher(BaseSearcher):
             logger.debug(f"Reddit API direta falhou: {e}")
         return []
 
-    async def _search_pushshift(self, query: str) -> List[SearchResult]:
+    async def _search_pushshift(self, query: str) -> list[SearchResult]:
         """Pushshift as final fallback for Reddit data."""
         try:
             encoded = urllib.parse.quote(query)

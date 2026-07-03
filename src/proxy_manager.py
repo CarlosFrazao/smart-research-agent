@@ -1,17 +1,17 @@
 import asyncio
-import aiohttp
-import logging
 import base64
 import json
+import logging
 import os
 import random
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+
+import aiohttp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class Proxy:
-    def __init__(self, ip: str, port: int, protocol: str = "http", username: Optional[str] = None, password: Optional[str] = None, proxy_type: str = "public"):
+    def __init__(self, ip: str, port: int, protocol: str = "http", username: str | None = None, password: str | None = None, proxy_type: str = "public"):
         self.ip = ip
         self.port = port
         self.protocol = protocol
@@ -20,8 +20,8 @@ class Proxy:
         self.proxy_type = proxy_type  # "public" ou "vps_ipv6"
         self.health_score = 100.0
         self.latency = 0.0
-        self.blocked_domains: List[str] = []
-        self.failed_attempts: Dict[str, int] = {}
+        self.blocked_domains: list[str] = []
+        self.failed_attempts: dict[str, int] = {}
         self.last_checked = datetime.now()
 
     def get_url(self) -> str:
@@ -31,7 +31,7 @@ class Proxy:
 class ProxyManager:
     def __init__(self, config_dir: str = "config"):
         self.config_dir = config_dir
-        self.proxies: List[Proxy] = []
+        self.proxies: list[Proxy] = []
         self.sources = [
             "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
             "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt",
@@ -44,7 +44,7 @@ class ProxyManager:
         pool_path = os.path.join(self.config_dir, "proxy_pool.json")
         if os.path.exists(pool_path):
             try:
-                with open(pool_path, "r", encoding="utf-8") as f:
+                with open(pool_path, encoding="utf-8") as f:
                     config = json.load(f)
                     for item in config.get("proxies", []):
                         self.proxies.append(Proxy(
@@ -133,7 +133,7 @@ class ProxyManager:
             else:
                 proxy.health_score = 0.0
 
-    def get_best_proxy(self, target_domain: str) -> Optional[Proxy]:
+    def get_best_proxy(self, target_domain: str) -> Proxy | None:
         # Filtra candidatos ativos
         candidates = [p for p in self.proxies if p.health_score > 30 and target_domain not in p.blocked_domains]
         if not candidates:
@@ -181,7 +181,7 @@ class ProxyServer:
         self.server = await asyncio.start_server(self.handle_client, self.host, self.port)
         logging.info(f"Proxy Local Server rodando em http://{self.host}:{self.port}")
 
-    def authenticate_request(self, header_lines: List[str]) -> bool:
+    def authenticate_request(self, header_lines: list[str]) -> bool:
         user_env = os.getenv("PROXY_AUTH_USER", "admin")
         pass_env = os.getenv("PROXY_AUTH_PASS")
         if not pass_env:

@@ -1,22 +1,23 @@
 from __future__ import annotations
+
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class HybridSearcher:
-    def __init__(self, chroma_client: Optional[Any] = None, cohere_api_key: Optional[str] = None):
+    def __init__(self, chroma_client: Any | None = None, cohere_api_key: str | None = None):
         """
         chroma_client: uma Colecao ou Cliente do ChromaDB.
         cohere_api_key: chave de API do Cohere para reranking.
         """
         self.chroma = chroma_client
         self.cohere_key = cohere_api_key
-        self._documents: List[Dict[str, Any]] = []  # Cache local para BM25
-        self._encoder: Optional[Any] = None
+        self._documents: list[dict[str, Any]] = []  # Cache local para BM25
+        self._encoder: Any | None = None
 
-    def _get_encoder(self) -> Optional[Any]:
+    def _get_encoder(self) -> Any | None:
         if self._encoder is None:
             try:
                 from sentence_transformers import SentenceTransformer
@@ -26,11 +27,11 @@ class HybridSearcher:
                 logger.warning(f"Nao foi possivel carregar o modelo sentence-transformers: {e}")
         return self._encoder
 
-    def index_documents(self, documents: List[Dict[str, Any]]) -> None:
+    def index_documents(self, documents: list[dict[str, Any]]) -> None:
         """Cache em memoria para consultas BM25. Cada documento deve ser um dict com no minimo a chave 'text'."""
         self._documents = documents
 
-    async def search(self, query: str, top_k: int = 15) -> List[Dict[str, Any]]:
+    async def search(self, query: str, top_k: int = 15) -> list[dict[str, Any]]:
         if not query:
             return []
 
@@ -50,7 +51,7 @@ class HybridSearcher:
 
         return combined[:top_k]
 
-    def _bm25_search(self, query: str, top_k: int) -> List[Dict[str, Any]]:
+    def _bm25_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
         if not self._documents:
             return []
         try:
@@ -67,7 +68,7 @@ class HybridSearcher:
             logger.warning(f"Erro na busca BM25: {e}")
             return []
 
-    async def _chroma_search(self, query: str, top_k: int) -> List[Dict[str, Any]]:
+    async def _chroma_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
         if not self.chroma:
             return []
         encoder = self._get_encoder()
@@ -96,9 +97,9 @@ class HybridSearcher:
             logger.warning(f"Busca ChromaDB falhou: {e}")
             return []
 
-    def _reciprocal_rank_fusion(self, *result_lists: List[Dict[str, Any]], k: int = 60) -> List[Dict[str, Any]]:
-        scores: Dict[str, float] = {}
-        doc_map: Dict[str, Dict[str, Any]] = {}
+    def _reciprocal_rank_fusion(self, *result_lists: list[dict[str, Any]], k: int = 60) -> list[dict[str, Any]]:
+        scores: dict[str, float] = {}
+        doc_map: dict[str, dict[str, Any]] = {}
 
         for results in result_lists:
             for rank, doc in enumerate(results):
@@ -115,7 +116,7 @@ class HybridSearcher:
         sorted_keys = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
         return [doc_map[key] for key in sorted_keys]
 
-    async def _cohere_rerank(self, query: str, docs: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
+    async def _cohere_rerank(self, query: str, docs: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
         try:
             import cohere
             co = cohere.AsyncClient(api_key=self.cohere_key)

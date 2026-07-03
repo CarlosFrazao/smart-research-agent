@@ -27,7 +27,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class RoutingDecision:
     model_id: str
     score: int
     reason: str
-    provider_override: Optional[str] = None  # "openrouter" quando usar tier free via Groq
+    provider_override: str | None = None  # "openrouter" quando usar tier free via Groq
 
 
 class SmartModelRouter:
@@ -94,7 +94,7 @@ class SmartModelRouter:
       - Para demais tiers, retorna o model_id do provider atual
     """
 
-    def __init__(self, openrouter_api_key: Optional[str] = None):
+    def __init__(self, openrouter_api_key: str | None = None):
         self._openrouter_key = openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
 
     def route(
@@ -168,10 +168,10 @@ class SmartModelRouter:
 
 
 # Singleton de módulo
-_router: Optional[SmartModelRouter] = None
+_router: SmartModelRouter | None = None
 
 
-def get_router(openrouter_api_key: Optional[str] = None) -> SmartModelRouter:
+def get_router(openrouter_api_key: str | None = None) -> SmartModelRouter:
     global _router
     if _router is None:
         _router = SmartModelRouter(openrouter_api_key=openrouter_api_key)

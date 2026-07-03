@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Optional, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class SerpAPISearcher:
         if not self._available:
             logger.warning("SerpAPISearcher: desabilitado (chave ausente ou lib nao instalada)")
 
-    async def search(self, query: str, **kwargs) -> List[Any]:
+    async def search(self, query: str, **kwargs) -> list[Any]:
         """
         Executa busca via SerpAPI em um thread pool para nao bloquear o event loop.
         Retorna lista de dicts compativel com SearchResult.

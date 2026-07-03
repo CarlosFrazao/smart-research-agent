@@ -7,14 +7,13 @@ Se python-docx não estiver instalado, o exporter emite um aviso e retorna None.
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("docx_exporter")
 
 try:
     from docx import Document
-    from docx.shared import Pt, RGBColor
     from docx.oxml.ns import qn
+    from docx.shared import Pt, RGBColor
     _DOCX_AVAILABLE = True
 except ImportError:
     _DOCX_AVAILABLE = False
@@ -33,7 +32,7 @@ class DOCXExporter:
     def __init__(self):
         self.available = _DOCX_AVAILABLE
 
-    def export(self, markdown_content: str, filepath: str) -> Optional[str]:
+    def export(self, markdown_content: str, filepath: str) -> str | None:
         """
         Gera o DOCX a partir do conteúdo Markdown e o salva em `filepath`.
 

@@ -1,24 +1,26 @@
-from typing import List, Dict, Any
-from src.search.base_searcher import BaseSearcher
-from src.types import SearchResult
-from src.clients.firecrawl_client import FirecrawlClient
-from urllib.parse import quote
 import logging
 import re
+from typing import Any
+from urllib.parse import quote
+
 import httpx
+
+from src.clients.firecrawl_client import FirecrawlClient
+from src.search.base_searcher import BaseSearcher
+from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
 
 class WebSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.firecrawl = FirecrawlClient(
             api_key=config.get("firecrawl_api_key", ""),
             base_url=config.get("firecrawl_base_url"),
         )
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         # Tentativa 1: Busca Padrão com Stealth
         try:
             logger.info(f"WebSearcher: Executando busca com Firecrawl para '{query[:50]}'")

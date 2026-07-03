@@ -3,13 +3,12 @@ Suporte a proxies residenciais para contornar bloqueios geográficos e de IP.
 Providers suportados: BrightData, Smartproxy.
 """
 import logging
-from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
 
 class ResidentialProxyProvider:
-    PROVIDERS: Dict[str, dict] = {
+    PROVIDERS: dict[str, dict] = {
         "brightdata": {
             "host": "brd.superproxy.io",
             "port": 33335,

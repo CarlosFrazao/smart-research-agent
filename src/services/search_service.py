@@ -1,11 +1,10 @@
 import asyncio
 import logging
-from urllib.parse import quote
 from datetime import datetime
-from typing import List, Any, Dict, Optional
+from urllib.parse import quote
 
-from src.types import SearchResult, ExpandedQuery
 from src.query_validator import QueryValidator
+from src.types import ExpandedQuery, SearchResult
 
 logger = logging.getLogger("orchestrator.search_service")
 
@@ -38,7 +37,7 @@ class SearchService:
     def operation_mode(self):
         return self.orch.operation_mode
 
-    async def select_scraper_for_url(self, url: str) -> List[SearchResult]:
+    async def select_scraper_for_url(self, url: str) -> list[SearchResult]:
         """
         Smart cascade: tenta scrapers em ordem de prioridade para a URL dada.
         """
@@ -53,7 +52,7 @@ class SearchService:
                 if result and result[0].description and len(result[0].description.strip()) > 200:
                     return result
                 logger.warning(f"Firecrawl content too short/empty for '{url[:50]}'")
-            except (asyncio.TimeoutError, Exception) as e:
+            except (TimeoutError, Exception) as e:
                 logger.warning(f"Firecrawl failed for '{url[:50]}': {e}")
 
         # 2. Tentativa secundária: Spider (se habilitado)
@@ -83,7 +82,7 @@ class SearchService:
                 if result and result[0].description and len(result[0].description.strip()) > 200:
                     return result
                 logger.warning(f"Playwright retornou conteúdo curto/vazio para '{url[:50]}'")
-            except (asyncio.TimeoutError, Exception) as e:
+            except (TimeoutError, Exception) as e:
                 logger.warning(f"Playwright falhou para '{url[:50]}': {e}")
 
         # 5. Fallback incondicional final: Jina Reader
@@ -114,7 +113,7 @@ class SearchService:
 
         return []
 
-    async def execute(self, queries: List[ExpandedQuery], plan, intent) -> List[SearchResult]:
+    async def execute(self, queries: list[ExpandedQuery], plan, intent) -> list[SearchResult]:
         """
         Executa as pesquisas planejadas em paralelo, respeitando cache e modo de operação.
         """
@@ -226,8 +225,8 @@ class SearchService:
         return results
 
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
-        from src.utils.logging import structured_logger
         from src.observability.metrics import track_search
+        from src.utils.logging import structured_logger
         error_msg = None
         res = []
         try:
@@ -236,7 +235,7 @@ class SearchService:
                     searcher.search(query, domain=domain),
                     timeout=searcher.timeout,
                 )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Timeout em {searcher.__class__.__name__}")
             error_msg = "TimeoutError"
             if self.health_monitor:

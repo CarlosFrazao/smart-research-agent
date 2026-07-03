@@ -3,11 +3,12 @@ Retry com exponential backoff e jitter aleatório.
 Uso como decorator: @with_retry(RetryConfig(max_retries=3))
 """
 import asyncio
-import random
 import logging
-from typing import Callable, TypeVar, Tuple, Type
-from functools import wraps
+import random
 from dataclasses import dataclass, field
+from functools import wraps
+from typing import TypeVar
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -20,7 +21,7 @@ class RetryConfig:
     max_delay: float = 60.0
     exponential_base: float = 2.0
     jitter: bool = True
-    retryable_exceptions: Tuple[Type[Exception], ...] = field(
+    retryable_exceptions: tuple[type[Exception], ...] = field(
         default_factory=lambda: (Exception,)
     )
 

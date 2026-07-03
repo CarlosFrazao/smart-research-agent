@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from src.types import SearchResult
 from src.clients.llm_client import LLMClient
+from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class AuditClaim:
     text: str
     confidence: float = 0.0
     status: str = "unverified"       # verified | single_source | low_confidence | gap
-    supporting_sources: List[str] = field(default_factory=list)
+    supporting_sources: list[str] = field(default_factory=list)
     needs_recheck: bool = False
 
 
@@ -43,7 +43,7 @@ class AuditReport:
     total_claims: int
     verified_claims: int
     low_confidence_claims: int
-    gaps_detected: List[str]
+    gaps_detected: list[str]
     iterations_run: int
     enriched_content: str            # Relatório original + notas de auditoria injetadas
     audit_summary: str
@@ -63,8 +63,8 @@ class ResearchAuditor:
     def __init__(
         self,
         llm_client: LLMClient,
-        orchestrator: Optional[Any] = None,
-        confidence_scorer: Optional[Any] = None,
+        orchestrator: Any | None = None,
+        confidence_scorer: Any | None = None,
     ) -> None:
         self.llm = llm_client
         self.orchestrator = orchestrator
@@ -75,7 +75,7 @@ class ResearchAuditor:
     async def audit(
         self,
         report_text: str,
-        existing_results: Optional[List[SearchResult]] = None,
+        existing_results: list[SearchResult] | None = None,
         max_iterations: int = MAX_AUDIT_ITERATIONS,
     ) -> AuditReport:
         """
@@ -138,7 +138,7 @@ class ResearchAuditor:
 
     # ── Extração de Claims ───────────────────────────────────────────────────
 
-    async def _extract_claims(self, report_text: str) -> List[AuditClaim]:
+    async def _extract_claims(self, report_text: str) -> list[AuditClaim]:
         """Usa o LLM para extrair afirmações verificáveis do relatório."""
         prompt = (
             "You are a fact-checking assistant. Extract all verifiable factual claims "
@@ -176,9 +176,9 @@ class ResearchAuditor:
 
     async def _validate_claims(
         self,
-        claims: List[AuditClaim],
-        results: List[SearchResult],
-    ) -> List[AuditClaim]:
+        claims: list[AuditClaim],
+        results: list[SearchResult],
+    ) -> list[AuditClaim]:
         """Cruza claims com os resultados disponíveis para estimar confiança."""
         if not results:
             for claim in claims:
@@ -219,7 +219,7 @@ class ResearchAuditor:
 
     # ── Re-pesquisa de Gaps ──────────────────────────────────────────────────
 
-    async def _research_gaps(self, gaps: List[AuditClaim]) -> List[SearchResult]:
+    async def _research_gaps(self, gaps: list[AuditClaim]) -> list[SearchResult]:
         """
         Relança buscas focadas nas claims com gap de evidência.
         Usa o Orchestrator se disponível; retorna lista vazia caso contrário.
@@ -228,7 +228,7 @@ class ResearchAuditor:
             logger.debug("ResearchAuditor: sem orchestrator — pulando re-pesquisa de gaps.")
             return []
 
-        new_results: List[SearchResult] = []
+        new_results: list[SearchResult] = []
 
         for claim in gaps[:5]:  # Limita a 5 claims por iteração para controle de custo
             gap_query = self._claim_to_query(claim.text)
@@ -261,7 +261,7 @@ class ResearchAuditor:
 
     # ── Injeção de Notas de Auditoria ────────────────────────────────────────
 
-    def _inject_audit_notes(self, report_text: str, claims: List[AuditClaim]) -> str:
+    def _inject_audit_notes(self, report_text: str, claims: list[AuditClaim]) -> str:
         """
         Injeta um bloco de resumo de auditoria no final do relatório.
         Não altera o corpo do relatório para preservar a narrativa original.
@@ -297,7 +297,7 @@ class ResearchAuditor:
         # Remove pontuação terminal e trunca
         return claim_text.rstrip(".!?")[:100]
 
-    def _build_summary(self, claims: List[AuditClaim], iterations: int) -> str:
+    def _build_summary(self, claims: list[AuditClaim], iterations: int) -> str:
         """Gera sumário textual da auditoria."""
         total = len(claims)
         verified = len([c for c in claims if c.status == "verified"])

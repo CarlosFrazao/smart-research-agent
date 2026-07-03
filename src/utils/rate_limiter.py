@@ -6,11 +6,11 @@ Uso em qualquer searcher / http_client:
     await DomainRateLimiter.wait(url)
 """
 import asyncio
+import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass
 from urllib.parse import urlparse
-import logging
 
 logger = logging.getLogger(__name__)
 

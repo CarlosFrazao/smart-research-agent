@@ -6,11 +6,10 @@ O arquivo padrão é reports/_feedback.jsonl, configurável via FEEDBACK_STORE_P
 """
 
 import json
-import os
 import logging
-from datetime import datetime, timezone
+import os
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ _DEFAULT_PATH = Path(__file__).parent.parent / "reports" / "_feedback.jsonl"
 
 
 class FeedbackStore:
-    def __init__(self, store_path: Optional[str] = None):
+    def __init__(self, store_path: str | None = None):
         self.path = Path(store_path or os.environ.get("FEEDBACK_STORE_PATH", str(_DEFAULT_PATH)))
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -35,19 +34,19 @@ class FeedbackStore:
             "result_id": result_id,
             "signal": signal,
             "query": query,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         logger.info(f"Feedback gravado: {result_id} → {signal}")
         return entry
 
-    def load_all(self) -> List[dict]:
+    def load_all(self) -> list[dict]:
         """Carrega todos os registros do arquivo JSONL."""
         if not self.path.exists():
             return []
         records = []
-        with open(self.path, "r", encoding="utf-8") as f:
+        with open(self.path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

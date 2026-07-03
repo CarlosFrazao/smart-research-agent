@@ -13,15 +13,14 @@ Estratégia de Slides:
 import logging
 import re
 from pathlib import Path
-from typing import Optional, List, Tuple
 
 logger = logging.getLogger("pptx_exporter")
 
 try:
     from pptx import Presentation
-    from pptx.util import Inches, Pt, Emu
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
+    from pptx.util import Emu, Inches, Pt
     _PPTX_AVAILABLE = True
 except ImportError:
     _PPTX_AVAILABLE = False
@@ -44,7 +43,7 @@ class PPTXExporter:
     def __init__(self):
         self.available = _PPTX_AVAILABLE
 
-    def export(self, markdown_content: str, filepath: str) -> Optional[str]:
+    def export(self, markdown_content: str, filepath: str) -> str | None:
         """
         Gera o PPTX a partir do conteúdo Markdown e o salva em `filepath`.
 
@@ -120,15 +119,15 @@ class PPTXExporter:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _parse_sections(self, content: str) -> List[Tuple[str, int, List[str]]]:
+    def _parse_sections(self, content: str) -> list[tuple[str, int, list[str]]]:
         """
         Divide o Markdown em seções [(heading, level, body_lines)].
         level 0 = título (H1), 2 = H2, 3 = H3+
         """
-        sections: List[Tuple[str, int, List[str]]] = []
+        sections: list[tuple[str, int, list[str]]] = []
         current_heading = ""
         current_level = 0
-        current_body: List[str] = []
+        current_body: list[str] = []
 
         for line in content.splitlines():
             stripped = line.strip()
@@ -158,8 +157,7 @@ class PPTXExporter:
 
         return sections[:30]  # máximo de 30 slides
 
-    def _set_bg(self, slide, color: Tuple[int, int, int]) -> None:
-        from pptx.util import Pt
+    def _set_bg(self, slide, color: tuple[int, int, int]) -> None:
         from pptx.dml.color import RGBColor
         background = slide.background
         fill = background.fill
@@ -167,8 +165,8 @@ class PPTXExporter:
         fill.fore_color.rgb = RGBColor(*color)
 
     def _add_accent_bar(self, slide) -> None:
-        from pptx.util import Inches, Pt
         from pptx.dml.color import RGBColor
+        from pptx.util import Inches
         shape = slide.shapes.add_shape(
             1,  # MSO_SHAPE_TYPE.RECTANGLE
             Inches(0), Inches(0), Inches(13.33), Inches(0.07)
@@ -179,7 +177,7 @@ class PPTXExporter:
 
     def _add_text_box(self, slide, text: str, left, top, width, height,
                       font_size=None, bold=False,
-                      color: Tuple[int, int, int] = (255, 255, 255)) -> None:
+                      color: tuple[int, int, int] = (255, 255, 255)) -> None:
         from pptx.dml.color import RGBColor
         from pptx.util import Pt as _Pt
         if font_size is None:

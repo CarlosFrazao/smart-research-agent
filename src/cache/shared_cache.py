@@ -20,12 +20,12 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # ── TTL em segundos por estratégia ───────────────────────────────────────────
-TTL_STRATEGIES: Dict[str, int] = {
+TTL_STRATEGIES: dict[str, int] = {
     "aggressive": 7 * 24 * 3600,    # 7 dias
     "moderate":   48 * 3600,         # 48 horas
     "minimal":    3600,               # 1 hora
@@ -38,9 +38,9 @@ class _InMemoryCache:
     """Fallback de dict em memória com TTL manual — sem dependências externas."""
 
     def __init__(self) -> None:
-        self._store: Dict[str, tuple[Any, float]] = {}  # key → (value, expires_at)
+        self._store: dict[str, tuple[Any, float]] = {}  # key → (value, expires_at)
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         entry = self._store.get(key)
         if entry is None:
             return None
@@ -109,13 +109,13 @@ class SharedCache:
 
     # ── API Genérica ─────────────────────────────────────────────────────────
 
-    def _ttl(self, strategy: Optional[str] = None, ttl: Optional[int] = None) -> int:
+    def _ttl(self, strategy: str | None = None, ttl: int | None = None) -> int:
         if ttl is not None:
             return ttl
         s = strategy or self._default_strategy
         return TTL_STRATEGIES.get(s, DEFAULT_TTL)
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         try:
             if self._is_redis:
                 raw = self._backend.get(key)
@@ -129,8 +129,8 @@ class SharedCache:
         self,
         key: str,
         value: Any,
-        strategy: Optional[str] = None,
-        ttl: Optional[int] = None,
+        strategy: str | None = None,
+        ttl: int | None = None,
     ) -> None:
         effective_ttl = self._ttl(strategy, ttl)
         try:
@@ -172,7 +172,7 @@ class SharedCache:
     def url_hash(url: str) -> str:
         return hashlib.sha256(url.encode()).hexdigest()[:16]
 
-    def get_scraped_content(self, url: str) -> Optional[str]:
+    def get_scraped_content(self, url: str) -> str | None:
         key = f"scrape:{self.url_hash(url)}"
         result = self.get(key)
         if result is not None:
@@ -183,7 +183,7 @@ class SharedCache:
         self,
         url: str,
         content: str,
-        strategy: Optional[str] = None,
+        strategy: str | None = None,
     ) -> None:
         key = f"scrape:{self.url_hash(url)}"
         self.set(key, content, strategy=strategy)
@@ -195,7 +195,7 @@ class SharedCache:
     def query_hash(query: str) -> str:
         return hashlib.sha256(query.lower().strip().encode()).hexdigest()[:16]
 
-    def get_research_result(self, query: str) -> Optional[Dict]:
+    def get_research_result(self, query: str) -> dict | None:
         key = f"research:{self.query_hash(query)}"
         result = self.get(key)
         if result is not None:
@@ -205,8 +205,8 @@ class SharedCache:
     def set_research_result(
         self,
         query: str,
-        result: Dict,
-        strategy: Optional[str] = None,
+        result: dict,
+        strategy: str | None = None,
     ) -> None:
         key = f"research:{self.query_hash(query)}"
         self.set(key, result, strategy=strategy)

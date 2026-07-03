@@ -13,8 +13,8 @@ Se ele falhar com rate-limit, a cadeia acima é tentada automaticamente.
 
 import json
 import logging
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def _is_rate_limit(exc: Exception) -> bool:
     return code in _RATE_LIMIT_CODES
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     GEMINI = "gemini"
@@ -54,10 +54,10 @@ class LLMClient:
     def __init__(
         self,
         provider: LLMProvider,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         model_router=None,
         # configs de fallback (extraídas do Config global pelo Orchestrator)
-        fallback_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        fallback_configs: dict[str, dict[str, Any]] | None = None,
     ):
         self.provider = provider
         self.config = config
@@ -65,7 +65,7 @@ class LLMClient:
         self.model = ""
         self.model_router = model_router
         # fallback_configs: {"gemini": {...}, "groq": {...}, "openrouter": {...}, "ollama": {...}}
-        self._fallback_configs: Dict[str, Dict[str, Any]] = fallback_configs or {}
+        self._fallback_configs: dict[str, dict[str, Any]] = fallback_configs or {}
         self._init_providers_safely()
         self._init_client()
         from src.token_economy import TokenEconomy
@@ -222,7 +222,7 @@ class LLMClient:
           openrouter → gemini → groq → ollama
         Pula o provider que já falhou (skip).
         """
-        chain: List[str] = ["openrouter", "gemini", "groq", "ollama"]
+        chain: list[str] = ["openrouter", "gemini", "groq", "ollama"]
 
         for provider_name in chain:
             if provider_name == skip.value:
@@ -252,7 +252,7 @@ class LLMClient:
     async def _call_provider(
         self,
         provider: LLMProvider,
-        cfg: Dict[str, Any],
+        cfg: dict[str, Any],
         prompt: str,
         temperature: float,
         max_tokens: int,
@@ -315,8 +315,8 @@ class LLMClient:
     # ── Geração estruturada (JSON) ────────────────────────────────────────────
 
     async def generate_structured(
-        self, prompt: str, schema: Dict[str, Any], temperature: float = 0.1
-    ) -> Dict[str, Any]:
+        self, prompt: str, schema: dict[str, Any], temperature: float = 0.1
+    ) -> dict[str, Any]:
         json_prompt = (
             prompt
             + "\n\nResponda APENAS em JSON valido seguindo este schema: "
@@ -341,7 +341,7 @@ class LLMClient:
         self,
         prompt: str,
         task_type: str = "synthesis",
-        model_override: Optional[str] = None,
+        model_override: str | None = None,
         temperature: float = 0.3,
         max_tokens: int = 4000,
     ) -> str:
@@ -408,7 +408,7 @@ class LLMClient:
         self,
         prompt: str,
         task_type: str = "synthesis",
-        model_override: Optional[str] = None,
+        model_override: str | None = None,
         temperature: float = 0.3,
         max_tokens: int = 4000,
     ):

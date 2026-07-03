@@ -7,9 +7,9 @@ delta máximo = ±15 pontos sobre o combined_score original.
 """
 
 import logging
-from typing import List, Optional
-from src.types import SynthesizedResult
+
 from src.feedback_store import FeedbackStore
+from src.types import SynthesizedResult
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,10 @@ def _result_id(result: SynthesizedResult) -> str:
 
 
 class FeedbackRanker:
-    def __init__(self, store: Optional[FeedbackStore] = None):
+    def __init__(self, store: FeedbackStore | None = None):
         self.store = store or FeedbackStore()
 
-    def apply(self, results: List[SynthesizedResult]) -> List[SynthesizedResult]:
+    def apply(self, results: list[SynthesizedResult]) -> list[SynthesizedResult]:
         """
         Ajusta combined_score de cada resultado com base no feedback acumulado.
         Reordena a lista por score ajustado (desc). Não modifica o objeto original

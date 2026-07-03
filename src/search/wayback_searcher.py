@@ -1,18 +1,20 @@
-from typing import List, Dict, Any
+import logging
+from datetime import datetime
+from typing import Any
+
+import httpx
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
-import logging
-import httpx
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 class WaybackSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.api_url = "https://archive.org/wayback/available"
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         # Para o Wayback, a query ideal é uma URL. Se não for uma URL válida,
         # retornamos fallback já que o Wayback busca snapshots de URLs específicas.
         if not (query.startswith("http://") or query.startswith("https://")):
@@ -49,7 +51,7 @@ class WaybackSearcher(BaseSearcher):
             logger.error(f"WaybackSearcher: Falha ao executar busca no Internet Archive: {e}")
             return self.fallback(query)
 
-    def normalize(self, raw_result: Dict[str, Any]) -> SearchResult:
+    def normalize(self, raw_result: dict[str, Any]) -> SearchResult:
         timestamp_str = raw_result.get("timestamp", "")
         # Formata o timestamp de AAAAMMDDHHMMSS para data legível
         readable_date = "Data desconhecida"

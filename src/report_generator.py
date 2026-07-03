@@ -1,13 +1,13 @@
-from typing import List, Optional
+import logging
+import os
 from datetime import datetime
 from pathlib import Path
-import os
-from src.types import SynthesizedResult, ResearchMetadata, ReportFormat
+
 from src.clients.llm_client import LLMClient
-from src.temporal_analyzer import TemporalAnalyzer
-from src.sentiment_analyzer import SentimentAnalyzer
 from src.comparator import Comparator
-import logging
+from src.sentiment_analyzer import SentimentAnalyzer
+from src.temporal_analyzer import TemporalAnalyzer
+from src.types import ReportFormat, ResearchMetadata, SynthesizedResult
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class ReportGenerator:
     async def generate(
         self,
         query: str,
-        results: List[SynthesizedResult],
+        results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> str:
         executive_summary = await self._generate_executive_summary(query, results, metadata)
@@ -47,7 +47,7 @@ class ReportGenerator:
     async def _generate_executive_summary(
         self,
         query: str,
-        results: List[SynthesizedResult],
+        results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> str:
         top_lines_list = []
@@ -95,7 +95,7 @@ class ReportGenerator:
             )
 
     async def _generate_recommendation(
-        self, query: str, results: List[SynthesizedResult]
+        self, query: str, results: list[SynthesizedResult]
     ) -> str:
         if not results:
             return "Nenhum projeto encontrado para recomendacao."
@@ -127,7 +127,7 @@ class ReportGenerator:
             top = results[0]
             return f"Recomendamos **{top.title}** como principal opcao. {top.description[:200]}..."
 
-    async def _generate_trends(self, results: List[SynthesizedResult]) -> str:
+    async def _generate_trends(self, results: list[SynthesizedResult]) -> str:
         if len(results) < 3:
             return "Poucos dados para analise de tendencias."
         project_lines = "\n".join(
@@ -150,10 +150,10 @@ class ReportGenerator:
         self,
         query: str,
         metadata: ResearchMetadata,
-        results: List[SynthesizedResult],
-        executive_summary: Optional[str],
-        recommendation: Optional[str],
-        trends: Optional[str],
+        results: list[SynthesizedResult],
+        executive_summary: str | None,
+        recommendation: str | None,
+        trends: str | None,
         timeline_section: str = "",
         sentiment_section: str = "",
         comparison_section: str = "",
@@ -443,7 +443,7 @@ class ReportGenerator:
         report: str,
         query: str,
         output_dir: str = "./reports",
-        formats: Optional[List[ReportFormat]] = None,
+        formats: list[ReportFormat] | None = None,
     ) -> str:
         """
         Salva o relatório no disco.

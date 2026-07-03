@@ -1,10 +1,10 @@
-from pydantic_settings import BaseSettings
+from enum import StrEnum
+
 from pydantic import Field
-from typing import Optional
-from enum import Enum
+from pydantic_settings import BaseSettings
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     GEMINI = "gemini"
@@ -15,22 +15,22 @@ class LLMProvider(str, Enum):
 
 class Config(BaseSettings):
     llm_provider: LLMProvider = Field(default=LLMProvider.ANTHROPIC)
-    anthropic_api_key: Optional[str] = None
+    anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-20250514"
-    openai_api_key: Optional[str] = None
+    openai_api_key: str | None = None
     openai_model: str = "gpt-4.1"
-    openrouter_api_key: Optional[str] = None
+    openrouter_api_key: str | None = None
     openrouter_model: str = "google/gemma-4-26b-a4b-it:free"
-    gemini_api_key: Optional[str] = None
+    gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"  # free tier
-    groq_api_key: Optional[str] = None
+    groq_api_key: str | None = None
     groq_model: str = "llama-3.3-70b-versatile"  # free tier
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
-    ollama_api_key: Optional[str] = None
+    ollama_api_key: str | None = None
 
-    firecrawl_api_key: Optional[str] = None
-    firecrawl_base_url: Optional[str] = None
+    firecrawl_api_key: str | None = None
+    firecrawl_base_url: str | None = None
 
     spider_api_key: str = Field(default="")
     spider_base_url: str = "https://api.spider.cloud"
@@ -44,12 +44,12 @@ class Config(BaseSettings):
     playwright_enabled: bool = Field(default=False)
     playwright_headless: bool = Field(default=True)
 
-    captcha_provider: Optional[str] = Field(default=None)   # "2captcha" | "capsolver"
-    captcha_api_key: Optional[str] = Field(default=None)
+    captcha_provider: str | None = Field(default=None)   # "2captcha" | "capsolver"
+    captcha_api_key: str | None = Field(default=None)
 
-    residential_proxy_provider: Optional[str] = Field(default=None)  # "brightdata" | "smartproxy"
-    residential_proxy_username: Optional[str] = Field(default=None)
-    residential_proxy_password: Optional[str] = Field(default=None)
+    residential_proxy_provider: str | None = Field(default=None)  # "brightdata" | "smartproxy"
+    residential_proxy_username: str | None = Field(default=None)
+    residential_proxy_password: str | None = Field(default=None)
 
     # --- Firecrawl v4.30.3 Feature Flags ---
     firecrawl_redact_pii: bool = Field(default=False)
@@ -60,26 +60,26 @@ class Config(BaseSettings):
     # --- ModelRouter: Reasoning Models ---
     reasoning_models_enabled: bool = Field(default=False)
     openai_reasoning_model: str = Field(default="o3-mini")
-    deepseek_api_key: Optional[str] = Field(default=None)
+    deepseek_api_key: str | None = Field(default=None)
     deepseek_model: str = Field(default="deepseek-r1")
     deepseek_base_url: str = Field(default="https://api.deepseek.com/v1")
 
-    github_token: Optional[str] = None
-    producthunt_token: Optional[str] = None
+    github_token: str | None = None
+    producthunt_token: str | None = None
 
     memory_enabled: bool = Field(default=True)
     memory_db_path: str = Field(default="reports/.research_memory.db")
     smart_routing_enabled: bool = Field(default=True)
 
-    obsidian_vault_path: Optional[str] = Field(default=None)
+    obsidian_vault_path: str | None = Field(default=None)
     obsidian_auto_sync: bool = Field(default=False)
 
     host_mode: bool = Field(default=False)
     jina_reader_base_url: str = Field(default="https://r.jina.ai/")
 
-    semantic_scholar_api_key: Optional[str] = Field(default=None)
-    ncbi_api_key: Optional[str] = Field(default=None)
-    youtube_api_key: Optional[str] = Field(default=None)
+    semantic_scholar_api_key: str | None = Field(default=None)
+    ncbi_api_key: str | None = Field(default=None)
+    youtube_api_key: str | None = Field(default=None)
 
     max_results_per_source: int = 20
     max_iterations: int = 3
@@ -91,11 +91,11 @@ class Config(BaseSettings):
 
 
     # SerpAPI — fallback de último recurso para buscas na web
-    serpapi_api_key: Optional[str] = Field(default=None)
+    serpapi_api_key: str | None = Field(default=None)
     serpapi_enabled: bool = Field(default=True)
 
     # Neo4j — banco de grafos para conhecimento persistente
-    neo4j_uri: Optional[str] = Field(default=None)
+    neo4j_uri: str | None = Field(default=None)
     neo4j_user: str = Field(default="neo4j")
     neo4j_password: str = Field(default="password123")
 
@@ -104,7 +104,7 @@ class Config(BaseSettings):
     celery_result_backend: str = Field(default="redis://localhost:6379/1")
 
     # Cohere — reranking de buscas híbridas
-    cohere_api_key: Optional[str] = Field(default=None)
+    cohere_api_key: str | None = Field(default=None)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

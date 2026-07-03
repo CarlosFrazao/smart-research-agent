@@ -1,14 +1,16 @@
-from typing import List, Dict, Any
+import logging
+from typing import Any
+from urllib.parse import urlparse
+
+import httpx
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
-import logging
-import httpx
-from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 class SearXNGSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         # O padrão usa o container SearXNG se rodando de dentro do Docker, 
         # ou o mapeamento de loopback se rodando no host.
@@ -16,7 +18,7 @@ class SearXNGSearcher(BaseSearcher):
         self.engines = config.get("searxng_engines", "google,bing,duckduckgo")
         self.categories = config.get("searxng_categories", "general")
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         url = f"{self.searxng_url.rstrip('/')}/search"
         params = {
             "q": query,
@@ -48,7 +50,7 @@ class SearXNGSearcher(BaseSearcher):
             logger.error(f"SearXNGSearcher: Falha ao executar busca no SearXNG: {e}")
             return self.fallback(query)
 
-    def normalize(self, raw_result: Dict[str, Any]) -> SearchResult:
+    def normalize(self, raw_result: dict[str, Any]) -> SearchResult:
         url = raw_result.get("url", "")
         parsed_url = urlparse(url)
         domain = parsed_url.netloc if url else ""

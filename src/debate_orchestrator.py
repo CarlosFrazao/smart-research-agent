@@ -17,7 +17,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("debate_orchestrator")
 
@@ -39,8 +39,8 @@ class Hypothesis:
     rationale: str
     stance: str = "pro"
     # Preenchidos após pesquisa
-    evidence: List[str] = field(default_factory=list)
-    sources: List[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
     confidence: float = 0.0
     search_results_count: int = 0
 
@@ -60,7 +60,7 @@ class DebateRound:
     duration_s  — duração total em segundos
     """
     query: str
-    hypotheses: List[Hypothesis]
+    hypotheses: list[Hypothesis]
     winner: str = ""
     verdict: str = ""
     confidence: float = 0.0
@@ -86,7 +86,7 @@ class DebateOrchestrator:
     def __init__(
         self,
         llm_client: Any,
-        searchers: Dict[str, Any],
+        searchers: dict[str, Any],
         num_hypotheses: int = 3,
     ):
         self.llm = llm_client
@@ -126,7 +126,7 @@ class DebateOrchestrator:
 
     # ── Fase 1 — Geração de Hipóteses ─────────────────────────────────────────
 
-    async def generate_hypotheses(self, query: str) -> List[Hypothesis]:
+    async def generate_hypotheses(self, query: str) -> list[Hypothesis]:
         """
         Pede ao LLM que gere N hipóteses opostas/distintas sobre a query.
         Retorna uma lista de objetos Hypothesis parseados.
@@ -172,7 +172,7 @@ class DebateOrchestrator:
 
     # ── Fase 2 — Pesquisa Paralela ─────────────────────────────────────────────
 
-    async def run_debate(self, query: str, hypotheses: List[Hypothesis]) -> List[Hypothesis]:
+    async def run_debate(self, query: str, hypotheses: list[Hypothesis]) -> list[Hypothesis]:
         """
         Para cada hipótese, executa pesquisa com query especializada em paralelo.
         Preenche hypothesis.evidence, hypothesis.sources e hypothesis.confidence.
@@ -191,7 +191,7 @@ class DebateOrchestrator:
 
         return hypotheses
 
-    async def _research_hypothesis(self, base_query: str, h: Hypothesis) -> Dict[str, Any]:
+    async def _research_hypothesis(self, base_query: str, h: Hypothesis) -> dict[str, Any]:
         """
         Executa pesquisa especializada para uma única hipótese.
         Usa uma query reformulada que favorece a perspectiva da hipótese.
@@ -199,8 +199,8 @@ class DebateOrchestrator:
         # Reformula a query para reforçar a perspectiva da hipótese
         search_query = f"{base_query} {h.claim[:80]}"
 
-        evidence: List[str] = []
-        sources: List[str] = []
+        evidence: list[str] = []
+        sources: list[str] = []
         total_results = 0
 
         # Usar os searchers disponíveis para coletar evidências
@@ -229,7 +229,7 @@ class DebateOrchestrator:
                         total_results += 1
                 if total_results >= self.MAX_RESULTS_PER_H * 2:
                     break  # evidência suficiente
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(f"Searcher '{name}' timeout para hipótese {h.id}")
             except Exception as e:
                 logger.debug(f"Searcher '{name}' erro para hipótese {h.id}: {e}")
@@ -245,7 +245,7 @@ class DebateOrchestrator:
 
     # ── Fase 3 — Julgamento ────────────────────────────────────────────────────
 
-    async def judge_round(self, query: str, hypotheses: List[Hypothesis]) -> DebateRound:
+    async def judge_round(self, query: str, hypotheses: list[Hypothesis]) -> DebateRound:
         """
         O LLM juiz lê todos os argumentos e emite um veredito com raciocínio detalhado.
         """
@@ -372,12 +372,13 @@ class DebateOrchestrator:
 
     # ── Parsers internos ───────────────────────────────────────────────────────
 
-    def _parse_hypotheses(self, raw: str) -> List[Hypothesis]:
+    def _parse_hypotheses(self, raw: str) -> list[Hypothesis]:
         """
         Extrai lista de Hypothesis do JSON retornado pelo LLM.
         Tolerante a texto extra antes/depois do JSON.
         """
-        import json, re
+        import json
+        import re
         # Extrai o array JSON mesmo que o LLM adicione texto extra
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         if not match:
@@ -395,12 +396,13 @@ class DebateOrchestrator:
             )
         return hypotheses
 
-    def _parse_judgment(self, raw: str) -> Dict[str, Any]:
+    def _parse_judgment(self, raw: str) -> dict[str, Any]:
         """
         Extrai o veredito do JSON retornado pelo LLM juiz.
         Tolerante a texto extra antes/depois do JSON.
         """
-        import json, re
+        import json
+        import re
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not match:
             raise ValueError(f"JSON de julgamento não encontrado em: {raw[:200]}")

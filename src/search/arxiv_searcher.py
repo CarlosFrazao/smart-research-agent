@@ -1,11 +1,12 @@
-from typing import List, Dict, Any
+import logging
+import xml.etree.ElementTree as ET
+from typing import Any
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
+from src.utils.circuit_breaker import CircuitBreakerOpen, CircuitBreakerRegistry
 from src.utils.http_client import HTTPClient
-from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
-from src.utils.retry import with_retry, RetryConfig
-import xml.etree.ElementTree as ET
-import logging
+from src.utils.retry import RetryConfig, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ _RETRY_CONFIG = RetryConfig(
 
 
 class ArxivSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any], firecrawl_client=None):
+    def __init__(self, config: dict[str, Any], firecrawl_client=None):
         super().__init__(config)
         self.base_url = "http://export.arxiv.org/api/query"
         self.http = HTTPClient(timeout=self.timeout)
@@ -29,7 +30,7 @@ class ArxivSearcher(BaseSearcher):
             "arxiv_api", failure_threshold=3, recovery_timeout=300
         )
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         if not hasattr(self, "circuit"):
             self.circuit = CircuitBreakerRegistry.get(
                 "arxiv_api", failure_threshold=3, recovery_timeout=300
@@ -42,7 +43,7 @@ class ArxivSearcher(BaseSearcher):
             return self.fallback(query)
 
     @with_retry(_RETRY_CONFIG)
-    async def _do_search(self, query: str) -> List[SearchResult]:
+    async def _do_search(self, query: str) -> list[SearchResult]:
         params = {
             "search_query": f"all:{query}",
             "start": 0,
@@ -78,7 +79,7 @@ class ArxivSearcher(BaseSearcher):
             logger.error(f"Arxiv search erro: {e}")
             return self.fallback(query)
 
-    def _parse_xml(self, xml_text: str) -> List[SearchResult]:
+    def _parse_xml(self, xml_text: str) -> list[SearchResult]:
         results = []
         try:
             root = ET.fromstring(xml_text)
@@ -127,7 +128,7 @@ class ArxivSearcher(BaseSearcher):
             raw=raw_result,
         )
 
-    def _normalize_research_index_result(self, item: Dict[str, Any]) -> SearchResult:
+    def _normalize_research_index_result(self, item: dict[str, Any]) -> SearchResult:
         """Converte resultado do Firecrawl Research Index para SearchResult."""
         return SearchResult(
             source="arxiv_research_index",

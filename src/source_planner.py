@@ -1,11 +1,12 @@
-from typing import List, Dict, Any
-from pathlib import Path
-from src.types import IntentResult, ExpandedQuery, SourcePlan
 import logging
+from pathlib import Path
+from typing import Any
+
+from src.types import ExpandedQuery, IntentResult, SourcePlan
 
 logger = logging.getLogger(__name__)
 
-DOMAIN_SOURCES: Dict[str, Dict[str, List[str]]] = {
+DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
     "saas_b2b": {
         "primary": ["github", "producthunt", "reddit", "searxng"],
         "secondary": ["hackernews", "awesome", "firecrawl", "stackoverflow"],
@@ -38,11 +39,11 @@ DOMAIN_SOURCES: Dict[str, Dict[str, List[str]]] = {
 
 
 class SourcePlanner:
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         self.config = config or {}
         self.domain_map = self._load_domain_map()
 
-    def _load_domain_map(self) -> Dict:
+    def _load_domain_map(self) -> dict:
         config_path = Path(__file__).parent.parent / "config" / "domains.yaml"
         if config_path.exists():
             try:
@@ -54,22 +55,22 @@ class SourcePlanner:
                 logger.warning(f"Erro ao carregar domains.yaml: {e}")
         return DOMAIN_SOURCES
 
-    def plan(self, intent: IntentResult, queries: List[ExpandedQuery]) -> SourcePlan:
+    def plan(self, intent: IntentResult, queries: list[ExpandedQuery]) -> SourcePlan:
         domain_key = intent.domain.value
         mapping = self.domain_map.get(domain_key, DOMAIN_SOURCES["general"])
 
         primary = mapping.get("primary", [])
         secondary = mapping.get("secondary", [])
 
-        plan: Dict[str, List[ExpandedQuery]] = {}
+        plan: dict[str, list[ExpandedQuery]] = {}
         for source in primary + secondary:
             plan[source] = self._select_queries_for_source(queries, source, intent)
 
         return SourcePlan(sources=plan, primary=primary, secondary=secondary)
 
     def _select_queries_for_source(
-        self, queries: List[ExpandedQuery], source: str, intent: IntentResult
-    ) -> List[ExpandedQuery]:
+        self, queries: list[ExpandedQuery], source: str, intent: IntentResult
+    ) -> list[ExpandedQuery]:
         """Assign queries to each source based on type compatibility.
 
         The QueryExpander generates types: synonym, perspective, evidence,

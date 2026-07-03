@@ -5,11 +5,12 @@ Valida assincronamente todas as URLs de citações extraídas dos resultados de 
 Utiliza asyncio.Semaphore para limitar a concorrência e evitar abuso.
 Penaliza a confiança do resultado caso ele apresente referências quebradas (404, timeouts, etc).
 """
-import re
 import asyncio
-import httpx
 import logging
-from typing import List, Dict, Set, Tuple
+import re
+
+import httpx
+
 from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ class LinkVerifier:
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.timeout = timeout
 
-    def extract_links(self, text: str) -> List[str]:
+    def extract_links(self, text: str) -> list[str]:
         """Extrai URLs de um bloco de texto e limpa pontuações finais."""
         if not text:
             return []
@@ -34,7 +35,7 @@ class LinkVerifier:
                 cleaned.append(cleaned_url)
         return cleaned
 
-    async def verify_url(self, client: httpx.AsyncClient, url: str) -> Tuple[str, bool, int, str]:
+    async def verify_url(self, client: httpx.AsyncClient, url: str) -> tuple[str, bool, int, str]:
         """
         Verifica a saúde de uma única URL usando o semáforo de concorrência.
         Retorna: (url, is_alive, status_code, error_message)
@@ -57,14 +58,14 @@ class LinkVerifier:
             except Exception as e:
                 return url, False, 0, str(e)
 
-    async def verify_results(self, results: List[SearchResult]) -> List[SearchResult]:
+    async def verify_results(self, results: list[SearchResult]) -> list[SearchResult]:
         """
         Analisa um lote de SearchResult, extrai seus links citados, valida-os
         concorrentemente e aplica penalidades nos que tiverem links quebrados.
         """
         # 1. Coleta todas as URLs únicas citadas para evitar requisições duplicadas
-        all_urls_to_verify: Set[str] = set()
-        result_to_links_map: Dict[str, List[str]] = {}
+        all_urls_to_verify: set[str] = set()
+        result_to_links_map: dict[str, list[str]] = {}
 
         for result in results:
             content = result.description or ""
@@ -91,7 +92,7 @@ class LinkVerifier:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         
-        url_status_map: Dict[str, Tuple[bool, int, str]] = {}
+        url_status_map: dict[str, tuple[bool, int, str]] = {}
         
         async with httpx.AsyncClient(headers=headers, verify=False) as client:
             tasks = [self.verify_url(client, url) for url in all_urls_to_verify]

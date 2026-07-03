@@ -1,12 +1,13 @@
-from typing import List, Dict, Any
 import asyncio
+import logging
 import time
+from typing import Any
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
+from src.utils.circuit_breaker import CircuitBreakerOpen, CircuitBreakerRegistry
 from src.utils.http_client import HTTPClient
-from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
-from src.utils.retry import with_retry, RetryConfig
-import logging
+from src.utils.retry import RetryConfig, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +22,18 @@ _RETRY_CONFIG = RetryConfig(
 
 
 class HNSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.base_url = "https://hn.algolia.com/api/v1/search"
         self.http = HTTPClient(timeout=self.timeout)
         self.last_request_time = 0.0
         self.min_interval = 3.6  # segundos entre requests
-        self._cache: Dict[str, List[SearchResult]] = {}
+        self._cache: dict[str, list[SearchResult]] = {}
         self.circuit = CircuitBreakerRegistry.get(
             "hn_api", failure_threshold=3, recovery_timeout=300
         )
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         cache_key = f"{query}:{self.max_results}"
         if cache_key in self._cache:
             logger.info(f"HN search cache hit para: '{query}'")
@@ -50,7 +51,7 @@ class HNSearcher(BaseSearcher):
             return self.fallback(query)
 
     @with_retry(_RETRY_CONFIG)
-    async def _do_search(self, query: str, cache_key: str) -> List[SearchResult]:
+    async def _do_search(self, query: str, cache_key: str) -> list[SearchResult]:
 
         elapsed = time.time() - self.last_request_time
         if elapsed < self.min_interval:

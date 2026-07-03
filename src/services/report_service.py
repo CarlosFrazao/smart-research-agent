@@ -1,7 +1,7 @@
+import logging
 import os
 import shutil
-import logging
-from typing import List, Any, Optional
+from typing import Any
 
 logger = logging.getLogger("orchestrator.report_service")
 
@@ -22,13 +22,13 @@ class ReportService:
     def report_generator(self):
         return self.orch.report_generator
 
-    async def generate(self, query: str, synthesized: List[Any], metadata: Any) -> str:
+    async def generate(self, query: str, synthesized: list[Any], metadata: Any) -> str:
         """
         Invoca o ReportGenerator para compilar as entidades em um relatório Markdown estruturado.
         """
         return await self.report_generator.generate(query, synthesized, metadata)
 
-    def save(self, report: str, query: str, formats: Optional[List[Any]] = None) -> str:
+    def save(self, report: str, query: str, formats: list[Any] | None = None) -> str:
         """
         Salva o relatório fisicamente no disco nas extensões solicitadas.
         """

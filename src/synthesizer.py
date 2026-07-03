@@ -1,10 +1,9 @@
-from typing import List, Dict
+import logging
 from collections import defaultdict
-from datetime import datetime
+
+from src.clients.llm_client import LLMClient
 from src.types import RankedResult, SynthesizedResult, Verdict
 from src.utils.deduplicator import Deduplicator
-from src.clients.llm_client import LLMClient
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ class Synthesizer:
         self.llm = llm_client
         self.deduplicator = Deduplicator()
 
-    async def synthesize(self, results: List[RankedResult]) -> List[SynthesizedResult]:
+    async def synthesize(self, results: list[RankedResult]) -> list[SynthesizedResult]:
         deduped = self.deduplicator.deduplicate(results)
         logger.info(f"Deduplicacao: {len(results)} -> {len(deduped)}")
 
@@ -28,9 +27,9 @@ class Synthesizer:
         return self._apply_source_cap(synthesized)
 
     def _cluster_by_entity(
-        self, results: List[RankedResult]
-    ) -> List[List[RankedResult]]:
-        clusters: Dict[str, List[RankedResult]] = defaultdict(list)
+        self, results: list[RankedResult]
+    ) -> list[list[RankedResult]]:
+        clusters: dict[str, list[RankedResult]] = defaultdict(list)
         for r in results:
             entity = self._extract_entity(r.title)
             clusters[entity].append(r)
@@ -52,7 +51,7 @@ class Synthesizer:
         return words[0]
 
     @staticmethod
-    def _compute_verdict(score: float, description: str, highlights: List[str]) -> tuple[str, str, str, int]:
+    def _compute_verdict(score: float, description: str, highlights: list[str]) -> tuple[str, str, str, int]:
         """Retorna (verdict, tldr, next_step, read_min) a partir do score e conteúdo."""
         if score >= 75:
             verdict = Verdict.FOCA.value
@@ -80,7 +79,7 @@ class Synthesizer:
 
         return verdict, tldr, next_step, read_min
 
-    def _merge_cluster(self, cluster: List[RankedResult]) -> SynthesizedResult:
+    def _merge_cluster(self, cluster: list[RankedResult]) -> SynthesizedResult:
         entity = self._extract_entity(cluster[0].title)
         best_title = max(cluster, key=lambda x: len(x.title)).title
 
@@ -93,7 +92,7 @@ class Synthesizer:
         scores = [r.score for r in cluster]
         combined_score = round(sum(scores) / len(scores), 2)
 
-        merged_metrics: Dict = {}
+        merged_metrics: dict = {}
         for r in cluster:
             for key, value in r.metrics.items():
                 if key not in merged_metrics:
@@ -139,12 +138,12 @@ class Synthesizer:
         )
 
     def _apply_source_cap(
-        self, results: List[SynthesizedResult], max_per_source: int = 10
-    ) -> List[SynthesizedResult]:
+        self, results: list[SynthesizedResult], max_per_source: int = 10
+    ) -> list[SynthesizedResult]:
         """Cap per-source results to avoid one source dominating.
         Always keeps the global top-20 by combined_score.
         """
-        source_counts: Dict[str, int] = defaultdict(int)
+        source_counts: dict[str, int] = defaultdict(int)
         filtered = []
         for r in results:
             primary_source = r.sources[0] if r.sources else "unknown"

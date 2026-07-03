@@ -6,7 +6,7 @@ Não requer chave de API — faz requisições HTTP simples ao endpoint público
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -17,11 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 class JinaSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.base_url = config.get("jina_base_url", "https://r.jina.ai/").rstrip("/")
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         """
         Extrai conteúdo de uma URL via Jina Reader.
 

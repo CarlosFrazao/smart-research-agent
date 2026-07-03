@@ -1,8 +1,9 @@
 import asyncio
-import aiohttp
 import logging
-from typing import Dict, Any, Optional, List
-from urllib.parse import urlparse, quote
+from typing import Any
+from urllib.parse import quote
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ class ScrapingRaceClient:
         self.firecrawl_client = firecrawl_client
         self.timeout = timeout
 
-    async def scrape(self, url: str, formats: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def scrape(self, url: str, formats: list[str] | None = None) -> dict[str, Any]:
         """
         Dispara requisições concorrentes para raspar a URL e retorna o primeiro sucesso válido.
         Cancela as conexões excedentes no mesmo instante.
@@ -49,7 +50,7 @@ class ScrapingRaceClient:
                             break
                 except Exception as e:
                     logger.debug(f"Competidor da corrida falhou com exceção: {e}")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Timeout na corrida de scraping para {url}")
             
         # Cancela todos os competidores que ainda não concluíram
@@ -92,7 +93,7 @@ class ScrapingRaceClient:
             logger.error(f"Erro fatal no fallback final de scraping para {url}: {e}")
         return {"success": False, "markdown": "", "error": "Todos os motores de scraping falharam."}
 
-    async def _wrap_task(self, name: str, coro) -> Dict[str, Any]:
+    async def _wrap_task(self, name: str, coro) -> dict[str, Any]:
         """Encapsulador para identificar qual motor venceu a corrida."""
         try:
             res = await coro
@@ -103,7 +104,7 @@ class ScrapingRaceClient:
             logger.debug(f"Engine {name} falhou: {e}")
         return {"success": False, "engine": name}
 
-    async def _scrape_via_firecrawl(self, url: str, formats: List[str]) -> Dict[str, Any]:
+    async def _scrape_via_firecrawl(self, url: str, formats: list[str]) -> dict[str, Any]:
         """Interface com o FirecrawlClient existente (que chama o contêiner Docker)."""
         try:
             res = await self.firecrawl_client._direct_scrape_call(url, formats=formats)
@@ -116,7 +117,7 @@ class ScrapingRaceClient:
             logger.debug(f"Erro no scraping via Firecrawl na corrida: {e}")
         return {"success": False}
 
-    async def _scrape_direct_http(self, url: str) -> Dict[str, Any]:
+    async def _scrape_direct_http(self, url: str) -> dict[str, Any]:
         """Requisição HTTP direta usando aiohttp com cabeçalhos realistas."""
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -174,10 +175,10 @@ class ScrapingRaceClient:
         
         return text.strip()
 
-    async def _scrape_via_jina(self, url: str) -> Dict[str, Any]:
+    async def _scrape_via_jina(self, url: str) -> dict[str, Any]:
         """Raspagem via Jina Reader API (https://r.jina.ai/<url>)."""
-        import sys
         import os
+        import sys
         if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
             return {"success": False}
         jina_url = f"https://r.jina.ai/{quote(url, safe=':/.?=#&')}"

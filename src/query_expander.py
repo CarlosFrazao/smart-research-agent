@@ -1,7 +1,7 @@
-from typing import List
-from src.types import ExpandedQuery, IntentResult
-from src.clients.llm_client import LLMClient
 import logging
+
+from src.clients.llm_client import LLMClient
+from src.types import ExpandedQuery, IntentResult
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +10,7 @@ class QueryExpander:
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
 
-    async def expand(self, query: str, intent: IntentResult) -> List[ExpandedQuery]:
+    async def expand(self, query: str, intent: IntentResult) -> list[ExpandedQuery]:
         prompt_text = (
             "Você é um especialista em expansão de queries de pesquisa.\n"
             "Gere variações inteligentes que maximizam a cobertura de informação.\n\n"
@@ -68,7 +68,7 @@ class QueryExpander:
             logger.warning(f"LLM query expansion falhou, usando fallback: {e}")
             return self._fallback_expand(query, intent)
 
-    def _fallback_expand(self, query: str, intent: IntentResult) -> List[ExpandedQuery]:
+    def _fallback_expand(self, query: str, intent: IntentResult) -> list[ExpandedQuery]:
         base = query.lower()
         expansions = [
             ExpandedQuery(query=base, type="original", priority="alta", rationale="query original"),

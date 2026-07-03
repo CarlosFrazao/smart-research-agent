@@ -25,7 +25,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generator, List, Optional
+from typing import Any
+from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,8 @@ class MemoryEntry:
 
 @dataclass
 class MemorySearchResult:
-    entries: List[MemoryEntry] = field(default_factory=list)
-    modes_used: List[str] = field(default_factory=list)
+    entries: list[MemoryEntry] = field(default_factory=list)
+    modes_used: list[str] = field(default_factory=list)
 
 
 # ── Embedding helper (lazy-loaded) ────────────────────────────────────────────
@@ -76,7 +77,7 @@ def _get_embedder() -> Any:
     return _embedder_cache
 
 
-def _embed(text: str) -> Optional[list]:
+def _embed(text: str) -> list | None:
     model = _get_embedder()
     if model is None:
         return None
@@ -97,7 +98,7 @@ def _cosine(a: list, b: list) -> float:
 class OrvixMemory:
     """Memória local SQLite com busca RRF (BM25 + Vector + Grafo)."""
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         self._db_path = Path(db_path or str(_DEFAULT_DB_PATH))
         self._local = threading.local()
         self._init_schema()
@@ -160,7 +161,7 @@ class OrvixMemory:
 
     # ── Escrita ───────────────────────────────────────────────────────────────
 
-    def add(self, content: str, metadata: Optional[dict] = None) -> int:
+    def add(self, content: str, metadata: dict | None = None) -> int:
         """Persiste um registro de memória e extrai entidades automaticamente."""
         meta = metadata or {}
         embedding = _embed(content)
@@ -301,7 +302,7 @@ class OrvixMemory:
         self,
         query: str,
         executive_summary: str,
-        top_entities: List[str],
+        top_entities: list[str],
         domain: str = "",
         duration_seconds: float = 0.0,
     ) -> int:

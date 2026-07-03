@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
+from typing import Any
 
 
-class Domain(str, Enum):
+class Domain(StrEnum):
     SAAS_B2B = "saas_b2b"
     DEV_TOOLS = "dev_tools"
     AI_ML = "ai_ml"
@@ -14,7 +14,7 @@ class Domain(str, Enum):
     GENERAL = "general"
 
 
-class Intention(str, Enum):
+class Intention(StrEnum):
     DISCOVER = "discover"
     COMPARE = "compare"
     LEARN = "learn"
@@ -22,7 +22,7 @@ class Intention(str, Enum):
     EVALUATE = "evaluate"
 
 
-class ReportFormat(str, Enum):
+class ReportFormat(StrEnum):
     MARKDOWN = "markdown"
     PDF      = "pdf"
     DOCX     = "docx"
@@ -32,7 +32,7 @@ class ReportFormat(str, Enum):
 @dataclass
 class IntentResult:
     domain: Domain
-    entities: List[str]
+    entities: list[str]
     intention: Intention
     urgency: str  # "sim" | "nao"
     confidence: str  # "alta" | "media" | "baixa"
@@ -52,39 +52,39 @@ class SearchResult:
     title: str
     url: str
     description: str
-    metrics: Dict[str, Any] = field(default_factory=dict)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
     fetched_at: datetime = field(default_factory=datetime.now)
     confidence_score: float = 0.0
     evidence_quality: str = "unknown"
-    citations: List[str] = field(default_factory=list)
-    contradictions: List[str] = field(default_factory=list)
-    hallucination_flags: List[str] = field(default_factory=list)
+    citations: list[str] = field(default_factory=list)
+    contradictions: list[str] = field(default_factory=list)
+    hallucination_flags: list[str] = field(default_factory=list)
 
 
 @dataclass
 class RankedResult(SearchResult):
     score: float = 0.0
-    score_breakdown: Dict[str, float] = field(default_factory=dict)
+    score_breakdown: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
 class SourcePlan:
-    sources: Dict[str, List[ExpandedQuery]]
-    primary: List[str]
-    secondary: List[str]
+    sources: dict[str, list[ExpandedQuery]]
+    primary: list[str]
+    secondary: list[str]
 
 
 @dataclass
 class GapAnalysis:
     is_complete: bool
-    missing_aspects: List[str]
-    new_queries: List[str]
+    missing_aspects: list[str]
+    new_queries: list[str]
     confidence: str
     rationale: str
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     """Veredito interpretável do resultado sintetizado, inspirado no Tino."""
     FOCA = "Foca"          # score >= 75 — ler/avaliar agora
     CONSIDERA = "Considera"  # score >= 50 — relevante, sem urgência
@@ -97,11 +97,11 @@ class SynthesizedResult:
     entity: str
     title: str
     description: str
-    sources: List[str]
-    urls: List[str]
+    sources: list[str]
+    urls: list[str]
     combined_score: float
-    metrics: Dict[str, Any]
-    highlights: List[str]
+    metrics: dict[str, Any]
+    highlights: list[str]
     first_seen: datetime
     last_seen: datetime
     # Campos de veredito rico (P1)
@@ -110,17 +110,17 @@ class SynthesizedResult:
     next_step: str = ""        # Ação concreta recomendada
     read_min: int = 0          # Tempo estimado de leitura em minutos
     evidence_quality: str = "unknown"
-    hallucination_flags: List[str] = field(default_factory=list)
+    hallucination_flags: list[str] = field(default_factory=list)
 
 
 @dataclass
 class ResearchMetadata:
     query: str
     domain: str
-    sources: List[str]
+    sources: list[str]
     total_results: int
     iterations: int
     timestamp: datetime
     duration_seconds: float
     overall_confidence: float = 0.0
-    low_confidence_warnings: List[str] = field(default_factory=list)
+    low_confidence_warnings: list[str] = field(default_factory=list)

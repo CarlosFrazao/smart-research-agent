@@ -8,8 +8,7 @@ Rate-limits: Cota diária padrão do YouTube v3 (10.000 unidades).
 Fallback: Conecta ao WebSearcher se retornar < 2 resultados ou se a API key estiver ausente.
 """
 import logging
-import asyncio
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
@@ -27,13 +26,13 @@ class YouTubeSearcher(BaseSearcher):
     Extrai estatísticas de visualizações e curtidas para cálculo de métricas de relevância.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.http = HTTPClient(timeout=self.timeout)
-        self.api_key: Optional[str] = config.get("youtube_api_key")
+        self.api_key: str | None = config.get("youtube_api_key")
         self.web_fallback = None  # Injetado pelo Orchestrator se disponível
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         if not self.api_key:
             logger.info("YouTubeSearcher: API Key não configurada. Acionando web fallback diretamente.")
             return await self._run_web_fallback(query)
@@ -102,7 +101,7 @@ class YouTubeSearcher(BaseSearcher):
             logger.error(f"YouTube search error: {e}")
             return self.fallback(query)
 
-    def _parse_video(self, video_id: str, snippet: Dict[str, Any], stats: Dict[str, Any]) -> Optional[SearchResult]:
+    def _parse_video(self, video_id: str, snippet: dict[str, Any], stats: dict[str, Any]) -> SearchResult | None:
         """
         Converte as informações brutas do YouTube v3 em SearchResult.
         """
@@ -159,7 +158,7 @@ class YouTubeSearcher(BaseSearcher):
             logger.warning(f"YouTubeSearcher: erro ao parsear vídeo {video_id}: {e}")
             return None
 
-    async def _run_web_fallback(self, query: str) -> List[SearchResult]:
+    async def _run_web_fallback(self, query: str) -> list[SearchResult]:
         """
         Executa busca na web como fallback se o YouTube falhar ou retornar vazio.
         """

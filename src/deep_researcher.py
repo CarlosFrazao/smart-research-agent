@@ -13,14 +13,13 @@ confirmed hypotheses into the final report.
 Usage: activated only when --mode deep is passed. Cost ~5-10x standard.
 """
 import asyncio
-import uuid
 import logging
+import uuid
 from dataclasses import dataclass, field
-from typing import List, Optional
 
-from src.types import SearchResult
 from src.clients.llm_client import LLMClient
 from src.exceptions import BudgetExceededError
+from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +63,8 @@ class ResearchNode:
     id: str
     query: str
     hypothesis: str
-    results: List[SearchResult] = field(default_factory=list)
-    children: List["ResearchNode"] = field(default_factory=list)
+    results: list[SearchResult] = field(default_factory=list)
+    children: list["ResearchNode"] = field(default_factory=list)
     status: str = "pending"          # pending | explored | dead_end | confirmed
     confidence: float = 0.0
     depth: int = 0
@@ -75,13 +74,13 @@ class ResearchNode:
 @dataclass
 class DeepResearchResult:
     """Output of a DeepResearcher.research() call."""
-    findings: List[SearchResult]
+    findings: list[SearchResult]
     reasoning_tree: str              # markdown representation of the tree
     total_nodes_explored: int
-    confirmed_hypotheses: List[str]
-    dead_end_hypotheses: List[str]
+    confirmed_hypotheses: list[str]
+    dead_end_hypotheses: list[str]
     budget_exceeded: bool = False
-    budget_summary: Optional[dict] = None
+    budget_summary: dict | None = None
 
 
 class DeepResearcher:
@@ -111,7 +110,7 @@ class DeepResearcher:
         "default": 0.001,
     }
 
-    def __init__(self, llm_client: LLMClient, orchestrator=None, memory=None, budget: Optional[ResearchBudget] = None):
+    def __init__(self, llm_client: LLMClient, orchestrator=None, memory=None, budget: ResearchBudget | None = None):
         self.llm = llm_client
         self.orchestrator = orchestrator
         # OrvixMemoryV2 opcional — injeta contexto do grafo nas hipóteses
@@ -253,7 +252,7 @@ class DeepResearcher:
 
         return node
 
-    async def _search_for_node(self, node: ResearchNode) -> List[SearchResult]:
+    async def _search_for_node(self, node: ResearchNode) -> list[SearchResult]:
         """Searches using the orchestrator if available, otherwise returns empty list."""
         if self.orchestrator is None:
             logger.debug(f"No orchestrator attached; skipping search for node {node.id}")
@@ -296,8 +295,8 @@ class DeepResearcher:
             return []
 
     async def _generate_hypotheses(
-        self, query: str, parent_results: List[SearchResult]
-    ) -> List[str]:
+        self, query: str, parent_results: list[SearchResult]
+    ) -> list[str]:
         """
         Uses the LLM to generate competing hypotheses to explore.
         Enriches the prompt with graph/vector context from OrvixMemoryV2
@@ -354,16 +353,16 @@ class DeepResearcher:
             f"{query} performance benchmarks 2026",
         ]
 
-    def _estimate_confidence(self, results: List[SearchResult]) -> float:
+    def _estimate_confidence(self, results: list[SearchResult]) -> float:
         """Estimates node confidence from the average confidence_score of results."""
         if not results:
             return 0.0
         total = sum(getattr(r, "confidence_score", 0.0) for r in results)
         return round(min(1.0, total / len(results)), 3)
 
-    def _consolidate_tree(self, root: ResearchNode) -> List[SearchResult]:
+    def _consolidate_tree(self, root: ResearchNode) -> list[SearchResult]:
         """Collects all SearchResults from confirmed and explored nodes."""
-        collected: List[SearchResult] = []
+        collected: list[SearchResult] = []
         seen_urls: set = set()
 
         def _walk(node: ResearchNode) -> None:
@@ -384,7 +383,7 @@ class DeepResearcher:
 
     def _export_tree_as_markdown(self, root: ResearchNode) -> str:
         """Exports the reasoning tree as readable markdown."""
-        lines: List[str] = ["## Reasoning Tree", ""]
+        lines: list[str] = ["## Reasoning Tree", ""]
 
         status_icons = {
             "confirmed": "✅",
@@ -420,9 +419,9 @@ class DeepResearcher:
         lines.append("")
         return "\n".join(lines)
 
-    def _collect_by_status(self, root: ResearchNode, status: str) -> List[str]:
+    def _collect_by_status(self, root: ResearchNode, status: str) -> list[str]:
         """Collects all hypothesis strings for nodes matching the given status."""
-        collected: List[str] = []
+        collected: list[str] = []
 
         def _walk(node: ResearchNode) -> None:
             if node.status == status:

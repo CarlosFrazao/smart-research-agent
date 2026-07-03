@@ -9,19 +9,19 @@ Evolução da OrvixMemory v1:
 
 Mantém 100% de compatibilidade de interface com OrvixMemory v1.
 """
+import json
+import logging
 import os
 import re
-import json
 import sqlite3
-import logging
 import threading
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+from collections.abc import Generator
+
 import chromadb
 import kuzu
-from pathlib import Path
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Generator
-from contextlib import contextmanager
-from src.types import ResearchMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +36,13 @@ _CHROMA_PORT = int(os.environ.get("CHROMADB_PORT", 3024))
 _KUZU_PATH = os.environ.get("KUZU_DATA_PATH", "kuzu_data")
 
 # --- Contratos de Dados (compatíveis com v1) ---
-from src.memory.orvix_memory import MemoryEntry, MemorySearchResult, _get_embedder
+from src.memory.orvix_memory import MemoryEntry, MemorySearchResult
+
 
 class OrvixMemoryV2:
     """Memória de RAG Híbrido avançado combinando SQLite, ChromaDB e KuzuDB."""
 
-    def __init__(self, db_path: Optional[str] = None, kuzu_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None, kuzu_path: str | None = None) -> None:
         self._db_path = Path(db_path or str(_DEFAULT_DB_PATH))
         self._kuzu_path = kuzu_path or _KUZU_PATH
         self._local = threading.local()
@@ -203,7 +204,7 @@ class OrvixMemoryV2:
     # Escrita de Memória
     # ------------------------------------------------------------------
 
-    def add(self, content: str, metadata: Optional[dict] = None) -> int:
+    def add(self, content: str, metadata: dict | None = None) -> int:
         """Persiste uma memória no SQLite, ChromaDB e KuzuDB."""
         meta = metadata or {}
         # Garante que o metadados não esteja vazio para evitar warnings/erros do ChromaDB
@@ -303,8 +304,8 @@ class OrvixMemoryV2:
         use_vector: bool = True,
         use_graph: bool = True,
     ) -> MemorySearchResult:
-        modes_used: List[str] = []
-        ranked: Dict[int, Dict[str, float]] = {}
+        modes_used: list[str] = []
+        ranked: dict[int, dict[str, float]] = {}
 
         # Executa buscas em paralelo conceitual
         if use_bm25:
@@ -332,7 +333,7 @@ class OrvixMemoryV2:
         # Combina e ordena por RRF
         fused = sorted(ranked.items(), key=lambda kv: sum(kv[1].values()), reverse=True)[:top_k]
 
-        entries: List[MemoryEntry] = []
+        entries: list[MemoryEntry] = []
         with self._conn() as conn:
             for row_id, scores in fused:
                 row = conn.execute(
@@ -350,7 +351,7 @@ class OrvixMemoryV2:
 
     # --- Motores de Busca Individuais ---
 
-    def _bm25(self, conn: sqlite3.Connection, query: str, limit: int) -> List[Tuple[int, float]]:
+    def _bm25(self, conn: sqlite3.Connection, query: str, limit: int) -> list[tuple[int, float]]:
         try:
             rows = conn.execute(
                 "SELECT rowid, rank FROM memories_fts WHERE memories_fts MATCH ? ORDER BY rank LIMIT ?",
@@ -360,7 +361,7 @@ class OrvixMemoryV2:
         except sqlite3.OperationalError:
             return []
 
-    def _vector(self, query: str, limit: int) -> List[Tuple[int, float]]:
+    def _vector(self, query: str, limit: int) -> list[tuple[int, float]]:
         """Busca vetorial de alta performance usando ChromaDB."""
         try:
             from src.memory.orvix_memory import _embed
@@ -384,7 +385,7 @@ class OrvixMemoryV2:
             logger.warning(f"OrvixMemoryV2: Busca vetorial no ChromaDB falhou: {e}")
             return []
 
-    def _graph(self, query: str, limit: int) -> List[Tuple[int, float]]:
+    def _graph(self, query: str, limit: int) -> list[tuple[int, float]]:
         """Busca semântica no banco de grafos KuzuDB usando Cypher."""
         if not self.kuzu_conn:
             return []
@@ -431,7 +432,7 @@ class OrvixMemoryV2:
         self,
         query: str,
         executive_summary: str,
-        top_entities: List[str],
+        top_entities: list[str],
         domain: str = "",
         duration_seconds: float = 0.0,
     ) -> int:

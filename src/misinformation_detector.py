@@ -10,9 +10,10 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
+
 import yaml
-from typing import Dict, Any, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +21,14 @@ logger = logging.getLogger(__name__)
 class MisinformationDetector:
     """Detects low-credibility or misinformation domains based on configuration."""
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         if config_path is None:
             # Fallback path relative to project root
             base_dir = Path(__file__).resolve().parents[1]
             config_path = str(base_dir / "config" / "misinformation_domains.yaml")
 
         self.config_path = config_path
-        self.domains: Dict[str, Dict[str, Any]] = {}
+        self.domains: dict[str, dict[str, Any]] = {}
         self.load_domains()
 
     def load_domains(self) -> None:
@@ -40,7 +41,7 @@ class MisinformationDetector:
             return
 
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 
             entries = data.get("misinformation_domains", [])
@@ -55,7 +56,7 @@ class MisinformationDetector:
         except Exception as e:
             logger.error(f"Error loading misinformation domains: {e}", exc_info=True)
 
-    def check_url(self, url: str) -> Tuple[bool, float, str]:
+    def check_url(self, url: str) -> tuple[bool, float, str]:
         """
         Checks a URL against blacklisted/unreliable domains.
 

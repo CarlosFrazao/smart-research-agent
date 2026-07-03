@@ -1,8 +1,9 @@
-import aiohttp
 import asyncio
-import random
-from typing import Optional, Dict, Any
 import logging
+import random
+from typing import Any
+
+import aiohttp
 
 from src.utils.rate_limiter import DomainRateLimiter
 
@@ -19,7 +20,7 @@ class HTTPClient:
     def __init__(self, timeout: int = 30, max_retries: int = 3):
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_retries = max_retries
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -39,30 +40,30 @@ class HTTPClient:
     async def get(
         self,
         url: str,
-        headers: Optional[Dict] = None,
-        params: Optional[Dict] = None,
+        headers: dict | None = None,
+        params: dict | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return await self._request_with_retry("GET", url, headers=headers, params=params, **kwargs)
 
     async def post(
         self,
         url: str,
-        headers: Optional[Dict] = None,
-        json: Optional[Dict] = None,
+        headers: dict | None = None,
+        json: dict | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return await self._request_with_retry("POST", url, headers=headers, json_data=json, **kwargs)
 
     async def _request_with_retry(
         self,
         method: str,
         url: str,
-        headers: Optional[Dict] = None,
-        params: Optional[Dict] = None,
-        json_data: Optional[Dict] = None,
+        headers: dict | None = None,
+        params: dict | None = None,
+        json_data: dict | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         headers = headers or {}
         headers.setdefault("User-Agent", random.choice(USER_AGENTS))
 
@@ -88,7 +89,7 @@ class HTTPClient:
                         return await resp.json()
                     return {"text": await resp.text(), "status": resp.status}
 
-            except (asyncio.TimeoutError, aiohttp.ClientConnectorError) as e:
+            except (TimeoutError, aiohttp.ClientConnectorError) as e:
                 logger.warning(
                     f"Erro temporário de conexão/timeout em {method} {url}: {type(e).__name__}({e}) "
                     f"(tentativa {attempt + 1}/{self.max_retries})"

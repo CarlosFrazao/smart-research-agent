@@ -1,9 +1,8 @@
-import re
 import logging
+import re
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Tuple
 
-from src.types import SearchResult, ExpandedQuery, IntentResult, Domain, Intention
+from src.types import Domain, ExpandedQuery, Intention, IntentResult, SearchResult
 
 logger = logging.getLogger("conflict_detector")
 
@@ -30,7 +29,7 @@ class NumericClaim:
 @dataclass
 class Conflict:
     metric_name: str
-    claims: List[NumericClaim]
+    claims: list[NumericClaim]
     divergence_ratio: float       # abs(max-min)/min
     severity: str                 # critical | high | medium | low
     resolution_query: str
@@ -39,8 +38,8 @@ class Conflict:
 @dataclass
 class ConflictReport:
     total_claims_extracted: int
-    conflicts: List[Conflict]
-    critical_conflicts: List[Conflict]
+    conflicts: list[Conflict]
+    critical_conflicts: list[Conflict]
 
     @property
     def has_critical(self) -> bool:
@@ -57,11 +56,11 @@ class ConflictDetector:
         self.divergence_threshold = divergence_threshold
         self._compiled_patterns = [re.compile(p, re.IGNORECASE) for p in _NUMBER_PATTERNS]
 
-    def detect(self, results: List[SearchResult]) -> ConflictReport:
+    def detect(self, results: list[SearchResult]) -> ConflictReport:
         """
         Extrai e analisa claims numéricas em busca de divergências estatísticas.
         """
-        all_claims: List[NumericClaim] = []
+        all_claims: list[NumericClaim] = []
         for r in results:
             try:
                 claims = self._extract_numeric_claims(r)
@@ -70,13 +69,13 @@ class ConflictDetector:
                 logger.warning(f"ConflictDetector: falha ao extrair de {r.url[:40]}: {e}")
 
         # Agrupa claims por (metric_name, unit)
-        groups: Dict[Tuple[str, str], List[NumericClaim]] = {}
+        groups: dict[tuple[str, str], list[NumericClaim]] = {}
         for claim in all_claims:
             key = (claim.metric_name, claim.unit)
             groups.setdefault(key, []).append(claim)
 
-        conflicts: List[Conflict] = []
-        critical_conflicts: List[Conflict] = []
+        conflicts: list[Conflict] = []
+        critical_conflicts: list[Conflict] = []
 
         for (metric_name, unit), group_claims in groups.items():
             # Filtra claims repetidas da mesma URL no mesmo grupo para evitar ruído
@@ -101,11 +100,11 @@ class ConflictDetector:
             critical_conflicts=critical_conflicts
         )
 
-    def _extract_numeric_claims(self, result: SearchResult) -> List[NumericClaim]:
+    def _extract_numeric_claims(self, result: SearchResult) -> list[NumericClaim]:
         """
         Varre o título e a descrição do resultado extraindo números no padrão.
         """
-        claims: List[NumericClaim] = []
+        claims: list[NumericClaim] = []
         text = f"{result.title or ''} {result.description or ''}"
         
         # Divide em sentenças
@@ -178,7 +177,7 @@ class ConflictDetector:
         # Mantém até as últimas 3 palavras significativas
         return " ".join(words[-3:])
 
-    def _analyze_group(self, metric_name: str, claims: List[NumericClaim]) -> Optional[Conflict]:
+    def _analyze_group(self, metric_name: str, claims: list[NumericClaim]) -> Conflict | None:
         """
         Calcula a divergência entre claims do mesmo grupo.
         """
@@ -214,7 +213,7 @@ class ConflictDetector:
             resolution_query=resolution_query
         )
 
-    def _generate_resolution_query(self, metric_name: str, claims: List[NumericClaim]) -> str:
+    def _generate_resolution_query(self, metric_name: str, claims: list[NumericClaim]) -> str:
         """
         Gera uma query focada baseada nos valores divergentes.
         """
@@ -226,11 +225,11 @@ class ConflictDetector:
         query += " ".join(source_names)
         return query.strip()
 
-    async def resolve(self, report: ConflictReport, orchestrator, max_conflicts: int = 3) -> List[SearchResult]:
+    async def resolve(self, report: ConflictReport, orchestrator, max_conflicts: int = 3) -> list[SearchResult]:
         """
         Executa buscas focadas para resolver os conflitos críticos detectados.
         """
-        new_results: List[SearchResult] = []
+        new_results: list[SearchResult] = []
         conflicts_to_resolve = report.critical_conflicts[:max_conflicts]
         
         for conflict in conflicts_to_resolve:

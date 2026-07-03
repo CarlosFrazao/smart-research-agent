@@ -10,12 +10,12 @@ Fontes default (espelhadas do Tino com pesos adaptados):
   LangChain, Mistral, Cohere, HN Frontpage, Import AI.
 """
 
-import re
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+import re
+from datetime import datetime, UTC
 from email.utils import parsedate_to_datetime
+from typing import Any
 
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # ── Feed catalog ─────────────────────────────────────────────────────────────
 
-DEFAULT_FEEDS: List[Dict[str, Any]] = [
+DEFAULT_FEEDS: list[dict[str, Any]] = [
     {"id": "anthropic",       "name": "Anthropic News",          "url": "https://www.anthropic.com/news/rss.xml",               "weight": 1.5},
     {"id": "openai",          "name": "OpenAI News",             "url": "https://openai.com/news/rss.xml",                      "weight": 1.4},
     {"id": "deepmind",        "name": "Google DeepMind Blog",    "url": "https://deepmind.google/blog/rss.xml",                  "weight": 1.2},
@@ -59,21 +59,21 @@ def _strip_html(text: str) -> str:
     return _SPACE_RE.sub(" ", text).strip()
 
 
-def _parse_date(raw: Optional[str]) -> Optional[str]:
+def _parse_date(raw: str | None) -> str | None:
     if not raw:
         return None
     raw = raw.strip()
     # Try RFC 2822 (RSS pubDate)
     try:
         dt = parsedate_to_datetime(raw)
-        return dt.astimezone(timezone.utc).isoformat()
+        return dt.astimezone(UTC).isoformat()
     except Exception:
         pass
     # Try ISO 8601 (Atom updated/published)
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(raw[:19], fmt[:len(raw[:19])])
-            return dt.replace(tzinfo=timezone.utc).isoformat()
+            return dt.replace(tzinfo=UTC).isoformat()
         except ValueError:
             continue
     return raw
@@ -84,7 +84,7 @@ def _stable_id(url: str, title: str) -> str:
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
-def _xml_text(element_text: Optional[str]) -> str:
+def _xml_text(element_text: str | None) -> str:
     return _strip_html(element_text or "")
 
 
@@ -109,17 +109,17 @@ def _score_relevance(query: str, title: str, description: str, weight: float) ->
 
 # ── Parser XML mínimo sem deps externas ──────────────────────────────────────
 
-def _extract_tag(xml: str, tag: str) -> Optional[str]:
+def _extract_tag(xml: str, tag: str) -> str | None:
     m = re.search(rf"<{tag}[^>]*>([\s\S]*?)</{tag}>", xml)
     return m.group(1).strip() if m else None
 
 
-def _extract_attr(xml: str, tag: str, attr: str) -> Optional[str]:
+def _extract_attr(xml: str, tag: str, attr: str) -> str | None:
     m = re.search(rf'<{tag}[^>]*{attr}=["\']([^"\']*)["\']', xml)
     return m.group(1) if m else None
 
 
-def _parse_rss_items(xml: str, feed_name: str) -> List[Dict[str, str]]:
+def _parse_rss_items(xml: str, feed_name: str) -> list[dict[str, str]]:
     items = []
     for block in re.finditer(r"<item>([\s\S]*?)</item>", xml):
         raw = block.group(1)
@@ -133,7 +133,7 @@ def _parse_rss_items(xml: str, feed_name: str) -> List[Dict[str, str]]:
     return items
 
 
-def _parse_atom_entries(xml: str, feed_name: str) -> List[Dict[str, str]]:
+def _parse_atom_entries(xml: str, feed_name: str) -> list[dict[str, str]]:
     items = []
     for block in re.finditer(r"<entry>([\s\S]*?)</entry>", xml):
         raw = block.group(1)
@@ -148,7 +148,7 @@ def _parse_atom_entries(xml: str, feed_name: str) -> List[Dict[str, str]]:
     return items
 
 
-def parse_feed_xml(xml: str, feed_name: str) -> List[Dict[str, str]]:
+def parse_feed_xml(xml: str, feed_name: str) -> list[dict[str, str]]:
     """Detecta RSS ou Atom e parseia os itens. Zero deps externas."""
     if not xml:
         return []
@@ -162,18 +162,18 @@ def parse_feed_xml(xml: str, feed_name: str) -> List[Dict[str, str]]:
 class RSSSearcher(BaseSearcher):
     """Busca em feeds RSS/Atom de fontes curadas de IA/tech por relevância de query."""
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config or {})
         self.http = HTTPClient(timeout=self.timeout, max_retries=2)
         feeds_cfg = (config or {}).get("feeds", DEFAULT_FEEDS)
-        self.feeds: List[Dict[str, Any]] = feeds_cfg if feeds_cfg else DEFAULT_FEEDS
+        self.feeds: list[dict[str, Any]] = feeds_cfg if feeds_cfg else DEFAULT_FEEDS
         self.max_feeds = (config or {}).get("max_feeds", len(self.feeds))
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         if not self.enabled:
             return []
 
-        results: List[SearchResult] = []
+        results: list[SearchResult] = []
         feeds_to_use = self.feeds[: self.max_feeds]
 
         for feed in feeds_to_use:
@@ -186,7 +186,7 @@ class RSSSearcher(BaseSearcher):
         results.sort(key=lambda r: r.metrics.get("relevance_score", 0), reverse=True)
         return results[: self.max_results]
 
-    async def _fetch_feed(self, query: str, feed: Dict[str, Any]) -> List[SearchResult]:
+    async def _fetch_feed(self, query: str, feed: dict[str, Any]) -> list[SearchResult]:
         url = feed["url"]
         feed_name = feed["name"]
         weight = float(feed.get("weight", 1.0))

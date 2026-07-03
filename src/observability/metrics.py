@@ -1,19 +1,20 @@
 from __future__ import annotations
-import time
+
 import logging
+import time
 from contextlib import asynccontextmanager
-from typing import Optional, Dict, Any
+from typing import Any
 
 logger = logging.getLogger("sra.metrics")
 
 # Singleton preguiçoso para evitar exceptions na ausência do client
-_metrics: Optional[Dict[str, Any]] = None
+_metrics: dict[str, Any] | None = None
 
-def get_metrics() -> Dict[str, Any]:
+def get_metrics() -> dict[str, Any]:
     global _metrics
     if _metrics is None:
         try:
-            from prometheus_client import Counter, Histogram, Gauge
+            from prometheus_client import Counter, Gauge, Histogram
             _metrics = {
                 "search_requests": Counter(
                     "sra_search_requests_total",

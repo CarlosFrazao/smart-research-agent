@@ -1,10 +1,11 @@
-from typing import List, Dict, Any, Optional
+import logging
+from typing import Any
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
+from src.utils.circuit_breaker import CircuitBreakerOpen, CircuitBreakerRegistry
 from src.utils.http_client import HTTPClient
-from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
-from src.utils.retry import with_retry, RetryConfig
-import logging
+from src.utils.retry import RetryConfig, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ DOMAIN_QUALIFIERS = {
 
 
 class GitHubSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.token = config.get("github_token")
         self.base_url = "https://api.github.com/search/repositories"
@@ -38,7 +39,7 @@ class GitHubSearcher(BaseSearcher):
             "github_api", failure_threshold=3, recovery_timeout=600
         )
 
-    async def search(self, query: str, domain: str = "general", **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, domain: str = "general", **kwargs) -> list[SearchResult]:
         # 1. Clean query: remove stop words and keep it concise for GitHub search
         stop_words = {"for", "with", "and", "or", "in", "to", "best", "alternatives", "alternative", "solutions", "solution", "of", "the", "a", "an", "on", "using", "by", "from", "how"}
         words = [w for w in query.replace("-", " ").split() if w.lower() not in stop_words]
@@ -84,7 +85,7 @@ class GitHubSearcher(BaseSearcher):
             return self.fallback(query)
 
     @with_retry(_RETRY_CONFIG)
-    async def _do_search(self, full_query: str, cleaned_query: str, qualifiers: str, original_query: str, headers: dict, params: dict) -> List[SearchResult]:
+    async def _do_search(self, full_query: str, cleaned_query: str, qualifiers: str, original_query: str, headers: dict, params: dict) -> list[SearchResult]:
         """Lógica real de busca no GitHub API, protegida pelo circuit breaker."""
         data = await self.http.get(self.base_url, headers=headers, params=params)
         items = data.get("items", [])
@@ -111,7 +112,7 @@ class GitHubSearcher(BaseSearcher):
 
         return results
 
-    async def search_code(self, query: str, language: Optional[str] = None) -> List[SearchResult]:
+    async def search_code(self, query: str, language: str | None = None) -> list[SearchResult]:
 
         """Code Search via GitHub API — busca conteúdo dentro de arquivos."""
         code_search_url = "https://api.github.com/search/code"

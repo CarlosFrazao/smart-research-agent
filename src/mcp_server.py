@@ -3,23 +3,20 @@ import glob as glob_module
 import json
 import logging
 import os
-from typing import Optional
 
-from fastapi import FastAPI
-from fastapi import Response
+from fastapi import FastAPI, Response
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.confidence_scorer import ConfidenceScorer
 from src.deep_researcher import DeepResearcher
-from src.feedback_store import FeedbackStore, VALID_SIGNALS
+from src.feedback_store import VALID_SIGNALS, FeedbackStore
 from src.orchestrator import Orchestrator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-server")
 
 from contextvars import ContextVar
-from typing import Dict
 
 app = FastAPI(title="Smart Research Agent MCP Server")
 
@@ -30,14 +27,14 @@ async def shutdown_event():
     if _orchestrator is not None:
         await _orchestrator.close()
 
-_orchestrator: Optional[Orchestrator] = None
-_deep_researcher: Optional[DeepResearcher] = None
-_confidence_scorer: Optional[ConfidenceScorer] = None
+_orchestrator: Orchestrator | None = None
+_deep_researcher: DeepResearcher | None = None
+_confidence_scorer: ConfidenceScorer | None = None
 
 # Thread-safety context and lock for concurrent research requests
-_current_research: ContextVar[Optional[dict]] = ContextVar("current_research", default=None)
+_current_research: ContextVar[dict | None] = ContextVar("current_research", default=None)
 _research_lock = asyncio.Lock()
-_research_store: Dict[str, dict] = {}  # Keyed by session_id
+_research_store: dict[str, dict] = {}  # Keyed by session_id
 
 async def get_or_create_research(session_id: str) -> dict:
     async with _research_lock:
@@ -135,7 +132,7 @@ async def get_report(filename: str):
         return PlainTextResponse("Relatório não encontrado.", status_code=404)
     
     if safe_name.endswith(".md"):
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
         return PlainTextResponse(content, media_type="text/markdown")
         
@@ -233,8 +230,9 @@ async def obsidian_sync_endpoint(body: dict):
     Copia o último relatório gerado para o Obsidian Vault configurado em OBSIDIAN_VAULT_PATH.
     Body: { filename: str } — query ou nome do arquivo
     """
-    from src.config import Config
     import shutil
+
+    from src.config import Config
 
     config = Config()
     vault_path = getattr(config, "obsidian_vault_path", None)
@@ -884,7 +882,6 @@ try:
             scorer = get_confidence_scorer()
             orc = get_orchestrator()
 
-            from src.types import SearchResult
             scored_results = []
             for url in sources[:5]:
                 try:

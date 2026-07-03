@@ -7,14 +7,13 @@ Detecta mudanças entre execuções e envia alertas via webhook.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import re
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("scheduler")
 
@@ -36,9 +35,9 @@ class ScheduledJob:
         query: str,
         cron: str,
         output_dir: str,
-        webhook_url: Optional[str] = None,
+        webhook_url: str | None = None,
         alert_on_changes: bool = True,
-        email: Optional[str] = None,
+        email: str | None = None,
     ):
         self.id = str(uuid.uuid4())
         self.query = query
@@ -47,11 +46,11 @@ class ScheduledJob:
         self.webhook_url = webhook_url
         self.alert_on_changes = alert_on_changes
         self.email = email
-        self.last_run: Optional[str] = None
-        self.last_report_path: Optional[str] = None
+        self.last_run: str | None = None
+        self.last_report_path: str | None = None
         self.created_at = datetime.now().isoformat()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "query": self.query,
@@ -66,7 +65,7 @@ class ScheduledJob:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ScheduledJob":
+    def from_dict(cls, data: dict[str, Any]) -> ScheduledJob:
         job = cls(
             query=data["query"],
             cron=data["cron"],
@@ -94,7 +93,7 @@ class ResearchScheduler:
     def __init__(self, orchestrator: Any, jobs_file: str = _DEFAULT_JOBS_FILE):
         self.orchestrator = orchestrator
         self.jobs_file = jobs_file
-        self._jobs: Dict[str, ScheduledJob] = self._load_jobs()
+        self._jobs: dict[str, ScheduledJob] = self._load_jobs()
         self._apscheduler_available = self._check_apscheduler()
 
     # ── Verificação de Dependências ───────────────────────────────────────────
@@ -114,9 +113,9 @@ class ResearchScheduler:
         query: str,
         cron_expr: str,
         output_dir: str,
-        webhook_url: Optional[str] = None,
+        webhook_url: str | None = None,
         alert_on_changes: bool = True,
-        email: Optional[str] = None,
+        email: str | None = None,
     ) -> str:
         """
         Registra um novo job de pesquisa recorrente.
@@ -157,10 +156,10 @@ class ResearchScheduler:
         logger.info(f"ResearchScheduler: Relatório salvo em: {report_path}")
 
         # Detecta mudanças em relação ao relatório anterior
-        changes: List[str] = []
+        changes: list[str] = []
         if job.last_report_path and os.path.exists(job.last_report_path):
             try:
-                with open(job.last_report_path, "r", encoding="utf-8") as f:
+                with open(job.last_report_path, encoding="utf-8") as f:
                     old_report = f.read()
                 changes = self.compare_with_previous(report, old_report)
                 logger.info(f"ResearchScheduler: {len(changes)} mudança(s) detectada(s).")
@@ -180,7 +179,7 @@ class ResearchScheduler:
 
     # ── Detecção de Mudanças ──────────────────────────────────────────────────
 
-    def compare_with_previous(self, new_report: str, old_report: str) -> List[str]:
+    def compare_with_previous(self, new_report: str, old_report: str) -> list[str]:
         """
         Compara dois relatórios e retorna lista descritiva de mudanças detectadas.
 
@@ -191,7 +190,7 @@ class ResearchScheduler:
         4. Novos tópicos cobertos (novos headings ##)
         5. Mudança no Research Score (grade)
         """
-        changes: List[str] = []
+        changes: list[str] = []
 
         # 1. Novas entidades (nomes próprios capitalizados)
         new_entities = set(_ENTITY_RE.findall(new_report))
@@ -238,8 +237,8 @@ class ResearchScheduler:
 
     async def send_alert(
         self,
-        changes: List[str],
-        webhook_url: Optional[str] = None,
+        changes: list[str],
+        webhook_url: str | None = None,
     ) -> None:
         """
         Envia alertas de mudanças via webhook HTTP POST (Slack, Discord, N8N, etc.).
@@ -267,7 +266,7 @@ class ResearchScheduler:
 
     # ── Gerenciamento de Jobs ─────────────────────────────────────────────────
 
-    def list_jobs(self) -> List[Dict[str, Any]]:
+    def list_jobs(self) -> list[dict[str, Any]]:
         """Retorna lista de todos os jobs agendados como dicts."""
         return [job.to_dict() for job in self._jobs.values()]
 
@@ -286,13 +285,13 @@ class ResearchScheduler:
 
     # ── Persistência de Jobs ──────────────────────────────────────────────────
 
-    def _load_jobs(self) -> Dict[str, ScheduledJob]:
+    def _load_jobs(self) -> dict[str, ScheduledJob]:
         """Carrega jobs persistidos do arquivo JSON."""
         if not os.path.exists(self.jobs_file):
             return {}
         try:
-            with open(self.jobs_file, "r", encoding="utf-8") as f:
-                raw: Dict[str, Any] = json.load(f)
+            with open(self.jobs_file, encoding="utf-8") as f:
+                raw: dict[str, Any] = json.load(f)
             return {jid: ScheduledJob.from_dict(data) for jid, data in raw.items()}
         except Exception as e:
             logger.warning(f"ResearchScheduler: Erro ao carregar jobs de '{self.jobs_file}': {e}")

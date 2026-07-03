@@ -1,9 +1,8 @@
-import re
-import os
-import json
 import logging
+import os
+import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from src.clients.llm_client import LLMClient
 
@@ -37,9 +36,9 @@ class ReviewIssue:
 class PeerReviewReport:
     overall_assessment: str     # strong | moderate | weak | unreliable
     confidence_in_report: float # 0.0-1.0
-    issues: List[ReviewIssue] = field(default_factory=list)
-    strengths: List[str] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
+    issues: list[ReviewIssue] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
 
     @property
     def critical_count(self) -> int:
@@ -59,7 +58,7 @@ class PeerReviewAgent:
         self.llm = llm_client
         self.prompt_path = os.path.join("prompts", "peer_review.md")
 
-    async def review(self, report: str, results: List[Any], query: str = "") -> PeerReviewReport:
+    async def review(self, report: str, results: list[Any], query: str = "") -> PeerReviewReport:
         """
         Executa a revisão de pares do relatório combinando análise por LLM e heurísticas locais.
         """
@@ -103,14 +102,14 @@ class PeerReviewAgent:
             recommendations=structured_report.get("recommendations", [])
         )
 
-    async def _structured_review(self, report: str, query: str) -> Optional[Dict[str, Any]]:
+    async def _structured_review(self, report: str, query: str) -> dict[str, Any] | None:
         """
         Carrega as regras do arquivo markdown e envia o prompt estruturado ao LLM.
         """
         instructions = ""
         if os.path.exists(self.prompt_path):
             try:
-                with open(self.prompt_path, "r", encoding="utf-8") as f:
+                with open(self.prompt_path, encoding="utf-8") as f:
                     instructions = f.read()
             except Exception as e:
                 logger.warning(f"PeerReviewAgent: falha ao carregar prompt markdown: {e}")
@@ -161,11 +160,11 @@ Relatório de Pesquisa:
             
         return None
 
-    def _heuristic_review(self, report: str, results: List[Any]) -> List[ReviewIssue]:
+    def _heuristic_review(self, report: str, results: list[Any]) -> list[ReviewIssue]:
         """
         Varredura estática no texto do relatório por superlativos não citados e seções curtas.
         """
-        issues: List[ReviewIssue] = []
+        issues: list[ReviewIssue] = []
 
         # 1. Detecção de superlativos sem citação próxima
         for superlativo in SUPERLATIVOS:

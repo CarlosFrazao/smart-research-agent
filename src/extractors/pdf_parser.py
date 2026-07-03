@@ -1,7 +1,11 @@
 from __future__ import annotations
-import asyncio, logging, re
+
+import asyncio
+import logging
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
+
 logger = logging.getLogger(__name__)
 
 _REF_PATTERN = re.compile(r'(?:\[(\d+)\]|\b(\d{4})\b.*?(?:doi|arxiv|http))', re.IGNORECASE)
@@ -15,7 +19,7 @@ class PDFParser:
     '''
 
     def __init__(self) -> None:
-        self._available: Optional[bool] = None
+        self._available: bool | None = None
 
     def _check_available(self) -> bool:
         if self._available is not None:
@@ -29,9 +33,9 @@ class PDFParser:
             logger.warning('PDFParser: pdfplumber nao instalado. Fallback ativo.')
         return self._available
 
-    def _extract_references(self, text: str) -> List[str]:
+    def _extract_references(self, text: str) -> list[str]:
         '''Extrai possiveis referencias bibliograficas do texto.'''
-        refs: List[str] = []
+        refs: list[str] = []
         lines = text.split('\n')
         in_refs = False
         for line in lines:
@@ -46,7 +50,7 @@ class PDFParser:
                     refs.append(stripped)
         return refs[:50]
 
-    async def parse_file(self, path: Union[str, Path]) -> Dict[str, Any]:
+    async def parse_file(self, path: str | Path) -> dict[str, Any]:
         '''Extrai texto, tabelas e referencias de arquivo PDF.'''
         if not self._check_available():
             return {'text': '', 'tables': [], 'references': [], 'pages': 0, 'error': 'pdfplumber not installed'}
@@ -57,10 +61,10 @@ class PDFParser:
             logger.warning(f'PDFParser.parse_file falhou em {path}: {exc}')
             return {'text': '', 'tables': [], 'references': [], 'pages': 0, 'error': str(exc)}
 
-    def _parse_sync(self, path: str) -> Dict[str, Any]:
+    def _parse_sync(self, path: str) -> dict[str, Any]:
         import pdfplumber
-        all_text: List[str] = []
-        all_tables: List[List[List[str]]] = []
+        all_text: list[str] = []
+        all_tables: list[list[list[str]]] = []
         num_pages = 0
         with pdfplumber.open(path) as pdf:
             num_pages = len(pdf.pages)
@@ -81,22 +85,23 @@ class PDFParser:
             'error': None,
         }
 
-    async def parse_bytes(self, pdf_bytes: bytes) -> Dict[str, Any]:
+    async def parse_bytes(self, pdf_bytes: bytes) -> dict[str, Any]:
         '''Extrai texto e tabelas de bytes de PDF.'''
         if not self._check_available():
             return {'text': '', 'tables': [], 'references': [], 'pages': 0, 'error': 'pdfplumber not installed'}
         try:
-            import io
             result = await asyncio.to_thread(self._parse_sync_bytes, pdf_bytes)
             return result
         except Exception as exc:
             logger.warning(f'PDFParser.parse_bytes falhou: {exc}')
             return {'text': '', 'tables': [], 'references': [], 'pages': 0, 'error': str(exc)}
 
-    def _parse_sync_bytes(self, pdf_bytes: bytes) -> Dict[str, Any]:
-        import pdfplumber, io
-        all_text: List[str] = []
-        all_tables: List[List[List[str]]] = []
+    def _parse_sync_bytes(self, pdf_bytes: bytes) -> dict[str, Any]:
+        import io
+
+        import pdfplumber
+        all_text: list[str] = []
+        all_tables: list[list[list[str]]] = []
         num_pages = 0
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             num_pages = len(pdf.pages)

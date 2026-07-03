@@ -1,9 +1,11 @@
-from typing import List, Dict, Any
+import logging
+from html.parser import HTMLParser
+from typing import Any
+
+import httpx
+
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
-import logging
-import httpx
-from html.parser import HTMLParser
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ class MLStripper(HTMLParser):
 
 
 class StackOverflowSearcher(BaseSearcher):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self.api_url = "https://api.stackexchange.com/2.3/search/advanced"
         self.site = config.get("stackoverflow_site", "stackoverflow")
@@ -36,7 +38,7 @@ class StackOverflowSearcher(BaseSearcher):
         except Exception:
             return html
 
-    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+    async def search(self, query: str, **kwargs) -> list[SearchResult]:
         params = {
             "order": "desc",
             "sort": "relevance",
@@ -65,7 +67,7 @@ class StackOverflowSearcher(BaseSearcher):
             logger.error(f"StackOverflowSearcher: Falha ao executar busca: {e}")
             return self.fallback(query)
 
-    def normalize(self, raw_result: Dict[str, Any]) -> SearchResult:
+    def normalize(self, raw_result: dict[str, Any]) -> SearchResult:
         # Tenta remover HTML do título se houver entities
         title = self._strip_html(raw_result.get("title", "Sem título"))
         url = raw_result.get("link", "")

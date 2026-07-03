@@ -1,6 +1,9 @@
 from __future__ import annotations
-import asyncio, logging, re
-from typing import List, Optional
+
+import asyncio
+import logging
+import re
+
 logger = logging.getLogger(__name__)
 SearchResult = dict
 

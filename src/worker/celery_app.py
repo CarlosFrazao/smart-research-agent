@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Optional, Any
+
 from celery import Celery
+
 from src.config import Config
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,7 @@ celery_app.conf.update(
     default_retry_delay=60,
     name="sra.research",
 )
-def research_task(self, query: str, mode: str = "standard", options: Optional[dict] = None) -> dict:
+def research_task(self, query: str, mode: str = "standard", options: dict | None = None) -> dict:
     """Task de pesquisa processada em background via Celery."""
     from src.config import Config as SRAConfig
     from src.orchestrator import Orchestrator

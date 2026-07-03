@@ -20,9 +20,10 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from datetime import datetime, UTC
+from enum import StrEnum
+from typing import Any
+from collections.abc import Callable
 
 import httpx
 
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Enumerações e Contratos ─────────────────────────────────────────────────
 
-class ServiceStatus(str, Enum):
+class ServiceStatus(StrEnum):
     HEALTHY   = "healthy"
     DEGRADED  = "degraded"
     OFFLINE   = "offline"
@@ -44,8 +45,8 @@ class ServiceCheck:
     name: str
     url: str
     timeout_seconds: float = 3.0
-    expected_status_codes: List[int] = field(default_factory=lambda: [200])
-    fallback_action: Optional[str] = None   # Nome da ação de fallback registrada
+    expected_status_codes: list[int] = field(default_factory=lambda: [200])
+    fallback_action: str | None = None   # Nome da ação de fallback registrada
     critical: bool = False                   # Se True, dispara alerta imediato
 
 
@@ -64,9 +65,9 @@ class ServiceHealthResult:
 class HealthSnapshot:
     """Snapshot completo do estado de saúde de todos os serviços."""
     timestamp: str
-    services: Dict[str, ServiceHealthResult]
+    services: dict[str, ServiceHealthResult]
     overall_status: ServiceStatus
-    alerts: List[str]
+    alerts: list[str]
 
     @property
     def is_healthy(self) -> bool:
@@ -115,7 +116,7 @@ class HealthMonitor:
     """
 
     # Serviços padrão checados (override via environment variables)
-    _DEFAULT_SERVICES: List[ServiceCheck] = [
+    _DEFAULT_SERVICES: list[ServiceCheck] = [
         ServiceCheck(
             name="firecrawl",
             url=os.environ.get("FIRECRAWL_HEALTH_URL", "http://localhost:3022/v1/scrape"),
@@ -160,10 +161,10 @@ class HealthMonitor:
 
     def __init__(
         self,
-        extra_services: Optional[List[ServiceCheck]] = None,
-        on_status_change: Optional[Callable[[str, ServiceStatus, ServiceStatus], None]] = None,
+        extra_services: list[ServiceCheck] | None = None,
+        on_status_change: Callable[[str, ServiceStatus, ServiceStatus], None] | None = None,
     ) -> None:
-        self.services: List[ServiceCheck] = list(self._DEFAULT_SERVICES)
+        self.services: list[ServiceCheck] = list(self._DEFAULT_SERVICES)
         if extra_services:
             self.services.extend(extra_services)
 
@@ -171,33 +172,33 @@ class HealthMonitor:
         self._on_status_change = on_status_change
 
         # Estado interno: último status por serviço (para detectar mudanças)
-        self._last_status: Dict[str, ServiceStatus] = {}
+        self._last_status: dict[str, ServiceStatus] = {}
 
         # Ações de fallback registradas
-        self._fallback_actions: Dict[str, Callable] = {}
+        self._fallback_actions: dict[str, Callable] = {}
 
         # Histórico de snapshots (últimos 10)
-        self._history: List[HealthSnapshot] = []
+        self._history: list[HealthSnapshot] = []
 
         # Referência ao orchestrator (injetada externamente se necessário)
-        self.orchestrator: Optional[Any] = None
+        self.orchestrator: Any | None = None
 
         # Contador de falhas por fonte de busca (MEL-6.2)
-        self.failure_counts: Dict[str, int] = {}
+        self.failure_counts: dict[str, int] = {}
 
     # ── Verificação Principal ─────────────────────────────────────────────────
 
     async def check_all(self) -> HealthSnapshot:
         """Executa verificações paralelas de todos os serviços."""
         tasks = [self._check_service(svc) for svc in self.services]
-        results_list: List[ServiceHealthResult] = await asyncio.gather(*tasks)
+        results_list: list[ServiceHealthResult] = await asyncio.gather(*tasks)
 
         results = {r.name: r for r in results_list}
         alerts = self._compute_alerts(results)
         overall = self._compute_overall(results)
 
         snapshot = HealthSnapshot(
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             services=results,
             overall_status=overall,
             alerts=alerts,
@@ -230,7 +231,7 @@ class HealthMonitor:
     async def _check_service(self, svc: ServiceCheck) -> ServiceHealthResult:
         """Verifica um único serviço via HTTP GET."""
         start = time.monotonic()
-        checked_at = datetime.now(timezone.utc).isoformat()
+        checked_at = datetime.now(UTC).isoformat()
 
         try:
             async with httpx.AsyncClient(timeout=svc.timeout_seconds) as client:
@@ -322,7 +323,7 @@ class HealthMonitor:
 
     # ── Utilitários ───────────────────────────────────────────────────────────
 
-    def _compute_overall(self, results: Dict[str, ServiceHealthResult]) -> ServiceStatus:
+    def _compute_overall(self, results: dict[str, ServiceHealthResult]) -> ServiceStatus:
         """Calcula o status geral com base nos serviços críticos."""
         critical_names = {svc.name for svc in self.services if svc.critical}
 
@@ -339,7 +340,7 @@ class HealthMonitor:
             return ServiceStatus.DEGRADED
         return ServiceStatus.HEALTHY
 
-    def _compute_alerts(self, results: Dict[str, ServiceHealthResult]) -> List[str]:
+    def _compute_alerts(self, results: dict[str, ServiceHealthResult]) -> list[str]:
         alerts = []
         for svc in self.services:
             r = results.get(svc.name)
@@ -348,11 +349,11 @@ class HealthMonitor:
                 alerts.append(f"[{severity}] '{svc.name}' offline — {r.detail}")
         return alerts
 
-    def get_history(self) -> List[HealthSnapshot]:
+    def get_history(self) -> list[HealthSnapshot]:
         """Retorna os últimos 10 snapshots de saúde."""
         return list(self._history)
 
-    def get_last_snapshot(self) -> Optional[HealthSnapshot]:
+    def get_last_snapshot(self) -> HealthSnapshot | None:
         """Retorna o snapshot mais recente ou None."""
         return self._history[-1] if self._history else None
 
@@ -368,14 +369,14 @@ class HealthMonitor:
             logger.error(
                 f"🚨 HealthMonitor: DESABILITANDO FONTE '{source.upper()}' temporariamente devido a falhas consecutivas!"
             )
-            print(f"\n[Aviso HealthMonitor] 🚨 Desabilitando fonte '{source.upper()}' devido a falhas repetidas: {error}\n")
+            
             
             if self.orchestrator and hasattr(self.orchestrator, "searchers"):
                 searcher = self.orchestrator.searchers.get(source)
                 if searcher:
                     searcher.enabled = False
 
-    def get_active_sources(self) -> List[str]:
+    def get_active_sources(self) -> list[str]:
         """Retorna os nomes de fontes de busca que estão ativas e não desabilitadas."""
         if self.orchestrator and hasattr(self.orchestrator, "searchers"):
             return [

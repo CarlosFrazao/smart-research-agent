@@ -3,10 +3,10 @@ Circuit Breaker — Desliga automaticamente fontes que falham repetidamente.
 Estados: CLOSED (normal) → OPEN (desligado) → HALF_OPEN (testando recuperação)
 """
 import asyncio
+import logging
 import time
 from enum import Enum
-from typing import Optional, Callable, Dict
-import logging
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class CircuitBreaker:
         self.half_open_max_calls = half_open_max_calls
         self.state = CircuitState.CLOSED
         self.failure_count = 0
-        self.last_failure_time: Optional[float] = None
+        self.last_failure_time: float | None = None
         self.half_open_calls = 0
         self._lock = asyncio.Lock()
 
@@ -119,7 +119,7 @@ class CircuitBreaker:
 
 # Registry global de circuit breakers
 class CircuitBreakerRegistry:
-    _breakers: Dict[str, CircuitBreaker] = {}
+    _breakers: dict[str, CircuitBreaker] = {}
 
     @classmethod
     def get(cls, source_name: str, **kwargs) -> CircuitBreaker:
@@ -128,7 +128,7 @@ class CircuitBreakerRegistry:
         return cls._breakers[source_name]
 
     @classmethod
-    def status_all(cls) -> Dict[str, str]:
+    def status_all(cls) -> dict[str, str]:
         return {name: b.state.value for name, b in cls._breakers.items()}
 
     @classmethod

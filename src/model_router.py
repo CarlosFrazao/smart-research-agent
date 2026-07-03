@@ -8,7 +8,6 @@ This reduces cost 60-80% without sacrificing perceived quality.
 """
 import logging
 from dataclasses import dataclass
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ _REASONING_TASKS = frozenset({
     "research_auditing",
 })
 
-_PRICES_PER_1K_TOKENS: Dict[str, float] = {
+_PRICES_PER_1K_TOKENS: dict[str, float] = {
     "claude-haiku-4-5": 0.001,
     "claude-sonnet-4-5": 0.015,
     "claude-opus-4-5": 0.075,
@@ -51,7 +50,7 @@ _PRICES_PER_1K_TOKENS: Dict[str, float] = {
     "gemini-2.5-flash-thinking": 0.001,
 }
 
-_ROUTING_TABLE: Dict[str, Dict[str, str]] = {
+_ROUTING_TABLE: dict[str, dict[str, str]] = {
     "simple": {
         "anthropic": "claude-haiku-4-5",
         "openai": "gpt-4o-mini",

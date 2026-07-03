@@ -4,14 +4,14 @@ para análise posterior ou retry controlado.
 
 Cada tarefa é persistida como JSON em disco em um diretório configurável (.dlq/).
 """
-import json
-import uuid
 import asyncio
+import json
 import logging
-from pathlib import Path
+import uuid
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from dataclasses import dataclass, asdict
-from typing import Callable, List, Optional
+from pathlib import Path
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class DeadLetterQueue:
         except Exception as e:
             logger.error(f"DLQ: falha ao persistir task {task.task_id}: {e}")
 
-    async def pop_all(self) -> List[FailedTask]:
+    async def pop_all(self) -> list[FailedTask]:
         """Lê e remove todas as tarefas da fila do disco."""
         tasks = []
         for file in sorted(self.path.glob("*.json")):

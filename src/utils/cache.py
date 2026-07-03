@@ -1,8 +1,8 @@
-import json
 import hashlib
+import json
 from datetime import datetime, timedelta
-from typing import Optional, Any
 from pathlib import Path
+from typing import Any
 
 
 class Cache:
@@ -15,7 +15,7 @@ class Cache:
         hash_key = hashlib.md5(f"{prefix}:{query}".encode()).hexdigest()
         return f"{prefix}_{hash_key}.json"
 
-    def get(self, prefix: str, query: str) -> Optional[Any]:
+    def get(self, prefix: str, query: str) -> Any | None:
         path = self.cache_dir / self._key(prefix, query)
         if not path.exists():
             return None
