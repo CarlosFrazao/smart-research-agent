@@ -2,7 +2,7 @@ import asyncio
 import aiohttp
 import logging
 from typing import Dict, Any, Optional, List
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,7 @@ class ScrapingRaceClient:
         import os
         if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
             return {"success": False}
-        jina_url = f"https://r.jina.ai/{url}"
+        jina_url = f"https://r.jina.ai/{quote(url, safe=':/.?=#&')}"
         headers = {
             "Accept": "text/markdown",
             "User-Agent": "curl/8.6.0"

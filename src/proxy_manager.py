@@ -181,13 +181,50 @@ class ProxyServer:
         self.server = await asyncio.start_server(self.handle_client, self.host, self.port)
         logging.info(f"Proxy Local Server rodando em http://{self.host}:{self.port}")
 
+    def authenticate_request(self, header_lines: List[str]) -> bool:
+        user_env = os.getenv("PROXY_AUTH_USER", "admin")
+        pass_env = os.getenv("PROXY_AUTH_PASS")
+        if not pass_env:
+            return True
+            
+        proxy_auth_header = None
+        for line in header_lines:
+            if line.lower().startswith("proxy-authorization:"):
+                proxy_auth_header = line
+                break
+                
+        if not proxy_auth_header:
+            return False
+            
+        try:
+            parts = proxy_auth_header.split()
+            if len(parts) < 3 or parts[1].lower() != "basic":
+                return False
+                
+            decoded = base64.b64decode(parts[2]).decode("utf-8", errors="ignore")
+            user, password = decoded.split(":", 1)
+            
+            import secrets
+            user_ok = secrets.compare_digest(user, user_env)
+            pass_ok = secrets.compare_digest(password, pass_env)
+            return user_ok and pass_ok
+        except Exception:
+            return False
+
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
             # Lê a requisição inicial (cabeçalho)
             data = await reader.readuntil(b'\r\n\r\n')
             header_lines = data.decode('utf-8', errors='ignore').split('\r\n')
-            first_line = header_lines[0]
             
+            # Autenticação básica do Proxy
+            if not self.authenticate_request(header_lines):
+                writer.write(b"HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"Proxy Shield\"\r\n\r\n")
+                await writer.drain()
+                writer.close()
+                return
+
+            first_line = header_lines[0]
             words = first_line.split()
             if not words or len(words) < 2:
                 writer.close()

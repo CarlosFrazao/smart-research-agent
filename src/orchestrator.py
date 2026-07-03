@@ -3,7 +3,9 @@ import logging
 import os
 import shutil
 from datetime import datetime
+from statistics import mean
 from typing import Dict, Any, List, Optional
+from urllib.parse import quote
 
 from src.config import Config
 from src.types import ResearchMetadata, ExpandedQuery
@@ -89,6 +91,9 @@ class Orchestrator:
         self.conflict_detector = ConflictDetector(llm_client=self.llm)
         self.peer_reviewer = PeerReviewAgent(llm_client=self.llm)
         self.evidence_graph = EvidenceGraph()
+
+        from src.security.llm_sanitizer import LLMSanitizer
+        self.sanitizer = LLMSanitizer(self.llm)
 
         self.searchers = self._init_searchers()
         self.cache = Cache(cache_dir=self.config.cache_dir)
@@ -264,7 +269,7 @@ class Orchestrator:
                 logger.warning(f"Steel failed for '{url[:50]}': {e}")
 
         # 4. Fallback incondicional final: Jina Reader
-        jina_url = f"https://r.jina.ai/{url}"
+        jina_url = f"https://r.jina.ai/{quote(url, safe=':/.?=#&')}"
         try:
             logger.info(f"Using Jina Reader fallback for '{url[:50]}'")
             raw = await self.searchers["firecrawl"].client.scrape(jina_url)
@@ -426,6 +431,17 @@ class Orchestrator:
             ranked.extend(new_ranked)
             ranked.sort(key=lambda x: x.score, reverse=True)
             iteration += 1
+
+        logger.info("Passo 7b/9: Sanitização anti-injection (LLMSanitizer)...")
+        sanitized = await self.sanitizer.sanitize_batch([r.description or "" for r in ranked])
+        safe_ranked = []
+        for r, s in zip(ranked, sanitized):
+            if s.risk_score < 0.7:
+                r.description = s.cleaned
+                safe_ranked.append(r)
+            else:
+                logger.warning(f"LLMSanitizer bloqueou/filtrou resultado com alto risco ({s.risk_score}) de '{r.url[:50]}'")
+        ranked = safe_ranked
 
         logger.info("Passo 8/9: Sintetizando resultados...")
         synthesized = await self.synthesizer.synthesize(ranked)
@@ -653,3 +669,23 @@ class Orchestrator:
                 self.health_monitor.report_failure(source_name, str(e))
             return []
 
+    async def _calculate_overall_confidence(self, results: List) -> float:
+        """
+        Calcula a confiança geral com base nos scores individuais,
+        diversidade de fontes e qualidade relativa dos resultados.
+        """
+        if not results:
+            return 0.0
+        individual_scores = [
+            r.confidence_score
+            for r in results
+            if hasattr(r, "confidence_score") and r.confidence_score is not None
+        ]
+        if not individual_scores:
+            return 0.5
+        source_diversity = len(set(getattr(r, "source", "") for r in results))
+        diversity_bonus = min(source_diversity / 5, 1.0)
+        high_quality = sum(1 for s in individual_scores if s > 0.7)
+        quality_ratio = high_quality / len(individual_scores)
+        base_confidence = mean(individual_scores)
+        return round(min(base_confidence * diversity_bonus * (0.5 + 0.5 * quality_ratio), 1.0), 4)

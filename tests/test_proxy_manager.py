@@ -145,3 +145,35 @@ async def test_proxy_manager_blocking_consecutive_attempts():
     manager.report_result(p, "github.com", success=False)
     assert "github.com" in p.blocked_domains
 
+
+@pytest.mark.asyncio
+async def test_proxy_server_authentication():
+    from unittest import mock
+    import base64
+    
+    manager = ProxyManager(config_dir="non_existent")
+    server = ProxyServer(manager, host="127.0.0.1", port=13017)
+    
+    # 1. Sem credenciais configuradas na env -> Permite acesso (retrocompatibilidade)
+    with mock.patch.dict(os.environ, {"PROXY_AUTH_PASS": ""}):
+        assert server.authenticate_request(["GET / HTTP/1.1"]) is True
+        
+    # 2. Com credenciais, mas sem cabeçalho -> Rejeita (407)
+    with mock.patch.dict(os.environ, {"PROXY_AUTH_USER": "admin", "PROXY_AUTH_PASS": "secret123"}):
+        assert server.authenticate_request(["GET / HTTP/1.1"]) is False
+        
+        # 3. Credenciais incorretas -> Rejeita
+        wrong_auth = base64.b64encode(b"admin:wrong").decode()
+        assert server.authenticate_request([
+            "GET / HTTP/1.1",
+            f"Proxy-Authorization: Basic {wrong_auth}"
+        ]) is False
+        
+        # 4. Credenciais corretas -> Permite
+        correct_auth = base64.b64encode(b"admin:secret123").decode()
+        assert server.authenticate_request([
+            "GET / HTTP/1.1",
+            f"Proxy-Authorization: Basic {correct_auth}"
+        ]) is True
+
+

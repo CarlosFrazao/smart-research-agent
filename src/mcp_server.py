@@ -18,10 +18,24 @@ from src.orchestrator import Orchestrator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-server")
 
+from contextvars import ContextVar
+from typing import Dict
+
 app = FastAPI(title="Smart Research Agent MCP Server")
 _orchestrator: Optional[Orchestrator] = None
 _deep_researcher: Optional[DeepResearcher] = None
 _confidence_scorer: Optional[ConfidenceScorer] = None
+
+# Thread-safety context and lock for concurrent research requests
+_current_research: ContextVar[Optional[dict]] = ContextVar("current_research", default=None)
+_research_lock = asyncio.Lock()
+_research_store: Dict[str, dict] = {}  # Keyed by session_id
+
+async def get_or_create_research(session_id: str) -> dict:
+    async with _research_lock:
+        if session_id not in _research_store:
+            _research_store[session_id] = {}
+        return _research_store[session_id]
 
 _STATIC_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static"))
 _REPORTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "reports"))
@@ -99,12 +113,17 @@ async def list_reports():
 @app.get("/api/reports/{filename}")
 async def get_report(filename: str):
     """Retorna o conteúdo de um relatório (Markdown, PDF, DOCX, PPTX)."""
+    from pathlib import Path
     safe_name = os.path.basename(filename)
     allowed_extensions = (".md", ".pdf", ".docx", ".pptx")
     if not any(safe_name.endswith(ext) for ext in allowed_extensions) or safe_name.startswith("_"):
         return PlainTextResponse("Arquivo inválido.", status_code=400)
-    file_path = os.path.join(_REPORTS_DIR, safe_name)
-    if not os.path.isfile(file_path):
+    # Path Traversal Guard: resolve() garante que o arquivo está estritamente dentro de _REPORTS_DIR
+    reports_root = Path(_REPORTS_DIR).resolve()
+    file_path = (reports_root / safe_name).resolve()
+    if not str(file_path).startswith(str(reports_root)):
+        return PlainTextResponse("Acesso negado.", status_code=403)
+    if not file_path.is_file():
         return PlainTextResponse("Relatório não encontrado.", status_code=404)
     
     if safe_name.endswith(".md"):
@@ -164,12 +183,9 @@ async def chat_direct(body: dict):
                 full_prompt += f"{role.upper()}: {content}\n"
             full_prompt += "ASSISTANT:"
 
-            response = await llm.complete(full_prompt, max_tokens=2048)
-            chunk_size = 50
-            for i in range(0, len(response), chunk_size):
-                chunk = response[i : i + chunk_size]
+            # Utiliza streaming real através do método complete_stream() do LLMClient
+            async for chunk in llm.complete_stream(full_prompt, max_tokens=2048):
                 yield f"data: {chunk}\n\n"
-                await asyncio.sleep(0.01)
             yield "data: [DONE]\n\n"
         except Exception as e:
             logger.error(f"[api/chat] erro: {e}")
@@ -249,14 +265,24 @@ async def research_endpoint(body: dict):
     query = body.get("query", "")
     if not query:
         return {"error": "query is required"}
+    session_id = body.get("session_id", "default_session")
     # api_key e provider são aceitos no body para compatibilidade com o frontend
     # O orchestrator usa as chaves do .env por default; override não é logado
     try:
+        session_data = await get_or_create_research(session_id)
+        _current_research.set(session_data)
+        
         report = await get_orchestrator().research(query)
-        return {"report": report, "query": query}
+        
+        session_data["last_query"] = query
+        session_data["last_report"] = report
+        
+        return {"report": report, "query": query, "session_id": session_id}
     except Exception as e:
         logger.error(f"Erro na pesquisa: {e}")
         return {"error": str(e)}
+    finally:
+        _current_research.set(None)
 
 
 try:

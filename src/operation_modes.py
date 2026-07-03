@@ -243,3 +243,37 @@ class OperationModes:
     def get_all_descriptions(cls) -> Dict[str, str]:
         """Retorna dicionário {nome: descrição} de todos os modos."""
         return {name: cfg.description for name, cfg in cls.MODES.items()}
+
+    @classmethod
+    def validate_operation_modes(cls) -> None:
+        """
+        Valida a consistência de todos os modos de operação.
+        Levanta ValueError com detalhes se alguma configuração for inválida.
+        Deve ser chamado no startup ou em testes de sanidade.
+        """
+        errors: List[str] = []
+        for mode_name, cfg in cls.MODES.items():
+            if not cfg.searchers:
+                errors.append(f"Modo '{mode_name}': lista de searchers está vazia.")
+            if cfg.confidence_threshold < 0.0 or cfg.confidence_threshold > 1.0:
+                errors.append(
+                    f"Modo '{mode_name}': confidence_threshold={cfg.confidence_threshold} fora do intervalo [0.0, 1.0]."
+                )
+            if cfg.max_depth <= 0:
+                errors.append(f"Modo '{mode_name}': max_depth={cfg.max_depth} deve ser > 0.")
+            if cfg.timeout_seconds <= 0:
+                errors.append(f"Modo '{mode_name}': timeout_seconds={cfg.timeout_seconds} deve ser > 0.")
+            if cfg.proxy_strategy not in ("rotate", "fixed", "direct", "vps_first", "none"):
+                errors.append(
+                    f"Modo '{mode_name}': proxy_strategy='{cfg.proxy_strategy}' não é um valor reconhecido."
+                )
+            if cfg.cache_strategy not in ("always", "smart", "never"):
+                errors.append(
+                    f"Modo '{mode_name}': cache_strategy='{cfg.cache_strategy}' deve ser 'always', 'smart' ou 'never'."
+                )
+        if errors:
+            raise ValueError(
+                f"Configuração inválida em {len(errors)} modo(s) de operação:\n" + "\n".join(f"  • {e}" for e in errors)
+            )
+        logger.info(f"[validate_operation_modes] {len(cls.MODES)} modos validados com sucesso.")
+

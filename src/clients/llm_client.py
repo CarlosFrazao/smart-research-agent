@@ -66,9 +66,33 @@ class LLMClient:
         self.model_router = model_router
         # fallback_configs: {"gemini": {...}, "groq": {...}, "openrouter": {...}, "ollama": {...}}
         self._fallback_configs: Dict[str, Dict[str, Any]] = fallback_configs or {}
+        self._init_providers_safely()
         self._init_client()
         from src.token_economy import TokenEconomy
         self.token_economy = TokenEconomy(default_model=self.model)
+
+    def _init_providers_safely(self) -> None:
+        import importlib
+        PROVIDER_MAP = [
+            ("openrouter", "openai", "api_key"),
+            ("anthropic", "anthropic", "api_key"),
+            ("gemini", "google.genai", "api_key"),
+            ("groq", "groq", "api_key"),
+            ("ollama", "openai", None),
+        ]
+        for name, module_name, key_attr in PROVIDER_MAP:
+            if key_attr and not self.config.get(key_attr):
+                fallback_cfg = self._fallback_configs.get(name)
+                if not fallback_cfg or not fallback_cfg.get(key_attr):
+                    continue
+            try:
+                importlib.import_module(module_name)
+                logger.debug(f"Provider {name} disponivel")
+            except ImportError as e:
+                logger.warning(f"Provider {name} indisponivel: {e}")
+            except Exception as e:
+                logger.error(f"Provider {name} falhou: {e}")
+
 
     # ── Inicialização ─────────────────────────────────────────────────────────
 
@@ -379,6 +403,87 @@ class LLMClient:
         )
 
         return response
+
+    async def complete_stream(
+        self,
+        prompt: str,
+        task_type: str = "synthesis",
+        model_override: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 4000,
+    ):
+        """
+        Gerador assíncrono que faz streaming real quando o provider suporta,
+        e cai em chunks simulados (sem sleep artificial) como fallback seguro.
+
+        Compatível com SSE via FastAPI StreamingResponse.
+        """
+        # Providers que suportam streaming nativo via openai SDK
+        if self.provider in (LLMProvider.OPENAI, LLMProvider.OPENROUTER, LLMProvider.OLLAMA, LLMProvider.GROQ):
+            try:
+                client = self._client
+                if self.provider == LLMProvider.GROQ and not client:
+                    raise RuntimeError("Groq SDK não instalado")
+                stream = await client.chat.completions.create(
+                    model=model_override or self.model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True,
+                )
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+                return
+            except Exception as exc:
+                logger.warning(f"[complete_stream] Streaming nativo falhou: {exc}. Usando fallback chunked.")
+
+        # Anthropic streaming
+        if self.provider == LLMProvider.ANTHROPIC:
+            try:
+                async with self._client.messages.stream(
+                    model=model_override or self.model,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                ) as stream:
+                    async for text in stream.text_stream:
+                        yield text
+                return
+            except Exception as exc:
+                logger.warning(f"[complete_stream] Anthropic stream falhou: {exc}. Usando fallback chunked.")
+
+        # Gemini streaming
+        if self.provider == LLMProvider.GEMINI and self._client:
+            try:
+                from google.genai import types as genai_types
+                response = await self._client.aio.models.generate_content(
+                    model=model_override or self.model,
+                    contents=prompt,
+                    config=genai_types.GenerateContentConfig(
+                        temperature=temperature,
+                        max_output_tokens=max_tokens,
+                    ),
+                )
+                text = response.text or ""
+                # Gemini não tem streaming por chunk na SDK atual — entrega em blocos
+                chunk_size = 80
+                for i in range(0, len(text), chunk_size):
+                    yield text[i : i + chunk_size]
+                return
+            except Exception as exc:
+                logger.warning(f"[complete_stream] Gemini stream falhou: {exc}. Usando fallback chunked.")
+
+        # Fallback universal: complete() normal, chunked sem sleep
+        full_response = await self.complete(
+            prompt, task_type=task_type, model_override=model_override,
+            temperature=temperature, max_tokens=max_tokens
+        )
+        chunk_size = 80
+        for i in range(0, len(full_response), chunk_size):
+            yield full_response[i : i + chunk_size]
+
+
 
     async def _fallback_to_ollama(self, prompt: str, temperature: float, max_tokens: int) -> str:
         try:

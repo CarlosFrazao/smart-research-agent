@@ -46,7 +46,10 @@ _YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 
 # Limiar de frescor: conteúdo com mais de N anos perde pontos
 _FRESHNESS_PENALTY_YEARS = 3
-_CURRENT_YEAR = datetime.now(timezone.utc).year
+
+def _get_current_year() -> int:
+    """Retorna o ano atual em UTC. Avaliado em tempo de chamada para evitar valores congelados."""
+    return datetime.now(timezone.utc).year
 
 
 class ConfidenceScorerV2(ConfidenceScorer):
@@ -205,7 +208,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
             return (0.7, None)
 
         most_recent = max(years_found)
-        age = _CURRENT_YEAR - most_recent
+        age = _get_current_year() - most_recent
 
         if age <= 0:
             return (1.0, most_recent)

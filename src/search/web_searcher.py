@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.clients.firecrawl_client import FirecrawlClient
+from urllib.parse import quote
 import logging
 import re
 import httpx
@@ -44,7 +45,7 @@ class WebSearcher(BaseSearcher):
         # Tentativa 3: Se a busca do Firecrawl falhar completamente, tentar buscar via API de scraping do Jina Reader
         try:
             logger.info(f"WebSearcher: Fallback de busca ativando Jina Reader para extração direta de busca pública.")
-            jina_search_url = f"https://s.jina.ai/{query}"
+            jina_search_url = f"https://s.jina.ai/{quote(query, safe='')}"
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.get(
                     jina_search_url,
