@@ -110,3 +110,38 @@ async def test_proxy_server_direct_fallback():
         await proxy_server.server.wait_closed()
         echo_server.close()
         await echo_server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_proxy_manager_blocking_consecutive_attempts():
+    p = Proxy(ip="1.1.1.1", port=80)
+    manager = ProxyManager(config_dir="non_existent")
+    
+    # 1. Sucesso inicial: não deve bloquear
+    manager.report_result(p, "github.com", success=True)
+    assert "github.com" not in p.blocked_domains
+    
+    # 2. Primeira falha: não deve bloquear
+    manager.report_result(p, "github.com", success=False)
+    assert "github.com" not in p.blocked_domains
+    
+    # 3. Segunda falha: não deve bloquear
+    manager.report_result(p, "github.com", success=False)
+    assert "github.com" not in p.blocked_domains
+    
+    # 4. Sucesso intermediário: deve resetar as falhas
+    manager.report_result(p, "github.com", success=True)
+    assert "github.com" not in p.blocked_domains
+    
+    # 5. Primeira falha pós-sucesso: não deve bloquear
+    manager.report_result(p, "github.com", success=False)
+    assert "github.com" not in p.blocked_domains
+    
+    # 6. Segunda falha consecutiva: não deve bloquear
+    manager.report_result(p, "github.com", success=False)
+    assert "github.com" not in p.blocked_domains
+    
+    # 7. Terceira falha consecutiva: DEVE bloquear
+    manager.report_result(p, "github.com", success=False)
+    assert "github.com" in p.blocked_domains
+

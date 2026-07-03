@@ -24,9 +24,16 @@ class FirecrawlClient:
         except Exception as e:
             logger.warning(f"Erro ao inicializar Firecrawl SDK: {e}. Usando fallback HTTP.")
         
-        # Inicializa o ScrapingRaceClient apontando para nós mesmos
-        from src.clients.scraping_race_client import ScrapingRaceClient
-        self.race_client = ScrapingRaceClient(self)
+        # Inicializa o ScrapingRaceClient de forma preguiçosa
+        self._race_client = None
+
+    @property
+    def race_client(self):
+        if self._race_client is None:
+            from src.clients.scraping_race_client import ScrapingRaceClient
+            self._race_client = ScrapingRaceClient(self)
+        return self._race_client
+
 
     def _is_retryable(self, exc: Exception) -> bool:
         msg = str(exc).lower()

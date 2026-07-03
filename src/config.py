@@ -28,7 +28,7 @@ class Config(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
 
-    firecrawl_api_key: str = "fc-placeholder"
+    firecrawl_api_key: Optional[str] = None
     firecrawl_base_url: Optional[str] = None
 
     spider_api_key: str = Field(default="")
@@ -54,7 +54,6 @@ class Config(BaseSettings):
 
     github_token: Optional[str] = None
     producthunt_token: Optional[str] = None
-    openrouter_api_key: Optional[str] = None
 
     memory_enabled: bool = Field(default=True)
     memory_db_path: str = Field(default="reports/.research_memory.db")
@@ -105,3 +104,11 @@ class Config(BaseSettings):
             configs["groq"] = {"api_key": self.groq_api_key, "model": self.groq_model}
         configs["ollama"] = {"base_url": self.ollama_base_url, "model": self.ollama_model}
         return configs
+
+    def validate_config(self) -> None:
+        """Valida que a chave do Firecrawl não é o placeholder de exemplo."""
+        if self.firecrawl_api_key == "fc-placeholder":
+            raise ValueError(
+                "A chave de API do Firecrawl está configurada como 'fc-placeholder'. "
+                "Por favor, configure uma chave válida no seu arquivo .env ou no ambiente."
+            )

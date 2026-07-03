@@ -84,6 +84,8 @@ async def cmd_research(args):
     if args.iterations:
         config.max_iterations = args.iterations
 
+    config.validate_config()
+
     orchestrator = Orchestrator(config)
     orchestrator.operation_mode = OperationModes.get_mode(op_mode)
 

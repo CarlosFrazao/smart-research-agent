@@ -21,6 +21,7 @@ class Proxy:
         self.health_score = 100.0
         self.latency = 0.0
         self.blocked_domains: List[str] = []
+        self.failed_attempts: Dict[str, int] = {}
         self.last_checked = datetime.now()
 
     def get_url(self) -> str:
@@ -108,8 +109,10 @@ class ProxyManager:
             test_url = "https://httpbin.org/ip"
             start_time = asyncio.get_event_loop().time()
             try:
-                # Ignora validação SSL para proxies públicos para evitar falhas de certificado falsas
-                connector = aiohttp.TCPConnector(ssl=False)
+                # Habilita contexto SSL padrão para validação segura
+                import ssl
+                ssl_context = ssl.create_default_context()
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
                 async with aiohttp.ClientSession(connector=connector) as session:
                     async with session.get(
                         test_url, 
@@ -150,10 +153,21 @@ class ProxyManager:
             proxy.health_score = min(100.0, proxy.health_score + 5.0)
             if proxy.latency > 0:
                 proxy.latency = (proxy.latency * 0.8) + (response_time * 0.2)
+            # Reseta tentativas consecutivas de falha
+            if not hasattr(proxy, "failed_attempts"):
+                proxy.failed_attempts = {}
+            proxy.failed_attempts[target_domain] = 0
         else:
             proxy.health_score = max(0.0, proxy.health_score - 15.0)
-            if target_domain not in proxy.blocked_domains:
-                proxy.blocked_domains.append(target_domain)
+            # Adiciona ao contador de falhas
+            if not hasattr(proxy, "failed_attempts"):
+                proxy.failed_attempts = {}
+            attempts = proxy.failed_attempts.get(target_domain, 0) + 1
+            proxy.failed_attempts[target_domain] = attempts
+            # Só bloqueia após 3 tentativas falhas consecutivas
+            if attempts >= 3:
+                if target_domain not in proxy.blocked_domains:
+                    proxy.blocked_domains.append(target_domain)
 
 
 class ProxyServer:
