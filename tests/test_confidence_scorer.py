@@ -27,21 +27,27 @@ def scorer() -> ConfidenceScorer:
 
 # ─── score_result: trusted domain bonus ──────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_trusted_domain_github_gets_bonus(scorer):
-    result = _make_result(url="https://github.com/owner/repo", description="word " * 300)
+    result = _make_result(
+        url="https://github.com/owner/repo", description="word " * 300
+    )
     r = await scorer.score_result(result)
     assert r.confidence_score >= 0.6
 
 
 @pytest.mark.asyncio
 async def test_trusted_domain_arxiv_gets_bonus(scorer):
-    result = _make_result(url="https://arxiv.org/abs/1234.5678", description="word " * 300)
+    result = _make_result(
+        url="https://arxiv.org/abs/1234.5678", description="word " * 300
+    )
     r = await scorer.score_result(result)
     assert r.confidence_score >= 0.6
 
 
 # ─── score_result: content length penalties/bonuses ─────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_rich_content_over_300_words_gets_bonus(scorer):
@@ -60,6 +66,7 @@ async def test_thin_content_under_50_words_penalized(scorer):
 
 # ─── score_result: untrusted domain penalty ──────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_untrusted_domain_penalized(scorer):
     result = _make_result(url="https://buzzfeed.com/article", description="word " * 50)
@@ -69,34 +76,45 @@ async def test_untrusted_domain_penalized(scorer):
 
 # ─── score_result: clickbait title ──────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_clickbait_title_flagged(scorer):
-    result = _make_result(title="You won't believe this amazing hack!", description="word " * 100)
+    result = _make_result(
+        title="You won't believe this amazing hack!", description="word " * 100
+    )
     r = await scorer.score_result(result)
     assert "clickbait_title" in r.hallucination_flags
 
 
 @pytest.mark.asyncio
 async def test_clean_title_no_clickbait_flag(scorer):
-    result = _make_result(title="Comparing Python ORMs in 2026", description="word " * 100)
+    result = _make_result(
+        title="Comparing Python ORMs in 2026", description="word " * 100
+    )
     r = await scorer.score_result(result)
     assert "clickbait_title" not in r.hallucination_flags
 
 
 # ─── score_result: absolute claims ──────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_absolute_claim_in_title_penalized(scorer):
-    result = _make_result(title="The best Python framework definitivo", description="word " * 100)
+    result = _make_result(
+        title="The best Python framework definitivo", description="word " * 100
+    )
     r = await scorer.score_result(result)
     assert "absolute_claim_detected" in r.hallucination_flags
 
 
 # ─── score_result: date detection ────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_date_in_content_adds_bonus(scorer):
-    result_with_date = _make_result(description="Released on 2026-01 this framework improved. " * 20)
+    result_with_date = _make_result(
+        description="Released on 2026-01 this framework improved. " * 20
+    )
     result_without_date = _make_result(description="word " * 40)
     r_with = await scorer.score_result(result_with_date)
     r_without = await scorer.score_result(result_without_date)
@@ -105,9 +123,12 @@ async def test_date_in_content_adds_bonus(scorer):
 
 # ─── score_result: citations ─────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_citations_extracted_from_content(scorer):
-    desc = "See https://github.com/foo/bar and https://arxiv.org/abs/123 for details. " * 5
+    desc = (
+        "See https://github.com/foo/bar and https://arxiv.org/abs/123 for details. " * 5
+    )
     result = _make_result(description=desc)
     r = await scorer.score_result(result)
     assert len(r.citations) >= 2
@@ -115,6 +136,7 @@ async def test_citations_extracted_from_content(scorer):
 
 
 # ─── score_result: repetition detection ──────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_repetitive_content_flagged(scorer):
@@ -125,6 +147,7 @@ async def test_repetitive_content_flagged(scorer):
 
 
 # ─── score_result: evidence_quality classification ───────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_evidence_quality_verified_for_high_score(scorer):
@@ -145,6 +168,7 @@ async def test_evidence_quality_unknown_for_low_score(scorer):
 
 
 # ─── score_result: score clamped to [0.0, 1.0] ───────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_score_never_exceeds_1(scorer):
@@ -170,6 +194,7 @@ async def test_score_never_below_0(scorer):
 
 
 # ─── score_batch ─────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_score_batch_returns_all_results(scorer):
@@ -205,6 +230,7 @@ async def test_score_batch_no_cross_validate_skips_contradiction_check(scorer):
 
 # ─── _detect_contradictions ──────────────────────────────────────────────────
 
+
 def test_detect_contradictions_finds_opposing_claims(scorer):
     r1 = _make_result(
         url="https://a.com",
@@ -221,13 +247,18 @@ def test_detect_contradictions_finds_opposing_claims(scorer):
 
 
 def test_detect_contradictions_ignores_unrelated(scorer):
-    r1 = _make_result(url="https://a.com", title="Python tips", description="Python is great. " * 5)
-    r2 = _make_result(url="https://b.com", title="Rust tips", description="Rust is memory safe. " * 5)
+    r1 = _make_result(
+        url="https://a.com", title="Python tips", description="Python is great. " * 5
+    )
+    r2 = _make_result(
+        url="https://b.com", title="Rust tips", description="Rust is memory safe. " * 5
+    )
     result = scorer._detect_contradictions([r1, r2])
     assert result == {}
 
 
 # ─── _extract_domain ────────────────────────────────────────────────────────
+
 
 def test_extract_domain_standard_url(scorer):
     assert scorer._extract_domain("https://github.com/owner/repo") == "github.com"
@@ -243,6 +274,7 @@ def test_extract_domain_empty_url(scorer):
 
 # ─── _has_repetition ────────────────────────────────────────────────────────
 
+
 def test_has_repetition_detects_spam(scorer):
     text = "buy now buy now buy now buy now buy now buy now buy now buy now"
     assert scorer._has_repetition(text * 3) is True
@@ -255,6 +287,7 @@ def test_has_repetition_normal_text(scorer):
 
 # ─── _classify_evidence_quality ─────────────────────────────────────────────
 
+
 def test_classify_evidence_quality_levels(scorer):
     assert scorer._classify_evidence_quality(0.80) == "verified"
     assert scorer._classify_evidence_quality(0.60) == "cited"
@@ -264,28 +297,29 @@ def test_classify_evidence_quality_levels(scorer):
 
 # ─── V2 FEATURES TESTS ───────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_classify_claim_heuristics():
     scorer = ConfidenceScorerV2()
-    
+
     # Teste de Estatística
     type_stat, _ = scorer._classify_claim(
-        "Based on a recent survey, 84.5% of developers prefer Python over Java, showing a huge difference.", 
-        "Python vs Java Survey"
+        "Based on a recent survey, 84.5% of developers prefer Python over Java, showing a huge difference.",
+        "Python vs Java Survey",
     )
     assert type_stat == "statistics"
-    
+
     # Teste de Fato
     type_fact, _ = scorer._classify_claim(
-        "According to official docs, Python was released in 1991 by Guido van Rossum.", 
-        "Python History"
+        "According to official docs, Python was released in 1991 by Guido van Rossum.",
+        "Python History",
     )
     assert type_fact == "fact"
-    
+
     # Teste de Opinião
     type_opinion, _ = scorer._classify_claim(
-        "In my opinion, Python is the most beautiful language ever created, I believe everyone should use it.", 
-        "My thoughts on Python"
+        "In my opinion, Python is the most beautiful language ever created, I believe everyone should use it.",
+        "My thoughts on Python",
     )
     assert type_opinion == "opinion"
 
@@ -294,14 +328,18 @@ async def test_classify_claim_heuristics():
 async def test_calculate_freshness():
     scorer = ConfidenceScorerV2()
     current_year = datetime.now().year
-    
+
     # Teste com ano recente (atual)
-    score_recent, year_recent = scorer._calculate_freshness(f"This library was updated in {current_year}.")
+    score_recent, year_recent = scorer._calculate_freshness(
+        f"This library was updated in {current_year}."
+    )
     assert year_recent == current_year
     assert score_recent == 1.0
-    
+
     # Teste com ano antigo
-    score_old, year_old = scorer._calculate_freshness("This article was written in 2012.")
+    score_old, year_old = scorer._calculate_freshness(
+        "This article was written in 2012."
+    )
     assert year_old == 2012
     assert score_old < 0.40
 
@@ -309,24 +347,24 @@ async def test_calculate_freshness():
 @pytest.mark.asyncio
 async def test_detect_link_circularity():
     scorer = ConfidenceScorerV2()
-    
+
     r1 = SearchResult(
         source="web",
         title="Article A",
         url="https://site-a.com/article",
-        description="We agree with the points made in https://site-b.com/article about this topic."
+        description="We agree with the points made in https://site-b.com/article about this topic.",
     )
-    
+
     r2 = SearchResult(
         source="web",
         title="Article B",
         url="https://site-b.com/article",
-        description="As stated by https://site-a.com/article, this is the best approach."
+        description="As stated by https://site-a.com/article, this is the best approach.",
     )
-    
+
     results = [r1, r2]
     circular_map = scorer._detect_link_circularity(results)
-    
+
     assert "https://site-a.com/article" in circular_map
     assert "https://site-b.com/article" in circular_map
     assert circular_map["https://site-a.com/article"] == ["https://site-b.com/article"]
@@ -335,24 +373,24 @@ async def test_detect_link_circularity():
 @pytest.mark.asyncio
 async def test_score_batch_with_v2_features():
     scorer = ConfidenceScorerV2()
-    
+
     r1 = SearchResult(
         source="web",
         title="Article A",
         url="https://site-a.com/article",
-        description="In my opinion, this library is terrible. See: https://site-b.com/article"
+        description="In my opinion, this library is terrible. See: https://site-b.com/article",
     )
-    
+
     current_year = datetime.now().year
     r2 = SearchResult(
         source="web",
         title="Article B",
         url="https://site-b.com/article",
-        description=f"85% of users reported success in {current_year}. Source: https://site-a.com/article"
+        description=f"85% of users reported success in {current_year}. Source: https://site-a.com/article",
     )
-    
+
     scored_results = await scorer.score_batch([r1, r2], detect_circularity=True)
-    
+
     assert len(scored_results) == 2
     assert "circular_reference" in scored_results[0].hallucination_flags
     assert "circular_reference" in scored_results[1].hallucination_flags

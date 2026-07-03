@@ -1,1 +1,1 @@
-﻿# __init__.py for cli
+# __init__.py for cli

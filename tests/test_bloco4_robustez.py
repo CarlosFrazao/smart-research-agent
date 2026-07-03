@@ -2,10 +2,9 @@
 Testes do Bloco 4 — Robustez: Budget, Rate Limiter, DLQ e Exceptions.
 Sub-tarefas: 4.1 (Budget), 4.2 (RateLimiter), 4.3 (DLQ), 4.4 (Exceptions).
 """
-import asyncio
+
 import json
 import pytest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -86,7 +85,9 @@ class TestResearchBudget:
         assert b.is_exhausted()
 
     def test_summary_format(self):
-        b = ResearchBudget(max_total_nodes=10, nodes_created=3, max_cost_usd=5.0, estimated_cost=0.5)
+        b = ResearchBudget(
+            max_total_nodes=10, nodes_created=3, max_cost_usd=5.0, estimated_cost=0.5
+        )
         s = b.summary()
         assert s["nodes"] == "3/10"
         assert "$0.5000/$5.0" in s["cost_usd"]
@@ -193,9 +194,7 @@ class TestDomainRateLimiter:
     @pytest.mark.asyncio
     async def test_wait_github_uses_correct_bucket(self):
         """Deve usar bucket configurado para api.github.com."""
-        with patch.object(
-            DomainRateLimiter, "_get_bucket"
-        ) as mock_get:
+        with patch.object(DomainRateLimiter, "_get_bucket") as mock_get:
             mock_bucket = AsyncMock()
             mock_get.return_value = mock_bucket
             await DomainRateLimiter.wait("https://api.github.com/repos")
@@ -220,8 +219,12 @@ class TestDomainRateLimiter:
     @pytest.mark.asyncio
     async def test_wait_does_not_raise_on_error(self):
         """Erros internos no rate limiter não devem propagar."""
-        with patch.object(DomainRateLimiter, "_get_bucket", side_effect=RuntimeError("fail")):
-            await DomainRateLimiter.wait("https://api.github.com/x")  # Não deve levantar
+        with patch.object(
+            DomainRateLimiter, "_get_bucket", side_effect=RuntimeError("fail")
+        ):
+            await DomainRateLimiter.wait(
+                "https://api.github.com/x"
+            )  # Não deve levantar
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -338,16 +341,15 @@ class TestOrchestratorFacade:
         config = Config()
         config.memory_enabled = False
         config.smart_routing_enabled = False
-        
+
         # Moca o client do LLMClient para evitar chamadas de API ou erros de setup de API key
         with patch("src.orchestrator.LLMClient") as mock_llm_class:
             orch = Orchestrator(config)
-            
+
             assert hasattr(orch, "search")
             assert hasattr(orch, "reasoning")
             assert hasattr(orch, "memory_service")
             assert hasattr(orch, "reports")
-            
+
             # Verifica que o property searchers aponta para o search service
             assert orch.searchers is orch.search.searchers
-

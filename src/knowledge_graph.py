@@ -3,6 +3,7 @@ knowledge_graph.py — Subsistema de Grafo de Conhecimento Semântico do SRA (Bl
 
 Fornece extração de triplas (regex + LLM), persistência no KuzuDB e exportação nos formatos Turtle (RDF) e JSON.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,17 +16,17 @@ logger = logging.getLogger("knowledge_graph")
 
 # Relações semânticas a detectar via padrões regex
 RELATION_PATTERNS = {
-    "founded_by":    r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:(?:was\s+|is\s+)?founded\s+by)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
-    "produces":      r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:produces?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
-    "develops":      r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:develops?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "founded_by": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:(?:was\s+|is\s+)?founded\s+by)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "produces": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:produces?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "develops": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:develops?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
     "competes_with": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:competes?\s+with)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
-    "acquired_by":   r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:(?:was\s+|is\s+)?acquired\s+by)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "acquired_by": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:(?:was\s+|is\s+)?acquired\s+by)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
     "partners_with": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:(?:partners?|partnered|collaborates?|collaborated)\s+with)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
-    "is_a":          r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:is\s+an?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
-    "has_part":      r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:has)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:part)\b",
-    "located_in":    r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:is\s+located\s+in)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
-    "created_by":    r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:(?:was\s+|is\s+)?created\s+by)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
-    "author_of":     r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:authored?|wrote?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "is_a": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:is\s+an?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "has_part": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:has)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:part)\b",
+    "located_in": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:is\s+located\s+in)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "created_by": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:(?:was\s+|is\s+)?created\s+by)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
+    "author_of": r"\b([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\s+(?i:authored?|wrote?)\s+([A-Za-z0-9_.\-]+(?:\s+[A-Z][A-Za-z0-9_.\-]*)*)\b",
 }
 
 
@@ -84,13 +85,15 @@ class SemanticKnowledgeGraph:
                     obj = m[1].strip()
                     # Filtra falsos positivos simples (números isolados, pronomes comuns)
                     if self._is_valid_entity(sub) and self._is_valid_entity(obj):
-                        triples.append(Triple(
-                            subject=sub,
-                            relation=rel_name,
-                            object=obj,
-                            confidence=0.75,
-                            source="regex_heuristics"
-                        ))
+                        triples.append(
+                            Triple(
+                                subject=sub,
+                                relation=rel_name,
+                                object=obj,
+                                confidence=0.75,
+                                source="regex_heuristics",
+                            )
+                        )
         return triples
 
     async def extract_triples_with_llm(self, text: str) -> list[Triple]:
@@ -98,7 +101,9 @@ class SemanticKnowledgeGraph:
         Usa o cliente LLM para realizar extração semântica profunda de triplas.
         """
         if not self.llm:
-            logger.warning("KG: extract_triples_with_llm falhou — LLMClient não fornecido.")
+            logger.warning(
+                "KG: extract_triples_with_llm falhou — LLMClient não fornecido."
+            )
             return []
 
         prompt = (
@@ -117,21 +122,21 @@ class SemanticKnowledgeGraph:
             "- located_in (entidade fica geograficamente localizada em)\n"
             "- created_by (projeto criado por pessoa/organização)\n"
             "- author_of (autor escreveu livro/artigo)\n\n"
-            f"Texto: \"{text}\"\n\n"
+            f'Texto: "{text}"\n\n'
             "Responda APENAS com um JSON contendo uma lista de objetos no seguinte formato (nada de texto antes ou depois):\n"
             "[\n"
             "  {\n"
-            "    \"subject\": \"<sujeito>\",\n"
-            "    \"relation\": \"<relação listada acima>\",\n"
-            "    \"object\": \"<objeto>\",\n"
-            "    \"confidence\": <0.0 a 1.0>\n"
+            '    "subject": "<sujeito>",\n'
+            '    "relation": "<relação listada acima>",\n'
+            '    "object": "<objeto>",\n'
+            '    "confidence": <0.0 a 1.0>\n'
             "  },\n"
             "  ...\n"
             "]\n"
         )
         try:
             raw = await self.llm.generate(prompt, temperature=0.2, max_tokens=600)
-            
+
             # Limpa qualquer delimitador de código Markdown ```json
             clean_raw = raw.strip()
             if clean_raw.startswith("```"):
@@ -146,23 +151,25 @@ class SemanticKnowledgeGraph:
             start = clean_raw.find("[")
             if start == -1:
                 return []
-            
+
             data = json.loads(clean_raw[start:])
             triples = []
             for item in data:
                 sub = item.get("subject", "").strip()
                 rel = item.get("relation", "").strip()
                 obj = item.get("object", "").strip()
-                
+
                 # Valida tipo de relação
                 if rel in RELATION_PATTERNS and sub and obj:
-                    triples.append(Triple(
-                        subject=sub,
-                        relation=rel,
-                        object=obj,
-                        confidence=float(item.get("confidence", 0.8)),
-                        source="llm_extraction"
-                    ))
+                    triples.append(
+                        Triple(
+                            subject=sub,
+                            relation=rel,
+                            object=obj,
+                            confidence=float(item.get("confidence", 0.8)),
+                            source="llm_extraction",
+                        )
+                    )
             return triples
         except Exception as e:
             logger.warning(f"KG: extract_triples_with_llm falhou: {e}")
@@ -181,19 +188,23 @@ class SemanticKnowledgeGraph:
 
         try:
             # 1. Merge do sujeito
-            sub_type = self._determine_entity_type(triple.subject, triple.relation, is_subject=True)
+            sub_type = self._determine_entity_type(
+                triple.subject, triple.relation, is_subject=True
+            )
             self.kuzu_conn.execute(
                 "MERGE (s:SemanticEntity {name: $name}) "
                 "ON CREATE SET s.type = $type",
-                {"name": triple.subject, "type": sub_type}
+                {"name": triple.subject, "type": sub_type},
             )
 
             # 2. Merge do objeto
-            obj_type = self._determine_entity_type(triple.object, triple.relation, is_subject=False)
+            obj_type = self._determine_entity_type(
+                triple.object, triple.relation, is_subject=False
+            )
             self.kuzu_conn.execute(
                 "MERGE (o:SemanticEntity {name: $name}) "
                 "ON CREATE SET o.type = $type",
-                {"name": triple.object, "type": obj_type}
+                {"name": triple.object, "type": obj_type},
             )
 
             # 3. Verifica se a aresta já existe para evitar duplicações
@@ -202,11 +213,10 @@ class SemanticKnowledgeGraph:
                 "WHERE s.name = $sub AND o.name = $obj AND r.type = $rel "
                 "RETURN r"
             )
-            res = self.kuzu_conn.execute(check_q, {
-                "sub": triple.subject,
-                "obj": triple.object,
-                "rel": triple.relation
-            })
+            res = self.kuzu_conn.execute(
+                check_q,
+                {"sub": triple.subject, "obj": triple.object, "rel": triple.relation},
+            )
             if res.has_next():
                 return  # Relação já cadastrada no grafo
 
@@ -216,13 +226,18 @@ class SemanticKnowledgeGraph:
                 "WHERE s.name = $sub AND o.name = $obj "
                 "CREATE (s)-[r:RELATION {type: $rel, confidence: $conf}]->(o)"
             )
-            self.kuzu_conn.execute(create_q, {
-                "sub": triple.subject,
-                "obj": triple.object,
-                "rel": triple.relation,
-                "conf": float(triple.confidence)
-            })
-            logger.debug(f"KG: Tripla adicionada: ({triple.subject}) -[{triple.relation}]-> ({triple.object})")
+            self.kuzu_conn.execute(
+                create_q,
+                {
+                    "sub": triple.subject,
+                    "obj": triple.object,
+                    "rel": triple.relation,
+                    "conf": float(triple.confidence),
+                },
+            )
+            logger.debug(
+                f"KG: Tripla adicionada: ({triple.subject}) -[{triple.relation}]-> ({triple.object})"
+            )
         except Exception as e:
             logger.warning(f"KG: Erro ao adicionar tripla ao KuzuDB: {e}")
 
@@ -232,7 +247,7 @@ class SemanticKnowledgeGraph:
         self,
         subject: str | None = None,
         relation: str | None = None,
-        object: str | None = None
+        object: str | None = None,
     ) -> list[Triple]:
         """
         Consulta o grafo de relações semânticas e retorna uma lista de triplas.
@@ -269,13 +284,15 @@ class SemanticKnowledgeGraph:
             res = self.kuzu_conn.execute(query, params)
             while res.has_next():
                 row = res.get_next()
-                triples.append(Triple(
-                    subject=str(row[0]),
-                    relation=str(row[1]),
-                    object=str(row[2]),
-                    confidence=float(row[3]),
-                    source="kuzudb_query"
-                ))
+                triples.append(
+                    Triple(
+                        subject=str(row[0]),
+                        relation=str(row[1]),
+                        object=str(row[2]),
+                        confidence=float(row[3]),
+                        source="kuzudb_query",
+                    )
+                )
         except Exception as e:
             logger.warning(f"KG: query_graph falhou: {e}")
 
@@ -313,7 +330,7 @@ class SemanticKnowledgeGraph:
         lines = [
             "@prefix sra: <http://smart-research-agent.org/resource/> .",
             "@prefix srap: <http://smart-research-agent.org/property/> .",
-            ""
+            "",
         ]
 
         def clean_uri(val: str) -> str:
@@ -340,30 +357,28 @@ class SemanticKnowledgeGraph:
 
         try:
             # 1. Recupera todos os nós
-            res_nodes = self.kuzu_conn.execute("MATCH (e:SemanticEntity) RETURN e.name, e.type")
+            res_nodes = self.kuzu_conn.execute(
+                "MATCH (e:SemanticEntity) RETURN e.name, e.type"
+            )
             while res_nodes.has_next():
                 row = res_nodes.get_next()
-                nodes_map[str(row[0])] = {
-                    "id": str(row[0]),
-                    "type": str(row[1])
-                }
+                nodes_map[str(row[0])] = {"id": str(row[0]), "type": str(row[1])}
 
             # 2. Recupera todos os links
             triples = self.query_graph()
             for t in triples:
-                links.append({
-                    "source": t.subject,
-                    "target": t.object,
-                    "type": t.relation,
-                    "confidence": t.confidence
-                })
+                links.append(
+                    {
+                        "source": t.subject,
+                        "target": t.object,
+                        "type": t.relation,
+                        "confidence": t.confidence,
+                    }
+                )
         except Exception as e:
             logger.warning(f"KG: export_json falhou: {e}")
 
-        return {
-            "nodes": list(nodes_map.values()),
-            "links": links
-        }
+        return {"nodes": list(nodes_map.values()), "links": links}
 
     # ── Helpers internos ──────────────────────────────────────────────────────
 
@@ -376,15 +391,40 @@ class SemanticKnowledgeGraph:
             return False
         # Ignora stopwords inglesas ou portuguesas comuns capturadas por acidente
         stopwords = {
-            "this", "that", "these", "those", "there", "their", "where", "which",
-            "what", "when", "with", "from", "into", "onto", "your", "they", "them",
-            "este", "esta", "esse", "essa", "aquele", "aquela", "tudo", "nada", "quem"
+            "this",
+            "that",
+            "these",
+            "those",
+            "there",
+            "their",
+            "where",
+            "which",
+            "what",
+            "when",
+            "with",
+            "from",
+            "into",
+            "onto",
+            "your",
+            "they",
+            "them",
+            "este",
+            "esta",
+            "esse",
+            "essa",
+            "aquele",
+            "aquela",
+            "tudo",
+            "nada",
+            "quem",
         }
         if name.lower() in stopwords:
             return False
         return True
 
-    def _determine_entity_type(self, entity_name: str, relation: str, is_subject: bool) -> str:
+    def _determine_entity_type(
+        self, entity_name: str, relation: str, is_subject: bool
+    ) -> str:
         """Heurística simples para classificar o tipo da entidade (Person, Company, Project, Product, Object)."""
         rel = relation.lower()
         if rel == "founded_by":

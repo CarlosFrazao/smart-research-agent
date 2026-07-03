@@ -3,6 +3,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
+
 class QueryValidator:
     INVALID_PATTERNS = [
         r"> Gerado em",
@@ -18,7 +19,7 @@ class QueryValidator:
         """Retorna True se a query for válida (comprimento aceitável e sem padrões suspeitos)."""
         if not query:
             return False
-            
+
         query_stripped = query.strip()
         if len(query_stripped) < 3 or len(query_stripped) > 200:
             return False
@@ -27,7 +28,7 @@ class QueryValidator:
         for pattern in cls.INVALID_PATTERNS:
             if re.search(pattern, query_stripped, re.IGNORECASE):
                 return False
-                
+
         return True
 
     @classmethod
@@ -40,9 +41,9 @@ class QueryValidator:
         # Remove múltiplos espaços consecutivos
         sanitized = re.sub(r"\s+", " ", sanitized)
         sanitized = sanitized.strip()
-        
+
         # Trunca a 200 caracteres se passar do limite
         if len(sanitized) > 200:
             sanitized = sanitized[:200].strip()
-            
+
         return sanitized

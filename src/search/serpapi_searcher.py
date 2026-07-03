@@ -6,12 +6,12 @@ logger = logging.getLogger(__name__)
 
 try:
     from serpapi import GoogleSearch as _SerpAPIGoogleSearch
+
     _SERPAPI_AVAILABLE = True
 except ImportError:
     _SERPAPI_AVAILABLE = False
     _SerpAPIGoogleSearch = None
     logger.warning("serpapi lib nao instalada. pip install google-search-results")
-
 
 
 class SerpAPISearcher:
@@ -22,12 +22,19 @@ class SerpAPISearcher:
     """
 
     def __init__(self, api_key: str, engine: str = "google", max_results: int = 10):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         self.api_key = api_key
         self.engine = engine
         self.max_results = max_results
         self._available = _SERPAPI_AVAILABLE and bool(api_key)
         if not self._available:
-            logger.warning("SerpAPISearcher: desabilitado (chave ausente ou lib nao instalada)")
+            logger.warning(
+                "SerpAPISearcher: desabilitado (chave ausente ou lib nao instalada)"
+            )
 
     async def search(self, query: str, **kwargs) -> list[Any]:
         """
@@ -58,17 +65,25 @@ class SerpAPISearcher:
         organic = results_raw.get("organic_results", [])
         normalized = []
         for item in organic:
-            normalized.append({
-                "title": item.get("title", ""),
-                "url": item.get("link", ""),
-                "snippet": item.get("snippet", ""),
-                "content": item.get("snippet", ""),
-                "source": "serpapi",
-                "query": query,
-                "_serpapi_position": item.get("position", 0),
-            })
+            normalized.append(
+                {
+                    "title": item.get("title", ""),
+                    "url": item.get("link", ""),
+                    "snippet": item.get("snippet", ""),
+                    "content": item.get("snippet", ""),
+                    "source": "serpapi",
+                    "query": query,
+                    "_serpapi_position": item.get("position", 0),
+                }
+            )
         return normalized
 
     @property
     def is_available(self) -> bool:
+        """Método auxiliar público/protegido `is_available` do buscador.
+
+        Args:
+            *args: Argumentos posicionais.
+            **kwargs: Argumentos nomeados.
+        """
         return self._available

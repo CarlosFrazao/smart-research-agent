@@ -6,36 +6,45 @@ Inspired by: Evo-Nexus multi-provider architecture
 Philosophy: use the CHEAPEST model that achieves the required quality.
 This reduces cost 60-80% without sacrificing perceived quality.
 """
+
 import logging
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-_SIMPLE_TASKS = frozenset({
-    "intent_analysis",
-    "deduplication",
-    "query_cleaning",
-    "relevance_check",
-})
+_SIMPLE_TASKS = frozenset(
+    {
+        "intent_analysis",
+        "deduplication",
+        "query_cleaning",
+        "relevance_check",
+    }
+)
 
-_MEDIUM_TASKS = frozenset({
-    "query_expansion",
-    "ranking",
-    "gap_detection",
-    "synthesis",
-})
+_MEDIUM_TASKS = frozenset(
+    {
+        "query_expansion",
+        "ranking",
+        "gap_detection",
+        "synthesis",
+    }
+)
 
-_COMPLEX_TASKS = frozenset({
-    "report_generation",
-    "deep_research",
-    "confidence_scoring",
-})
+_COMPLEX_TASKS = frozenset(
+    {
+        "report_generation",
+        "deep_research",
+        "confidence_scoring",
+    }
+)
 
-_REASONING_TASKS = frozenset({
-    "deep_research",
-    "confidence_scoring",
-    "research_auditing",
-})
+_REASONING_TASKS = frozenset(
+    {
+        "deep_research",
+        "confidence_scoring",
+        "research_auditing",
+    }
+)
 
 _PRICES_PER_1K_TOKENS: dict[str, float] = {
     "claude-haiku-4-5": 0.001,
@@ -73,12 +82,12 @@ _ROUTING_TABLE: dict[str, dict[str, str]] = {
         "ollama": "llama3.1",
     },
     "reasoning": {
-        "anthropic":  "claude-opus-4-5",
-        "openai":     "o3-mini",
-        "google":     "gemini-2.5-flash-thinking",
+        "anthropic": "claude-opus-4-5",
+        "openai": "o3-mini",
+        "google": "gemini-2.5-flash-thinking",
         "openrouter": "deepseek/deepseek-r1",
-        "deepseek":   "deepseek-r1",
-        "ollama":     "deepseek-r1:1.5b",
+        "deepseek": "deepseek-r1",
+        "ollama": "deepseek-r1:1.5b",
     },
 }
 
@@ -86,7 +95,8 @@ _ROUTING_TABLE: dict[str, dict[str, str]] = {
 @dataclass
 class TaskComplexity:
     """Classification result for a given task type."""
-    level: str            # "simple" | "medium" | "complex"
+
+    level: str  # "simple" | "medium" | "complex"
     reasoning: str
     estimated_tokens: int
 
@@ -105,6 +115,7 @@ class ModelRouter:
         if config is None:
             try:
                 from src.config import Config
+
                 self.config = Config()
             except Exception:
                 self.config = None
@@ -120,19 +131,25 @@ class ModelRouter:
         """
         complexity = self._classify_task(task_type)
         level = complexity.level
-        
-        reasoning_enabled = getattr(self.config, "reasoning_models_enabled", False) if self.config else False
+
+        reasoning_enabled = (
+            getattr(self.config, "reasoning_models_enabled", False)
+            if self.config
+            else False
+        )
         if reasoning_enabled and task_type in _REASONING_TASKS:
             level = "reasoning"
 
         tier = _ROUTING_TABLE.get(level, _ROUTING_TABLE["medium"])
         model = tier.get(provider, tier.get("anthropic", "claude-sonnet-4-5"))
-        
+
         # Override dinâmico vindo das configurações se disponível
         if self.config and level == "reasoning":
             if provider == "deepseek" and getattr(self.config, "deepseek_model", None):
                 model = self.config.deepseek_model
-            elif provider == "openai" and getattr(self.config, "openai_reasoning_model", None):
+            elif provider == "openai" and getattr(
+                self.config, "openai_reasoning_model", None
+            ):
                 model = self.config.openai_reasoning_model
 
         logger.debug(

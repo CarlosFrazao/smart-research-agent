@@ -18,6 +18,11 @@ class SpiderSearcher(BaseSearcher):
     BASE_URL = "https://api.spider.cloud"
 
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.api_key = config.get("spider_api_key", "")
         self.http = HTTPClient(timeout=self.timeout)

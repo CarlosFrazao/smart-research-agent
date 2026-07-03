@@ -1,20 +1,20 @@
 import pytest
 import tempfile
-import os
-from pathlib import Path
 
 
 def test_types_import():
     from src.types import (
-        Domain, Intention, IntentResult, ExpandedQuery, SearchResult,
-        RankedResult, SourcePlan, GapAnalysis, SynthesizedResult, ResearchMetadata,
+        Domain,
+        Intention,
     )
+
     assert Domain.SAAS_B2B == "saas_b2b"
     assert Intention.DISCOVER == "discover"
 
 
 def test_config_import():
     from src.config import Config, LLMProvider
+
     config = Config(_env_file=None)
     assert config.llm_provider == LLMProvider.ANTHROPIC
     assert config.max_results_per_source == 20
@@ -22,6 +22,7 @@ def test_config_import():
 
 def test_config_get_llm_config_anthropic():
     from src.config import Config, LLMProvider
+
     config = Config(llm_provider=LLMProvider.ANTHROPIC, anthropic_api_key="test-key")
     llm_cfg = config.get_llm_config()
     assert llm_cfg["api_key"] == "test-key"
@@ -30,6 +31,7 @@ def test_config_get_llm_config_anthropic():
 
 def test_config_get_llm_config_openai():
     from src.config import Config, LLMProvider
+
     config = Config(llm_provider=LLMProvider.OPENAI, openai_api_key="test-key")
     llm_cfg = config.get_llm_config()
     assert llm_cfg["api_key"] == "test-key"
@@ -37,6 +39,7 @@ def test_config_get_llm_config_openai():
 
 def test_config_get_llm_config_ollama():
     from src.config import Config, LLMProvider
+
     config = Config(llm_provider=LLMProvider.OLLAMA)
     llm_cfg = config.get_llm_config()
     assert "base_url" in llm_cfg
@@ -45,12 +48,14 @@ def test_config_get_llm_config_ollama():
 
 def test_http_client_init():
     from src.utils.http_client import HTTPClient
+
     client = HTTPClient(timeout=10, max_retries=2)
     assert client.max_retries == 2
 
 
 def test_query_cleaner_clean():
     from src.utils.query_cleaner import QueryCleaner
+
     result = QueryCleaner.clean("What is the best CRM?")
     assert "what" not in result
     assert "best" not in result
@@ -59,6 +64,7 @@ def test_query_cleaner_clean():
 
 def test_query_cleaner_disambiguate():
     from src.utils.query_cleaner import QueryCleaner
+
     results = QueryCleaner.disambiguate("java programming")
     assert len(results) > 0
     assert any("java" in r for r in results)
@@ -67,6 +73,7 @@ def test_query_cleaner_disambiguate():
 @pytest.mark.asyncio
 async def test_cache_set_get():
     from src.cache import Cache
+
     with tempfile.TemporaryDirectory() as tmpdir:
         cache = Cache(cache_dir=tmpdir)
         await cache.set("test", "my_query", {"data": "value"})
@@ -77,6 +84,7 @@ async def test_cache_set_get():
 @pytest.mark.asyncio
 async def test_cache_miss():
     from src.cache import Cache
+
     with tempfile.TemporaryDirectory() as tmpdir:
         cache = Cache(cache_dir=tmpdir)
         result = await cache.get("test", "nonexistent_query")
@@ -86,6 +94,7 @@ async def test_cache_miss():
 @pytest.mark.asyncio
 async def test_cache_invalidate():
     from src.cache import Cache
+
     with tempfile.TemporaryDirectory() as tmpdir:
         cache = Cache(cache_dir=tmpdir)
         await cache.set("prefix", "q1", "val1")
@@ -98,6 +107,7 @@ async def test_cache_invalidate():
 def test_deduplicator_by_url(sample_search_result):
     from src.utils.deduplicator import Deduplicator
     from src.types import SearchResult
+
     r1 = sample_search_result
     r2 = SearchResult(
         source="hackernews",
@@ -111,6 +121,7 @@ def test_deduplicator_by_url(sample_search_result):
 def test_deduplicator_by_title_similarity(sample_search_result):
     from src.utils.deduplicator import Deduplicator
     from src.types import SearchResult
+
     r1 = sample_search_result
     r2 = SearchResult(
         source="reddit",
@@ -124,6 +135,7 @@ def test_deduplicator_by_title_similarity(sample_search_result):
 def test_deduplicator_unique_results(sample_search_result):
     from src.utils.deduplicator import Deduplicator
     from src.types import SearchResult
+
     r1 = sample_search_result
     r2 = SearchResult(
         source="github",

@@ -10,6 +10,7 @@ Pipeline:
 
 Skill: adversarial-debate-engine (Auto-crítica adversária sistemática)
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,12 +28,14 @@ LOW_CONFIDENCE_THRESHOLD = 0.55
 
 # ─── Data Contracts ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class AuditClaim:
     """Uma afirmação extraída do relatório com seu status de validação."""
+
     text: str
     confidence: float = 0.0
-    status: str = "unverified"       # verified | single_source | low_confidence | gap
+    status: str = "unverified"  # verified | single_source | low_confidence | gap
     supporting_sources: list[str] = field(default_factory=list)
     needs_recheck: bool = False
 
@@ -40,16 +43,18 @@ class AuditClaim:
 @dataclass
 class AuditReport:
     """Resultado completo de uma rodada de auditoria."""
+
     total_claims: int
     verified_claims: int
     low_confidence_claims: int
     gaps_detected: list[str]
     iterations_run: int
-    enriched_content: str            # Relatório original + notas de auditoria injetadas
+    enriched_content: str  # Relatório original + notas de auditoria injetadas
     audit_summary: str
 
 
 # ─── ResearchAuditor ─────────────────────────────────────────────────────────
+
 
 class ResearchAuditor:
     """
@@ -108,7 +113,9 @@ class ResearchAuditor:
             )
 
             if not gaps:
-                logger.info("ResearchAuditor: nenhum gap restante — auditoria concluída.")
+                logger.info(
+                    "ResearchAuditor: nenhum gap restante — auditoria concluída."
+                )
                 break
 
             new_results = await self._research_gaps(gaps)
@@ -116,15 +123,19 @@ class ResearchAuditor:
 
             # Verifica se a re-pesquisa trouxe melhorias suficientes
             if not new_results:
-                logger.info("ResearchAuditor: re-pesquisa não retornou resultados — interrompendo.")
+                logger.info(
+                    "ResearchAuditor: re-pesquisa não retornou resultados — interrompendo."
+                )
                 break
 
-        verified     = [c for c in claims if c.status == "verified"]
-        low_conf     = [c for c in claims if c.status in ("low_confidence", "single_source")]
+        verified = [c for c in claims if c.status == "verified"]
+        low_conf = [
+            c for c in claims if c.status in ("low_confidence", "single_source")
+        ]
         remaining_gaps = [c.text for c in claims if c.needs_recheck]
 
         enriched = self._inject_audit_notes(report_text, claims)
-        summary  = self._build_summary(claims, iteration)
+        summary = self._build_summary(claims, iteration)
 
         return AuditReport(
             total_claims=len(claims),
@@ -155,7 +166,9 @@ class ResearchAuditor:
         schema = {"type": "array", "items": {"type": "string"}}
 
         try:
-            raw_claims = await self.llm.generate_structured(prompt, schema, temperature=0.2)
+            raw_claims = await self.llm.generate_structured(
+                prompt, schema, temperature=0.2
+            )
             if isinstance(raw_claims, list):
                 return [AuditClaim(text=str(c)) for c in raw_claims if c]
         except Exception as e:
@@ -163,14 +176,22 @@ class ResearchAuditor:
 
         # Fallback: extrai frases que começam com dados numéricos ou termos factuais
         import re
+
         sentences = re.findall(r"[A-Z][^.!?\n]{20,150}[.!?]", report_text)
         filtered_sentences = []
         for s in sentences:
             s_clean = s.strip()
-            if "> Gerado em" in s_clean or "##" in s_clean or "---" in s_clean or not s_clean:
+            if (
+                "> Gerado em" in s_clean
+                or "##" in s_clean
+                or "---" in s_clean
+                or not s_clean
+            ):
                 continue
             filtered_sentences.append(s_clean)
-        return [AuditClaim(text=s) for s in filtered_sentences[:5]]  # máx 5 claims para economizar LLM calls
+        return [
+            AuditClaim(text=s) for s in filtered_sentences[:5]
+        ]  # máx 5 claims para economizar LLM calls
 
     # ── Validação de Claims ──────────────────────────────────────────────────
 
@@ -225,7 +246,9 @@ class ResearchAuditor:
         Usa o Orchestrator se disponível; retorna lista vazia caso contrário.
         """
         if self.orchestrator is None:
-            logger.debug("ResearchAuditor: sem orchestrator — pulando re-pesquisa de gaps.")
+            logger.debug(
+                "ResearchAuditor: sem orchestrator — pulando re-pesquisa de gaps."
+            )
             return []
 
         new_results: list[SearchResult] = []
@@ -236,26 +259,38 @@ class ResearchAuditor:
 
             try:
                 expanded = [
-                    type("ExpandedQuery", (), {
-                        "query": gap_query,
-                        "type": "fact_check",
-                        "priority": "alta",
-                        "rationale": f"audit gap: {claim.text[:60]}",
-                    })()
+                    type(
+                        "ExpandedQuery",
+                        (),
+                        {
+                            "query": gap_query,
+                            "type": "fact_check",
+                            "priority": "alta",
+                            "rationale": f"audit gap: {claim.text[:60]}",
+                        },
+                    )()
                 ]
-                intent = type("IntentResult", (), {
-                    "domain": type("Domain", (), {"value": "general"})(),
-                    "intention": type("Intention", (), {"value": "verify"})(),
-                    "urgency": "nao",
-                    "confidence": "alta",
-                })()
+                intent = type(
+                    "IntentResult",
+                    (),
+                    {
+                        "domain": type("Domain", (), {"value": "general"})(),
+                        "intention": type("Intention", (), {"value": "verify"})(),
+                        "urgency": "nao",
+                        "confidence": "alta",
+                    },
+                )()
 
                 source_plan = self.orchestrator.source_planner.plan(intent, expanded)
-                results = await self.orchestrator._parallel_search(expanded, source_plan, intent)
+                results = await self.orchestrator._parallel_search(
+                    expanded, source_plan, intent
+                )
                 new_results.extend(results[:5])
 
             except Exception as e:
-                logger.warning(f"ResearchAuditor: falha na re-pesquisa do gap '{gap_query[:40]}': {e}")
+                logger.warning(
+                    f"ResearchAuditor: falha na re-pesquisa do gap '{gap_query[:40]}': {e}"
+                )
 
         return new_results
 
@@ -267,16 +302,19 @@ class ResearchAuditor:
         Não altera o corpo do relatório para preservar a narrativa original.
         """
         verified_pct = (
-            round(len([c for c in claims if c.status == "verified"]) / len(claims) * 100)
-            if claims else 0
+            round(
+                len([c for c in claims if c.status == "verified"]) / len(claims) * 100
+            )
+            if claims
+            else 0
         )
         gaps = [c for c in claims if c.needs_recheck]
 
         lines = [
             "\n\n---\n",
             "## 🛡️ Auditoria de Claims (ResearchAuditor)\n",
-            f"| Métrica | Valor |",
-            f"|---|---|",
+            "| Métrica | Valor |",
+            "|---|---|",
             f"| Total de claims analisadas | {len(claims)} |",
             f"| Claims verificadas | {len([c for c in claims if c.status == 'verified'])} ({verified_pct}%) |",
             f"| Claims de fonte única | {len([c for c in claims if c.status == 'single_source'])} |",

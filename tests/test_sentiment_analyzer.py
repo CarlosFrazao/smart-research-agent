@@ -48,10 +48,10 @@ def test_score_neutrality(analyzer):
     """Verifica o score de neutralidade."""
     neutral_text = "O sistema foi implementado usando arquitetura de microsserviços e comunicação mTLS."
     biased_text = "Este é o melhor e mais incrível software do mundo, tudo é perfeito e maravilhoso!"
-    
+
     neutrality_high = analyzer.score_neutrality(neutral_text)
     neutrality_low = analyzer.score_neutrality(biased_text)
-    
+
     # O texto neutro deve ter um score de neutralidade mais alto
     assert neutrality_high > neutrality_low
 
@@ -60,12 +60,28 @@ def test_check_bias_positive(analyzer):
     """Verifica detecção de viés positivo."""
     results = [
         SynthesizedResult(
-            entity="A", title="Excelente ferramenta", description="Muito rápida e incrível.",
-            sources=["github"], urls=[], combined_score=80.0, metrics={}, highlights=[], first_seen=None, last_seen=None
+            entity="A",
+            title="Excelente ferramenta",
+            description="Muito rápida e incrível.",
+            sources=["github"],
+            urls=[],
+            combined_score=80.0,
+            metrics={},
+            highlights=[],
+            first_seen=None,
+            last_seen=None,
         ),
         SynthesizedResult(
-            entity="B", title="Ótimo plugin", description="Moderno e inovador.",
-            sources=["github"], urls=[], combined_score=80.0, metrics={}, highlights=[], first_seen=None, last_seen=None
+            entity="B",
+            title="Ótimo plugin",
+            description="Moderno e inovador.",
+            sources=["github"],
+            urls=[],
+            combined_score=80.0,
+            metrics={},
+            highlights=[],
+            first_seen=None,
+            last_seen=None,
         ),
     ]
     bias = analyzer.check_bias(results)
@@ -77,12 +93,28 @@ def test_check_bias_negative(analyzer):
     """Verifica detecção de viés negativo."""
     results = [
         SynthesizedResult(
-            entity="A", title="Lento e cheio de bugs", description="Muito ruim e difícil de usar.",
-            sources=["github"], urls=[], combined_score=80.0, metrics={}, highlights=[], first_seen=None, last_seen=None
+            entity="A",
+            title="Lento e cheio de bugs",
+            description="Muito ruim e difícil de usar.",
+            sources=["github"],
+            urls=[],
+            combined_score=80.0,
+            metrics={},
+            highlights=[],
+            first_seen=None,
+            last_seen=None,
         ),
         SynthesizedResult(
-            entity="B", title="Inseguro e antigo", description="Cheio de erros e falhas.",
-            sources=["github"], urls=[], combined_score=80.0, metrics={}, highlights=[], first_seen=None, last_seen=None
+            entity="B",
+            title="Inseguro e antigo",
+            description="Cheio de erros e falhas.",
+            sources=["github"],
+            urls=[],
+            combined_score=80.0,
+            metrics={},
+            highlights=[],
+            first_seen=None,
+            last_seen=None,
         ),
     ]
     bias = analyzer.check_bias(results)
@@ -94,12 +126,28 @@ def test_check_bias_balanced(analyzer):
     """Verifica quando os resultados estão equilibrados."""
     results = [
         SynthesizedResult(
-            entity="A", title="Excelente ferramenta", description="Muito rápida.",
-            sources=["github"], urls=[], combined_score=80.0, metrics={}, highlights=[], first_seen=None, last_seen=None
+            entity="A",
+            title="Excelente ferramenta",
+            description="Muito rápida.",
+            sources=["github"],
+            urls=[],
+            combined_score=80.0,
+            metrics={},
+            highlights=[],
+            first_seen=None,
+            last_seen=None,
         ),
         SynthesizedResult(
-            entity="B", title="Lento e antigo", description="Cheio de erros.",
-            sources=["github"], urls=[], combined_score=80.0, metrics={}, highlights=[], first_seen=None, last_seen=None
+            entity="B",
+            title="Lento e antigo",
+            description="Cheio de erros.",
+            sources=["github"],
+            urls=[],
+            combined_score=80.0,
+            metrics={},
+            highlights=[],
+            first_seen=None,
+            last_seen=None,
         ),
     ]
     bias = analyzer.check_bias(results)

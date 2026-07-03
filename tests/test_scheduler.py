@@ -1,13 +1,12 @@
 import pytest
 import os
-import uuid
 import json
-import shutil
-from unittest.mock import AsyncMock, MagicMock, patch
-from src.scheduler import ResearchScheduler, ScheduledJob
+from unittest.mock import AsyncMock, MagicMock
+from src.scheduler import ResearchScheduler
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def jobs_file(tmp_path):
@@ -17,7 +16,9 @@ def jobs_file(tmp_path):
 @pytest.fixture
 def mock_orchestrator():
     orch = MagicMock()
-    orch.research = AsyncMock(return_value="# Relatório de Teste\n\n## 2. Fontes\n\n---\n")
+    orch.research = AsyncMock(
+        return_value="# Relatório de Teste\n\n## 2. Fontes\n\n---\n"
+    )
     return orch
 
 
@@ -27,6 +28,7 @@ def scheduler(mock_orchestrator, jobs_file):
 
 
 # ── Testes de Criação e Listagem de Jobs ──────────────────────────────────────
+
 
 def test_schedule_research_creates_job(scheduler):
     """Testa criação de job com ID único e persistência."""
@@ -76,6 +78,7 @@ def test_list_jobs_multiple(scheduler):
 
 # ── Testes de Persistência ────────────────────────────────────────────────────
 
+
 def test_jobs_are_persisted_to_json(scheduler, jobs_file):
     """Verifica que jobs são escritos no arquivo JSON após schedule_research."""
     scheduler.schedule_research("open source crm", "0 9 * * 1", "reports/")
@@ -102,6 +105,7 @@ def test_jobs_are_loaded_from_json(mock_orchestrator, jobs_file):
 
 # ── Testes de Cancelamento ────────────────────────────────────────────────────
 
+
 def test_cancel_job_removes_it(scheduler):
     """Testa que cancel_job remove o job e retorna True."""
     job_id = scheduler.schedule_research("to be removed", "0 9 * * 1", "reports/")
@@ -117,6 +121,7 @@ def test_cancel_nonexistent_job_returns_false(scheduler):
 
 
 # ── Testes de Comparação de Relatórios ───────────────────────────────────────
+
 
 def test_compare_with_previous_detects_new_entities(scheduler):
     """Detecta novas entidades (nomes próprios) entre relatórios."""
@@ -151,6 +156,7 @@ def test_compare_identical_reports_no_changes(scheduler):
 
 # ── Teste de Execução de Job ──────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_run_scheduled_research_calls_orchestrator(scheduler, tmp_path):
     """Testa que run_scheduled_research chama orchestrator.research e salva o arquivo."""
@@ -183,6 +189,7 @@ async def test_run_nonexistent_job_raises(scheduler):
 
 
 # ── Teste de Alerta ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_send_alert_without_webhook_only_logs(scheduler):

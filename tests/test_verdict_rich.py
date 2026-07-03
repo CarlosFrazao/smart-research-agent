@@ -1,4 +1,5 @@
 """Testes do veredito rico P1: Verdict enum, _compute_verdict, SynthesizedResult."""
+
 import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -9,6 +10,7 @@ from src.types import RankedResult
 
 
 # ── Verdict enum ──────────────────────────────────────────────────────────────
+
 
 class TestVerdictEnum:
     def test_foca_value(self):
@@ -30,8 +32,11 @@ class TestVerdictEnum:
 
 # ── _compute_verdict ─────────────────────────────────────────────────────────
 
+
 class TestComputeVerdict:
-    def _compute(self, score: float, description: str = "desc", highlights: list = None):
+    def _compute(
+        self, score: float, description: str = "desc", highlights: list = None
+    ):
         return Synthesizer._compute_verdict(score, description, highlights or [])
 
     def test_score_80_is_foca(self):
@@ -113,6 +118,7 @@ class TestComputeVerdict:
 
 # ── SynthesizedResult com campos de veredito ─────────────────────────────────
 
+
 class TestSynthesizedResultVerdictFields:
     def _make_result(self, **kwargs) -> SynthesizedResult:
         defaults = dict(
@@ -153,7 +159,10 @@ class TestSynthesizedResultVerdictFields:
 
 # ── Synthesizer.synthesize() popula veredito ─────────────────────────────────
 
-def _make_ranked(score: float, source: str = "github", title: str = "Proj") -> RankedResult:
+
+def _make_ranked(
+    score: float, source: str = "github", title: str = "Proj"
+) -> RankedResult:
     return RankedResult(
         source=source,
         title=title,
@@ -219,6 +228,7 @@ def test_compute_verdict_all_four_verdicts_possible():
 
 
 # ── report_generator usa verdict ─────────────────────────────────────────────
+
 
 def test_report_generator_includes_verdict_label():
     from src.report_generator import ReportGenerator

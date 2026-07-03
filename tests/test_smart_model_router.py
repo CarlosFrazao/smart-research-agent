@@ -1,5 +1,5 @@
 """Testes do SmartModelRouter P5."""
-import pytest
+
 from src.clients.smart_model_router import SmartModelRouter, get_router, _TASK_SCORES
 
 

@@ -1,3 +1,9 @@
+"""Detector de lacunas de cobertura em sessoes de pesquisa.
+
+Analisa os resultados coletados e identifica aspectos nao cobertos,
+generando novas queries para iteracoes adicionais de busca.
+"""
+
 import logging
 
 from src.clients.llm_client import LLMClient
@@ -7,6 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class GapDetector:
+    """Detecta lacunas de cobertura na pesquisa usando heuristicas e LLM.
+
+    Avalia se os resultados coletados cobrem os aspectos esperados da query
+    e gera queries adicionais para fechar as lacunas identificadas.
+    """
+
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
         self.max_iterations = 3
@@ -14,6 +26,20 @@ class GapDetector:
     async def detect(
         self, results: list[RankedResult], query: str, intent: IntentResult
     ) -> GapAnalysis:
+        """Detecta lacunas na cobertura dos resultados de pesquisa.
+
+        Usa heuristicas rapidas antes de chamar o LLM para reduzir custo.
+        Casos heuristicos: poucos resultados, poucas fontes, pouca diversidade.
+
+        Args:
+            results: Lista de resultados ranqueados da pesquisa atual.
+            query: Query original do usuario.
+            intent: Resultado da analise de intencao da query.
+
+        Returns:
+            GapAnalysis: Analise de lacunas com flag de completude,
+                aspectos faltantes e novas queries sugeridas.
+        """
         source_coverage = len(set(r.source for r in results))
         top_projects = len(set(self._extract_project(r.title) for r in results[:20]))
 
@@ -82,7 +108,13 @@ class GapDetector:
                 "confidence": {"type": "string"},
                 "rationale": {"type": "string"},
             },
-            "required": ["is_complete", "missing_aspects", "new_queries", "confidence", "rationale"],
+            "required": [
+                "is_complete",
+                "missing_aspects",
+                "new_queries",
+                "confidence",
+                "rationale",
+            ],
         }
 
         try:

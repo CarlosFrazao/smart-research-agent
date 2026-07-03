@@ -1,3 +1,10 @@
+"""Módulo de ranqueamento de qualidade dos resultados de busca.
+
+Fornece a classe `QualityRanker` que pontua resultados brutos de cada
+searcher usando heurísticas por fonte (GitHub, Reddit, HackerNews) e aplica
+penalidades de desinformação via `MisinformationDetector`.
+"""
+
 import logging
 import math
 from datetime import datetime
@@ -11,12 +18,26 @@ logger = logging.getLogger(__name__)
 
 
 class QualityRanker:
+    """Ranqueador de qualidade de resultados de busca por fonte e recencia.
+
+    Aplica heurísticas específicas por provedor (GitHub, Reddit, HackerNews)
+    e penalidades de desinformação detectadas pelo `MisinformationDetector`.
+    """
+
     def __init__(self, llm_client: LLMClient = None, config: dict[str, Any] = None):
         self.llm = llm_client
         self.config = config or {}
         self.detector = MisinformationDetector()
 
     def _recency_score(self, date_str: str) -> float:
+        """Converte uma string de data em score de recencia (5.0-20.0).
+
+        Args:
+            date_str: String de data no formato ISO 8601 ou YYYY-MM-DD.
+
+        Returns:
+            float: Score de recencia entre 5.0 (antigo) e 20.0 (< 30 dias).
+        """
         if not date_str:
             return 5.0
         for fmt in (
@@ -41,6 +62,16 @@ class QualityRanker:
         return 5.0
 
     def _github_score(self, result: SearchResult) -> float:
+        """Calcula score de qualidade para resultados do GitHub.
+
+        Leva em conta estrelas, forks, recencia, licenca e linguagem.
+
+        Args:
+            result: Resultado bruto de busca com metricas do repositorio.
+
+        Returns:
+            float: Score entre 0 e 100.
+        """
         m = result.metrics
         stars = m.get("stars", 0)
         forks = m.get("forks", 0)
@@ -59,6 +90,16 @@ class QualityRanker:
         return round(score, 2)
 
     def _reddit_score(self, result: SearchResult) -> float:
+        """Calcula score de qualidade para resultados do Reddit.
+
+        Considera upvotes, comentarios, recencia e relevancia do subreddit.
+
+        Args:
+            result: Resultado bruto de busca com metricas do post.
+
+        Returns:
+            float: Score entre 0 e 100.
+        """
         m = result.metrics
         upvotes = m.get("upvotes", 0)
         comments = m.get("comments", 0)
@@ -77,6 +118,16 @@ class QualityRanker:
         return round(score, 2)
 
     def _hn_score(self, result: SearchResult) -> float:
+        """Calcula score de qualidade para resultados do Hacker News.
+
+        Considera pontos, comentarios e recencia do item.
+
+        Args:
+            result: Resultado bruto de busca com metricas do item HN.
+
+        Returns:
+            float: Score entre 0 e 100.
+        """
         m = result.metrics
         points = m.get("points", 0)
         comments = m.get("comments", 0)
@@ -92,9 +143,29 @@ class QualityRanker:
         return round(score, 2)
 
     def _generic_score(self, result: SearchResult) -> float:
+        """Retorna score neutro padrao para fontes sem heuristica especifica.
+
+        Args:
+            result: Resultado bruto de busca.
+
+        Returns:
+            float: Score fixo de 50.0.
+        """
         return 50.0
 
     async def rank(self, results: list[SearchResult]) -> list[RankedResult]:
+        """Ranqueia uma lista de resultados de busca por score de qualidade.
+
+        Aplica heuristica especifica por fonte e penalidade de desinformacao
+        quando a URL e detectada como suspeita pelo `MisinformationDetector`.
+
+        Args:
+            results: Lista de `SearchResult` brutos de qualquer searcher.
+
+        Returns:
+            list[RankedResult]: Lista de resultados enriquecidos com score e
+                breakdown de pontuacao, ordenada por score descendente.
+        """
         ranked = []
         for result in results:
             if result.source == "github":

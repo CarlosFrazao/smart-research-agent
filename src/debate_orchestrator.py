@@ -11,6 +11,7 @@ Uso:
     debate = DebateOrchestrator(llm_client=llm, searchers=searchers)
     result = await debate.run(query)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,6 +25,7 @@ logger = logging.getLogger("debate_orchestrator")
 
 # ── Dataclasses ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class Hypothesis:
     """
@@ -34,6 +36,7 @@ class Hypothesis:
     rationale — por que esta hipótese é plausível
     stance    — "pro" | "contra" | "neutro"
     """
+
     id: str
     claim: str
     rationale: str
@@ -59,6 +62,7 @@ class DebateRound:
     timestamp   — quando o debate foi executado
     duration_s  — duração total em segundos
     """
+
     query: str
     hypotheses: list[Hypothesis]
     winner: str = ""
@@ -71,6 +75,7 @@ class DebateRound:
 
 # ── DebateOrchestrator ─────────────────────────────────────────────────────────
 
+
 class DebateOrchestrator:
     """
     Motor de debate adversarial multi-agente.
@@ -79,9 +84,9 @@ class DebateOrchestrator:
     O LLM juiz lê todos os argumentos e emite um veredito com raciocínio.
     """
 
-    MAX_HYPOTHESES = 4       # Nunca gerar mais que 4 hipóteses por debate
-    MAX_RESULTS_PER_H = 5    # Máximo de resultados de pesquisa por hipótese
-    JUDGE_TEMP = 0.2         # Temperatura baixa para julgamento determinístico
+    MAX_HYPOTHESES = 4  # Nunca gerar mais que 4 hipóteses por debate
+    MAX_RESULTS_PER_H = 5  # Máximo de resultados de pesquisa por hipótese
+    JUDGE_TEMP = 0.2  # Temperatura baixa para julgamento determinístico
 
     def __init__(
         self,
@@ -109,7 +114,9 @@ class DebateOrchestrator:
         hypotheses = await self.generate_hypotheses(query)
         if not hypotheses:
             logger.warning("Nenhuma hipótese gerada — debate abortado.")
-            return DebateRound(query=query, hypotheses=[], verdict="Debate não pôde ser iniciado.")
+            return DebateRound(
+                query=query, hypotheses=[], verdict="Debate não pôde ser iniciado."
+            )
 
         # Fase 2 — pesquisa paralela por hipótese
         hypotheses = await self.run_debate(query, hypotheses)
@@ -133,16 +140,16 @@ class DebateOrchestrator:
         """
         prompt = (
             "Você é um gerador de hipóteses adversariais. Escreva em Português do Brasil.\n\n"
-            f"Query do usuário: \"{query}\"\n\n"
+            f'Query do usuário: "{query}"\n\n'
             f"Gere exatamente {self.num_hypotheses} hipóteses distintas e testáveis sobre esta query.\n"
             "Cada hipótese deve representar uma perspectiva diferente (ex: favorável, crítica, alternativa).\n\n"
             "Responda APENAS com o seguinte formato JSON válido (nada antes ou depois):\n"
             "[\n"
             "  {\n"
-            "    \"id\": \"H1\",\n"
-            "    \"claim\": \"<afirmação central em 1 frase>\",\n"
-            "    \"rationale\": \"<por que é plausível em 1-2 frases>\",\n"
-            "    \"stance\": \"pro\" | \"contra\" | \"neutro\"\n"
+            '    "id": "H1",\n'
+            '    "claim": "<afirmação central em 1 frase>",\n'
+            '    "rationale": "<por que é plausível em 1-2 frases>",\n'
+            '    "stance": "pro" | "contra" | "neutro"\n'
             "  },\n"
             "  ...\n"
             "]\n"
@@ -172,7 +179,9 @@ class DebateOrchestrator:
 
     # ── Fase 2 — Pesquisa Paralela ─────────────────────────────────────────────
 
-    async def run_debate(self, query: str, hypotheses: list[Hypothesis]) -> list[Hypothesis]:
+    async def run_debate(
+        self, query: str, hypotheses: list[Hypothesis]
+    ) -> list[Hypothesis]:
         """
         Para cada hipótese, executa pesquisa com query especializada em paralelo.
         Preenche hypothesis.evidence, hypothesis.sources e hypothesis.confidence.
@@ -191,7 +200,9 @@ class DebateOrchestrator:
 
         return hypotheses
 
-    async def _research_hypothesis(self, base_query: str, h: Hypothesis) -> dict[str, Any]:
+    async def _research_hypothesis(
+        self, base_query: str, h: Hypothesis
+    ) -> dict[str, Any]:
         """
         Executa pesquisa especializada para uma única hipótese.
         Usa uma query reformulada que favorece a perspectiva da hipótese.
@@ -211,6 +222,7 @@ class DebateOrchestrator:
                 continue
             try:
                 from src.types import ExpandedQuery
+
                 eq = ExpandedQuery(
                     query=search_query,
                     type="debate_hypothesis",
@@ -221,9 +233,11 @@ class DebateOrchestrator:
                     searcher.search(eq),
                     timeout=15.0,
                 )
-                for r in (results or [])[:self.MAX_RESULTS_PER_H]:
+                for r in (results or [])[: self.MAX_RESULTS_PER_H]:
                     if r.description and len(r.description.strip()) > 50:
-                        evidence.append(f"[{r.source}] {r.title}: {r.description[:200]}")
+                        evidence.append(
+                            f"[{r.source}] {r.title}: {r.description[:200]}"
+                        )
                         if r.url and r.url not in sources:
                             sources.append(r.url)
                         total_results += 1
@@ -245,14 +259,19 @@ class DebateOrchestrator:
 
     # ── Fase 3 — Julgamento ────────────────────────────────────────────────────
 
-    async def judge_round(self, query: str, hypotheses: list[Hypothesis]) -> DebateRound:
+    async def judge_round(
+        self, query: str, hypotheses: list[Hypothesis]
+    ) -> DebateRound:
         """
         O LLM juiz lê todos os argumentos e emite um veredito com raciocínio detalhado.
         """
         # Formata os argumentos de cada hipótese para o prompt do juiz
         args_block = ""
         for h in hypotheses:
-            evidence_str = "\n".join(f"    - {e}" for e in h.evidence[:5]) or "    (sem evidências encontradas)"
+            evidence_str = (
+                "\n".join(f"    - {e}" for e in h.evidence[:5])
+                or "    (sem evidências encontradas)"
+            )
             args_block += (
                 f"## {h.id}: {h.claim}\n"
                 f"**Posição:** {h.stance} | **Confiança de pesquisa:** {h.confidence:.0%} "
@@ -263,7 +282,7 @@ class DebateOrchestrator:
 
         prompt = (
             "Você é um juiz imparcial e rigoroso. Escreva em Português do Brasil.\n\n"
-            f"A query em debate é: \"{query}\"\n\n"
+            f'A query em debate é: "{query}"\n\n'
             "As seguintes hipóteses foram pesquisadas e cada uma apresentou seus argumentos:\n\n"
             f"{args_block}"
             "Sua tarefa:\n"
@@ -272,15 +291,17 @@ class DebateOrchestrator:
             "3. Explique o raciocínio de forma clara e rastreável.\n\n"
             "Responda APENAS com o seguinte JSON válido:\n"
             "{\n"
-            "  \"winner\": \"<id da hipótese vencedora, ex: H1>\",\n"
-            "  \"confidence\": <0.0 a 1.0>,\n"
-            "  \"reasoning\": \"<raciocínio detalhado em 3-5 frases>\",\n"
-            "  \"verdict\": \"<declaração final em 1-2 frases>\"\n"
+            '  "winner": "<id da hipótese vencedora, ex: H1>",\n'
+            '  "confidence": <0.0 a 1.0>,\n'
+            '  "reasoning": "<raciocínio detalhado em 3-5 frases>",\n'
+            '  "verdict": "<declaração final em 1-2 frases>"\n'
             "}\n"
         )
 
         try:
-            raw = await self.llm.generate(prompt, temperature=self.JUDGE_TEMP, max_tokens=600)
+            raw = await self.llm.generate(
+                prompt, temperature=self.JUDGE_TEMP, max_tokens=600
+            )
             judgment = self._parse_judgment(raw)
             logger.info(
                 f"Juiz decidiu: winner={judgment.get('winner')} "
@@ -313,7 +334,7 @@ class DebateOrchestrator:
         """
         ts = round_result.timestamp.strftime("%Y-%m-%d %H:%M")
         lines = [
-            f"# 🗣️ Relatório de Debate Multi-Agente",
+            "# 🗣️ Relatório de Debate Multi-Agente",
             "",
             f"> **Query:** {round_result.query}",
             f"> **Data:** {ts}  |  **Duração:** {round_result.duration_s:.1f}s",
@@ -339,7 +360,7 @@ class DebateOrchestrator:
         ]
 
         for h in round_result.hypotheses:
-            is_winner = (h.id == round_result.winner)
+            is_winner = h.id == round_result.winner
             trophy = " 🏆 **VENCEDOR**" if is_winner else ""
             lines += [
                 f"### {h.id}{trophy}: {h.claim}",
@@ -379,6 +400,7 @@ class DebateOrchestrator:
         """
         import json
         import re
+
         # Extrai o array JSON mesmo que o LLM adicione texto extra
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         if not match:
@@ -403,6 +425,7 @@ class DebateOrchestrator:
         """
         import json
         import re
+
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not match:
             raise ValueError(f"JSON de julgamento não encontrado em: {raw[:200]}")

@@ -4,6 +4,7 @@ docx_exporter.py — Exportador de relatórios para DOCX via python-docx.
 Dependência opcional: pip install python-docx
 Se python-docx não estiver instalado, o exporter emite um aviso e retorna None.
 """
+
 import logging
 import re
 from pathlib import Path
@@ -14,6 +15,7 @@ try:
     from docx import Document
     from docx.oxml.ns import qn
     from docx.shared import Pt, RGBColor
+
     _DOCX_AVAILABLE = True
 except ImportError:
     _DOCX_AVAILABLE = False
@@ -40,7 +42,9 @@ class DOCXExporter:
             Caminho do arquivo gerado, ou None se python-docx não disponível.
         """
         if not self.available:
-            logger.warning("DOCXExporter: exportação ignorada — python-docx não disponível.")
+            logger.warning(
+                "DOCXExporter: exportação ignorada — python-docx não disponível."
+            )
             return None
 
         docx_path = str(filepath).replace(".md", ".docx")
@@ -71,10 +75,11 @@ class DOCXExporter:
             elif stripped.startswith("---"):
                 # Linha horizontal — paragraph com borda inferior
                 from docx.oxml import OxmlElement
+
                 p = doc.add_paragraph()
                 pPr = p._p.get_or_add_pPr()
-                pBdr = OxmlElement('w:pBdr')
-                bottom = OxmlElement('w:bottom')
+                pBdr = OxmlElement("w:pBdr")
+                bottom = OxmlElement("w:bottom")
                 bottom.set(qn("w:val"), "single")
                 bottom.set(qn("w:sz"), "6")
                 bottom.set(qn("w:space"), "1")
@@ -84,7 +89,9 @@ class DOCXExporter:
             elif stripped.startswith("> "):
                 # Blockquote como parágrafo indentado
                 p = doc.add_paragraph(self._strip_md(stripped[2:]))
-                p.style = "Quote" if "Quote" in [s.name for s in doc.styles] else "Normal"
+                p.style = (
+                    "Quote" if "Quote" in [s.name for s in doc.styles] else "Normal"
+                )
                 p.paragraph_format.left_indent = Pt(36)
             elif stripped.startswith("- ") or re.match(r"^\d+\.", stripped):
                 # Lista não-numerada ou numerada

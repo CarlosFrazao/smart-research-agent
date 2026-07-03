@@ -4,6 +4,7 @@ para análise posterior ou retry controlado.
 
 Cada tarefa é persistida como JSON em disco em um diretório configurável (.dlq/).
 """
+
 import asyncio
 import json
 import logging
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FailedTask:
     task_id: str
-    task_type: str      # "search", "llm_call", "scrape"
+    task_type: str  # "search", "llm_call", "scrape"
     payload: dict
     error: str
     timestamp: str
@@ -140,7 +141,11 @@ class DeadLetterQueue:
             f"DLQ retry_all: success={success}, requeued={requeued}, "
             f"permanent_fail={permanent_fail}"
         )
-        return {"success": success, "requeued": requeued, "permanent_fail": permanent_fail}
+        return {
+            "success": success,
+            "requeued": requeued,
+            "permanent_fail": permanent_fail,
+        }
 
     def size(self) -> int:
         """Retorna o número de tarefas atualmente na fila."""

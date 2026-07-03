@@ -17,7 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 class JinaSearcher(BaseSearcher):
+    """Buscador especializado para coletar e estruturar resultados vindos do Jina."""
+
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.base_url = config.get("jina_base_url", "https://r.jina.ai/").rstrip("/")
 
@@ -48,10 +55,20 @@ class JinaSearcher(BaseSearcher):
             return self.fallback(query)
 
     def normalize(self, raw_result: Any) -> SearchResult:
+        """Normaliza um resultado bruto vindo do Jina para a entidade padrão `SearchResult`.
+
+        Args:
+            raw_result (Any): O resultado bruto retornado pela API ou scraper.
+
+        Returns:
+            SearchResult: Objeto padronizado contendo os dados normalizados.
+        """
         if isinstance(raw_result, dict):
             content = raw_result.get("content", "")
             url = raw_result.get("url", "")
-            title = content.split("\n")[0].lstrip("# ").strip()[:120] if content else url
+            title = (
+                content.split("\n")[0].lstrip("# ").strip()[:120] if content else url
+            )
             return SearchResult(
                 source="jina_reader",
                 title=title or url,

@@ -20,7 +20,7 @@ _RETRY_CONFIG = RetryConfig(
     max_delay=10.0,
     exponential_base=2.0,
     jitter=True,
-    retryable_exceptions=(Exception,)
+    retryable_exceptions=(Exception,),
 )
 
 TECH_SUBREDDITS = {
@@ -42,7 +42,14 @@ _UA = (
 
 
 class RedditSearcher(BaseSearcher):
+    """Buscador especializado para coletar e estruturar resultados vindos do Reddit."""
+
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.base_url = "https://www.reddit.com/search.json"
         self.http = HTTPClient(timeout=self.timeout)
@@ -59,7 +66,18 @@ class RedditSearcher(BaseSearcher):
             "reddit_api", failure_threshold=3, recovery_timeout=300
         )
 
-    async def search(self, query: str, domain: str = "general", **kwargs) -> list[SearchResult]:
+    async def search(
+        self, query: str, domain: str = "general", **kwargs
+    ) -> list[SearchResult]:
+        """Realiza busca assíncrona por termos no Reddit.
+
+        Args:
+            query (str): Termo ou query de busca a ser pesquisada.
+            **kwargs: Parâmetros de pesquisa adicionais específicos do buscador.
+
+        Returns:
+            list[SearchResult]: Lista contendo os resultados padronizados encontrados.
+        """
         if not hasattr(self, "circuit"):
             self.circuit = CircuitBreakerRegistry.get(
                 "reddit_api", failure_threshold=3, recovery_timeout=300
@@ -73,38 +91,94 @@ class RedditSearcher(BaseSearcher):
 
     @with_retry(_RETRY_CONFIG)
     async def _search_pipeline(self, query: str, domain: str) -> list[SearchResult]:
+        # Simplifica a query para o Reddit removendo qualificadores do GitHub/metadados
+        import re
+
+        words = query.lower().split()
+        ignore = {
+            "github",
+            "repos",
+            "repositories",
+            "repository",
+            "implementing",
+            "implemented",
+            "stars",
+            "star",
+            "last",
+            "days",
+            "weeks",
+            "months",
+            "month",
+            "week",
+            "day",
+            "with",
+            "and",
+            "or",
+            "for",
+            "in",
+            "to",
+            "at",
+            "above",
+            "more",
+            "than",
+            "least",
+        }
+        clean_words = []
+        for w in words:
+            # Remove pontuações comuns
+            w_clean = re.sub(r"[^\w\+\-#]", "", w)
+            if (
+                w_clean
+                and w_clean not in ignore
+                and not w_clean.isdigit()
+                and not w_clean.startswith(">")
+            ):
+                clean_words.append(w_clean)
+
+        search_query = " ".join(clean_words) if clean_words else query
+        logger.info(f"Reddit: simplificou query '{query[:40]}' -> '{search_query}'")
+
         # Strategy 1: Firecrawl-powered Reddit search (bypasses bot detection)
-        results = await self._search_via_firecrawl(query, domain)
+        results = await self._search_via_firecrawl(search_query, domain)
         if results:
-            logger.info(f"Reddit via Firecrawl: {len(results)} resultados para '{query[:40]}'")
+            logger.info(
+                f"Reddit via Firecrawl: {len(results)} resultados para '{search_query}'"
+            )
             return results
 
         # Strategy 2: Direct JSON API with fresh session per request
-        results = await self._search_direct_api(query, domain)
+        results = await self._search_direct_api(search_query, domain)
         if results:
-            logger.info(f"Reddit via API direta: {len(results)} resultados para '{query[:40]}'")
+            logger.info(
+                f"Reddit via API direta: {len(results)} resultados para '{search_query}'"
+            )
             return results
 
         # Strategy 3: Pushshift / alternative endpoint
-        results = await self._search_pushshift(query)
+        results = await self._search_pushshift(search_query)
         if results:
             logger.info(f"Reddit via Pushshift: {len(results)} resultados")
             return results
 
         # Strategy 4: SearXNG com site:reddit.com
         try:
-            logger.info(f"Reddit: acionando Strategy 4 (SearXNG site:reddit.com) para '{query[:40]}'")
+            logger.info(
+                f"Reddit: acionando Strategy 4 (SearXNG site:reddit.com) para '{search_query}'"
+            )
             from src.search.searxng_searcher import SearXNGSearcher
+
             # Instancia localmente o SearXNG com o mesmo timeout
             searxng_cfg = {
                 "timeout": self.timeout,
                 "max_results": self.max_results,
                 "searxng_url": os.getenv("SEARXNG_URL", "http://127.0.0.1:3023"),
-                "searxng_engines": os.getenv("SEARXNG_ENGINES", "google,bing,duckduckgo"),
-                "searxng_categories": os.getenv("SEARXNG_CATEGORIES", "general")
+                "searxng_engines": os.getenv(
+                    "SEARXNG_ENGINES", "google,bing,duckduckgo"
+                ),
+                "searxng_categories": os.getenv("SEARXNG_CATEGORIES", "general"),
             }
             searxng = SearXNGSearcher(searxng_cfg)
-            reddit_query = f"{query} site:reddit.com"
+            reddit_query = f"{search_query} site:reddit.com"
             s_results = await searxng.search(reddit_query)
             if s_results:
                 results = []
@@ -112,10 +186,47 @@ class RedditSearcher(BaseSearcher):
                     r.source = "reddit"
                     r.metrics["subreddit"] = self._extract_subreddit_from_url(r.url)
                     results.append(r)
-                logger.info(f"Reddit via SearXNG fallback: {len(results)} resultados para '{query[:40]}'")
-                return results[:self.max_results]
+                logger.info(
+                    f"Reddit via SearXNG fallback: {len(results)} resultados para '{query[:40]}'"
+                )
+                return results[: self.max_results]
         except Exception as e:
             logger.debug(f"Reddit via SearXNG falhou: {e}")
+
+        # Strategy 5: Jina Search com site:reddit.com (como fallback final de emergência)
+        try:
+            logger.info(
+                f"Reddit: acionando Strategy 5 (Jina Search site:reddit.com) para '{search_query}'"
+            )
+            import httpx
+
+            jina_search_url = f"https://s.jina.ai/{urllib.parse.quote(f'{search_query} site:reddit.com', safe='')}"
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.get(
+                    jina_search_url,
+                    headers={"Accept": "text/markdown"},
+                    follow_redirects=True,
+                )
+                if resp.status_code == 200 and resp.text:
+                    logger.info(
+                        "Reddit via Jina Search: Sucesso ao obter busca pública."
+                    )
+                    content = resp.text
+                    return [
+                        SearchResult(
+                            source="reddit",
+                            title=f"Reddit Jina: {search_query[:40]}",
+                            url=jina_search_url,
+                            description=content[:1500],
+                            metrics={
+                                "subreddit": "search",
+                                "source_domain": "s.jina.ai",
+                            },
+                            raw={"markdown": content},
+                        )
+                    ]
+        except Exception as e:
+            logger.debug(f"Reddit via Jina Search falhou: {e}")
 
         logger.warning(f"Reddit: todas as estratégias falharam para '{query[:50]}'")
         return self.fallback(query)
@@ -123,52 +234,56 @@ class RedditSearcher(BaseSearcher):
     @staticmethod
     def _extract_subreddit_from_url(url: str) -> str:
         import re
+
         m = re.search(r"reddit\.com/r/([^/]+)", url)
         return m.group(1) if m else "unknown"
 
-    async def _search_via_firecrawl(self, query: str, domain: str) -> list[SearchResult]:
-        """Use Firecrawl to scrape Reddit search results (bypasses bot detection)."""
+    async def _search_via_firecrawl(
+        self, query: str, domain: str
+    ) -> list[SearchResult]:
+        """Usa a API de busca nativa do Firecrawl com site:reddit.com para obter resultados do Reddit."""
         if not self._firecrawl:
             return []
         try:
-            encoded = urllib.parse.quote(query)
-            # Use the JSON API endpoint via Firecrawl's browser engine
-            reddit_url = (
-                f"https://www.reddit.com/search.json"
-                f"?q={encoded}&sort=relevance&t=year&limit=15&type=link"
-            )
-            raw = await self._firecrawl.scrape(reddit_url, formats=["markdown"])
-            if not raw:
+            reddit_query = f"{query} site:reddit.com"
+            raw_results = await self._firecrawl.search(reddit_query, limit=15)
+            if not raw_results:
                 return []
 
-            # Try to extract JSON from markdown content
-            markdown = raw.get("markdown", "") or raw.get("content", "")
-            if not markdown:
-                return []
+            results = []
+            for r in raw_results:
+                title = r.get("title", "")
+                url = r.get("url", "")
+                markdown = r.get("markdown", "") or r.get("description", "") or ""
 
-            # The firecrawl might return the JSON as text in markdown
-            # Try to parse it
-            start = markdown.find("{")
-            if start == -1:
-                return []
-            try:
-                data = json.loads(markdown[start:])
-                posts = data.get("data", {}).get("children", [])
-                results = [self.normalize(p["data"]) for p in posts if p.get("data")]
-                priority_subs = [s.lower() for s in TECH_SUBREDDITS.get(domain, [])]
-                for r in results:
-                    sub = r.metrics.get("subreddit", "").lower()
-                    r.metrics["subreddit_relevance"] = 25 if sub in priority_subs else 10
-                return results
-            except json.JSONDecodeError:
-                pass
+                results.append(
+                    SearchResult(
+                        source="reddit",
+                        title=title,
+                        url=url,
+                        description=markdown[:500],
+                        metrics={
+                            "subreddit": self._extract_subreddit_from_url(url),
+                            "subreddit_relevance": 10,
+                        },
+                        raw=r,
+                    )
+                )
+
+            priority_subs = [s.lower() for s in TECH_SUBREDDITS.get(domain, [])]
+            for r in results:
+                sub = r.metrics.get("subreddit", "").lower()
+                if sub in priority_subs:
+                    r.metrics["subreddit_relevance"] = 25
+            return results
         except Exception as e:
-            logger.debug(f"Reddit Firecrawl falhou: {e}")
+            logger.debug(f"Reddit Firecrawl Search falhou: {e}")
         return []
 
     async def _search_direct_api(self, query: str, domain: str) -> list[SearchResult]:
         """Direct Reddit JSON API with browser-like headers and fresh session."""
         import aiohttp
+
         params = {
             "q": query,
             "sort": "relevance",
@@ -189,20 +304,29 @@ class RedditSearcher(BaseSearcher):
             connector = aiohttp.TCPConnector(ssl=False)
             async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(
-                    self.base_url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    self.base_url,
+                    headers=headers,
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         posts = data.get("data", {}).get("children", [])
                         if posts:
                             results = [self.normalize(p["data"]) for p in posts]
-                            priority_subs = [s.lower() for s in TECH_SUBREDDITS.get(domain, [])]
+                            priority_subs = [
+                                s.lower() for s in TECH_SUBREDDITS.get(domain, [])
+                            ]
                             for r in results:
                                 sub = r.metrics.get("subreddit", "").lower()
-                                r.metrics["subreddit_relevance"] = 25 if sub in priority_subs else 10
+                                r.metrics["subreddit_relevance"] = (
+                                    25 if sub in priority_subs else 10
+                                )
                             return results
                     else:
-                        logger.warning(f"Reddit API status {resp.status} para '{query[:40]}'")
+                        logger.warning(
+                            f"Reddit API status {resp.status} para '{query[:40]}'"
+                        )
         except Exception as e:
             logger.debug(f"Reddit API direta falhou: {e}")
         return []
@@ -239,6 +363,14 @@ class RedditSearcher(BaseSearcher):
         )
 
     def normalize(self, post: dict) -> SearchResult:
+        """Normaliza um resultado bruto vindo do Reddit para a entidade padrão `SearchResult`.
+
+        Args:
+            raw_result (Any): O resultado bruto retornado pela API ou scraper.
+
+        Returns:
+            SearchResult: Objeto padronizado contendo os dados normalizados.
+        """
         created = datetime.fromtimestamp(post.get("created_utc", 0)).isoformat()
         return SearchResult(
             source="reddit",

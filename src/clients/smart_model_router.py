@@ -35,7 +35,7 @@ ModelTier = Literal["free", "haiku", "sonnet", "opus"]
 
 # IDs de modelo por tier (provider Anthropic)
 _ANTHROPIC_MODELS: dict[ModelTier, str] = {
-    "free": "claude-haiku-4-5-20251001",   # fallback se Groq indisponível
+    "free": "claude-haiku-4-5-20251001",  # fallback se Groq indisponível
     "haiku": "claude-haiku-4-5-20251001",
     "sonnet": "claude-sonnet-4-6",
     "opus": "claude-opus-4-8",
@@ -95,7 +95,9 @@ class SmartModelRouter:
     """
 
     def __init__(self, openrouter_api_key: str | None = None):
-        self._openrouter_key = openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
+        self._openrouter_key = openrouter_api_key or os.environ.get(
+            "OPENROUTER_API_KEY", ""
+        )
 
     def route(
         self,
@@ -123,7 +125,9 @@ class SmartModelRouter:
             )
 
         # Demais tiers: usar modelo do provider atual
-        model_map = _OPENROUTER_MODELS if provider == "openrouter" else _ANTHROPIC_MODELS
+        model_map = (
+            _OPENROUTER_MODELS if provider == "openrouter" else _ANTHROPIC_MODELS
+        )
         model_id = model_map[tier]
         reason = self._build_reason(score, task_type, query, context_tokens, tier)
         logger.debug(f"SmartModelRouter: {reason}")
@@ -155,7 +159,12 @@ class SmartModelRouter:
         return "opus"
 
     def _build_reason(
-        self, score: int, task_type: str, query: str, context_tokens: int, tier: ModelTier
+        self,
+        score: int,
+        task_type: str,
+        query: str,
+        context_tokens: int,
+        tier: ModelTier,
     ) -> str:
         parts = [f"task={task_type}", f"score={score}", f"tier={tier}"]
         if len(query) > 200:

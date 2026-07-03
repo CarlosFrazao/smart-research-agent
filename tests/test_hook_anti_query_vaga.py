@@ -1,10 +1,10 @@
 """Testes unitários do hook anti-query-vaga."""
+
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 # Importa diretamente a lógica pura (sem I/O)
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -12,6 +12,7 @@ from hooks.anti_query_vaga import analyze
 
 
 # ── analyze() — lógica pura ───────────────────────────────────────────────────
+
 
 class TestAnalyzeApproved:
     def test_query_clara_aprovada(self):
@@ -43,7 +44,9 @@ class TestAnalyzeApproved:
         assert not flagged
 
     def test_query_longa_sem_interrogacao_aprovada(self):
-        flagged, _ = analyze("melhores ferramentas self-hosted para RAG com LLM em 2026", [])
+        flagged, _ = analyze(
+            "melhores ferramentas self-hosted para RAG com LLM em 2026", []
+        )
         assert not flagged
 
     def test_what_em_ingles_aprovado(self):

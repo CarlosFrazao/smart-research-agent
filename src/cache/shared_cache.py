@@ -14,6 +14,7 @@ Fallback: se Redis não estiver disponível, opera com dict em memória.
 
 Skill: systematic-debugging (Cache distribuído)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,10 +27,10 @@ logger = logging.getLogger(__name__)
 
 # ── TTL em segundos por estratégia ───────────────────────────────────────────
 TTL_STRATEGIES: dict[str, int] = {
-    "aggressive": 7 * 24 * 3600,    # 7 dias
-    "moderate":   48 * 3600,         # 48 horas
-    "minimal":    3600,               # 1 hora
-    "permanent":  30 * 24 * 3600,   # 30 dias
+    "aggressive": 7 * 24 * 3600,  # 7 dias
+    "moderate": 48 * 3600,  # 48 horas
+    "minimal": 3600,  # 1 hora
+    "permanent": 30 * 24 * 3600,  # 30 dias
 }
 DEFAULT_TTL = TTL_STRATEGIES["moderate"]
 
@@ -91,6 +92,7 @@ class SharedCache:
 
         try:
             import redis
+
             client = redis.from_url(redis_url, socket_connect_timeout=2)
             client.ping()
             self._backend = client
@@ -187,7 +189,9 @@ class SharedCache:
     ) -> None:
         key = f"scrape:{self.url_hash(url)}"
         self.set(key, content, strategy=strategy)
-        logger.debug(f"SharedCache SCRAPE SET: {url[:60]} [{strategy or self._default_strategy}]")
+        logger.debug(
+            f"SharedCache SCRAPE SET: {url[:60]} [{strategy or self._default_strategy}]"
+        )
 
     # ── API Semântica — Research Results ────────────────────────────────────
 

@@ -1,3 +1,5 @@
+"""Cliente HTTP assincrono com suporte a timeout, retry e logging de requests."""
+
 import asyncio
 import logging
 import random
@@ -25,7 +27,9 @@ class HTTPClient:
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             connector = aiohttp.TCPConnector(ssl=False)
-            self._session = aiohttp.ClientSession(timeout=self.timeout, connector=connector)
+            self._session = aiohttp.ClientSession(
+                timeout=self.timeout, connector=connector
+            )
         return self._session
 
     def __del__(self):
@@ -44,7 +48,9 @@ class HTTPClient:
         params: dict | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        return await self._request_with_retry("GET", url, headers=headers, params=params, **kwargs)
+        return await self._request_with_retry(
+            "GET", url, headers=headers, params=params, **kwargs
+        )
 
     async def post(
         self,
@@ -53,7 +59,9 @@ class HTTPClient:
         json: dict | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        return await self._request_with_retry("POST", url, headers=headers, json_data=json, **kwargs)
+        return await self._request_with_retry(
+            "POST", url, headers=headers, json_data=json, **kwargs
+        )
 
     async def _request_with_retry(
         self,
@@ -76,7 +84,9 @@ class HTTPClient:
                 if method.upper() == "GET":
                     req_ctx = session.get(url, headers=headers, params=params, **kwargs)
                 elif method.upper() == "POST":
-                    req_ctx = session.post(url, headers=headers, json=json_data, **kwargs)
+                    req_ctx = session.post(
+                        url, headers=headers, json=json_data, **kwargs
+                    )
                 else:
                     raise ValueError(f"Método HTTP não suportado: {method}")
 
@@ -89,6 +99,20 @@ class HTTPClient:
                         return await resp.json()
                     return {"text": await resp.text(), "status": resp.status}
 
+            except aiohttp.ClientResponseError as e:
+                if e.status in {400, 401, 403, 404, 405}:
+                    logger.debug(
+                        f"Erro HTTP permanente {e.status} em {method} {url} — abortando retries."
+                    )
+                    raise
+                logger.warning(
+                    f"Erro de resposta HTTP {e.status} em {method} {url}: {e} "
+                    f"(tentativa {attempt + 1}/{self.max_retries})"
+                )
+                if attempt == self.max_retries - 1:
+                    raise
+                wait_time = (2**attempt) + random.uniform(0.1, 1.0)
+                await asyncio.sleep(wait_time)
             except (TimeoutError, aiohttp.ClientConnectorError) as e:
                 logger.warning(
                     f"Erro temporário de conexão/timeout em {method} {url}: {type(e).__name__}({e}) "
@@ -96,7 +120,7 @@ class HTTPClient:
                 )
                 if attempt == self.max_retries - 1:
                     raise
-                wait_time = (2 ** attempt) + random.uniform(0.1, 1.0)
+                wait_time = (2**attempt) + random.uniform(0.1, 1.0)
                 await asyncio.sleep(wait_time)
             except Exception as e:
                 logger.warning(
@@ -105,8 +129,12 @@ class HTTPClient:
                 )
                 if attempt == self.max_retries - 1:
                     raise
-                wait_time = (2 ** attempt) + random.uniform(0.1, 1.0)
+                wait_time = (2**attempt) + random.uniform(0.1, 1.0)
                 await asyncio.sleep(wait_time)
 
         return {}
 
+    async def close(self) -> None:
+        """Fecha a ClientSession aiohttp de forma assíncrona e limpa."""
+        if self._session and not self._session.closed:
+            await self._session.close()

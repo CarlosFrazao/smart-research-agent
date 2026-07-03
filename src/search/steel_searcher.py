@@ -19,6 +19,11 @@ class SteelSearcher(BaseSearcher):
     BASE_URL = "https://api.steel.dev/v1"
 
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.api_key = config.get("steel_api_key", "")
         self.base_url = config.get("steel_base_url", self.BASE_URL)

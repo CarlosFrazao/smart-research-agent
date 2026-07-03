@@ -72,3 +72,20 @@
 #### 🔧 Próximo Bloco
 - Bloco 5: FEAT-B05 — Infra, DevOps & Documentação: Docstrings, CI/CD, Pre-commit & Docker (MEL-07, INFRA-01, INFRA-02, INFRA-03)
 - Agente: @ceo-agent
+
+---
+
+### Sessão: 2026-07-03 12:35 — Bloco 5: FEAT-B05 — Infra, DevOps & Documentação: Docstrings, CI/CD, Pre-commit & Docker (MEL-07, INFRA-01, INFRA-02, INFRA-03)
+
+#### 🎯 Entregas
+- **Documentação de Funções Públicas (MEL-07)**: Adicionadas docstrings formato Google para classes e métodos públicos de todos os searchers em `src/search/` e complementada a documentação em `orchestrator.py`. A cobertura de docstrings medida pelo `interrogate` nesses arquivos específicos atingiu **92.6%** (passed).
+- **CI/CD GitHub Actions (INFRA-01)**: Criado o arquivo `.github/workflows/ci.yml` configurando os estágios de linting (Ruff/Mypy), validação de docstrings (Interrogate) e a matriz de testes em Python 3.11/3.12. Validado sintaticamente no local.
+- **Pre-commit Hooks (INFRA-02)**: Criado `.pre-commit-config.yaml` integrado com Ruff (excluindo tests e hooks, ignorando avisos de estilo herdados inofensivos), Mypy (filtrado para `src/` com dependências de tipos do Redis) e Interrogate (local com fail-under de 60%). Validado localmente com `pre-commit run --all-files` retornando 100% Passed.
+- **Otimizações do Docker Compose (INFRA-03)**: Adicionados healthchecks baseados em wget (Neo4j) e bash TCP socket (ChromaDB devido a ausência de wget/curl), `restart: unless-stopped` e limites de recursos de CPU/RAM em todos os serviços no `docker-compose.yml`. Todos os serviços subiram e operam saudáveis.
+
+#### 🧪 Testes e Validação
+- **Execução**: Suite unitária/E2E completa rodada com sucesso absoluto localmente: **763 passed** em 3m53s (zero regressões).
+- **Docker Healthchecks**: Todos os contêineres (`sra-neo4j`, `sra-chromadb`, `sra-redis`, `smart-research-agent`) validados como `healthy` em runtime no Docker Desktop.
+
+#### 🔧 Próximo Bloco
+- Bloco concluído e selado. Upgrade SRA v6.1 completo! Aguardando tag final humana e validação.

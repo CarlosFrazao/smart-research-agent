@@ -13,14 +13,15 @@ from src.types import SynthesizedResult
 
 logger = logging.getLogger(__name__)
 
-_DELTA_CAP = 15.0   # máximo ajuste (positivo ou negativo) em pontos de score
-_SCALE = 5.0        # cada unidade de feedback score = 5 pontos de combined_score
+_DELTA_CAP = 15.0  # máximo ajuste (positivo ou negativo) em pontos de score
+_SCALE = 5.0  # cada unidade de feedback score = 5 pontos de combined_score
 
 
 def _result_id(result: SynthesizedResult) -> str:
     """Gera um id estável a partir de entity + title (sem deps externas)."""
     raw = f"{result.entity}:{result.title}".lower().strip()
     import hashlib
+
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
@@ -53,9 +54,12 @@ class FeedbackRanker:
             new_score = round(max(0.0, min(100.0, r.combined_score + delta)), 2)
 
             if new_score != r.combined_score:
-                logger.debug(f"FeedbackRanker: '{r.title[:40]}' {r.combined_score} → {new_score} (delta={delta:+.1f})")
+                logger.debug(
+                    f"FeedbackRanker: '{r.title[:40]}' {r.combined_score} → {new_score} (delta={delta:+.1f})"
+                )
 
             from dataclasses import replace
+
             adjusted.append(replace(r, combined_score=new_score))
 
         adjusted.sort(key=lambda x: x.combined_score, reverse=True)

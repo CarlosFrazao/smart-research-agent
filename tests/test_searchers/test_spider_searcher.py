@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from src.search.spider_searcher import SpiderSearcher
 from src.types import SearchResult
 
@@ -21,6 +21,7 @@ def spider_searcher(spider_config):
 
 # ─── Initialization ──────────────────────────────────────────────────────────
 
+
 def test_spider_searcher_init(spider_searcher):
     assert spider_searcher.api_key == "test-spider-key"
     assert spider_searcher.max_results == 5
@@ -33,6 +34,7 @@ def test_spider_searcher_init_no_key():
 
 
 # ─── search() with API response ──────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_spider_searcher_search_list_response(spider_searcher):
@@ -113,6 +115,7 @@ async def test_spider_searcher_fallback_on_error(spider_searcher):
 
 # ─── normalize() ─────────────────────────────────────────────────────────────
 
+
 def test_spider_searcher_normalize_dict(spider_searcher):
     raw = {
         "url": "https://test.com",
@@ -146,6 +149,7 @@ def test_spider_searcher_normalize_missing_fields(spider_searcher):
 
 # ─── fallback() ──────────────────────────────────────────────────────────────
 
+
 def test_spider_searcher_fallback_returns_empty(spider_searcher):
     """fallback() always returns empty list."""
     result = spider_searcher.fallback("https://example.com")
@@ -153,6 +157,7 @@ def test_spider_searcher_fallback_returns_empty(spider_searcher):
 
 
 # ─── HTTP call structure ──────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_spider_searcher_uses_correct_endpoint(spider_searcher):

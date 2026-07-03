@@ -4,6 +4,7 @@ operation_modes.py — Presets de Operação do Smart Research Agent
 6 modos pré-configurados com trade-offs distintos de velocidade vs precisão.
 Integrado ao Orchestrator, CLI (main.py) e MCP Server para seleção dinâmica.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OperationConfig:
     """Configuração completa de um modo de operação."""
+
     name: str
     description: str
     searchers: list[str]
@@ -59,11 +61,10 @@ class OperationModes:
     """
 
     MODES: dict[str, OperationConfig] = {
-
         "guerrilha": OperationConfig(
             name="guerrilha",
             description="Máxima velocidade — pesquisas rápidas sem deep research. "
-                        "Ideal para consultas factuais simples com prazo curto.",
+            "Ideal para consultas factuais simples com prazo curto.",
             searchers=["google", "brave", "searxng", "duckduckgo", "serpapi"],
             scrapers=["firecrawl", "jina", "curl_impersonate", "playwright"],
             confidence_threshold=0.50,
@@ -75,12 +76,20 @@ class OperationModes:
             timeout_seconds=30,
             cost_optimization=True,
         ),
-
         "cirurgia": OperationConfig(
             name="cirurgia",
             description="Máxima precisão — auditoria cruzada e verificação de cada claim. "
-                        "Indicado para pesquisas que exigem alta confiabilidade.",
-            searchers=["google", "brave", "arxiv", "github", "stackoverflow", "hackernews", "reddit", "serpapi"],
+            "Indicado para pesquisas que exigem alta confiabilidade.",
+            searchers=[
+                "google",
+                "brave",
+                "arxiv",
+                "github",
+                "stackoverflow",
+                "hackernews",
+                "reddit",
+                "serpapi",
+            ],
             scrapers=["firecrawl", "spider", "steel", "jina", "scrapingbee", "zenrows"],
             confidence_threshold=0.85,
             max_depth=3,
@@ -91,11 +100,10 @@ class OperationModes:
             timeout_seconds=300,
             cost_optimization=False,
         ),
-
         "radar": OperationConfig(
             name="radar",
             description="Monitoramento contínuo — alerta quando novas informações surgem. "
-                        "Focado em trending, lançamentos e notícias recentes.",
+            "Focado em trending, lançamentos e notícias recentes.",
             searchers=["google", "brave", "hackernews", "reddit", "producthunt"],
             scrapers=["firecrawl", "jina"],
             confidence_threshold=0.60,
@@ -107,11 +115,10 @@ class OperationModes:
             timeout_seconds=60,
             cost_optimization=True,
         ),
-
         "arqueologia": OperationConfig(
             name="arqueologia",
             description="Foco em conteúdo histórico — Wayback Machine, documentação antiga e versões legadas. "
-                        "Útil para rastrear deprecações e comportamentos históricos.",
+            "Útil para rastrear deprecações e comportamentos históricos.",
             searchers=["wayback", "github", "stackoverflow", "google"],
             scrapers=["wayback", "firecrawl", "jina"],
             confidence_threshold=0.40,
@@ -123,12 +130,18 @@ class OperationModes:
             timeout_seconds=120,
             cost_optimization=True,
         ),
-
         "concorrencia": OperationConfig(
             name="concorrencia",
             description="Inteligência competitiva — ProductHunt, GitHub trends, HN e Reddit. "
-                        "Ideal para mapear o ecossistema de produtos e projetos concorrentes.",
-            searchers=["producthunt", "hackernews", "reddit", "github", "google", "brave"],
+            "Ideal para mapear o ecossistema de produtos e projetos concorrentes.",
+            searchers=[
+                "producthunt",
+                "hackernews",
+                "reddit",
+                "github",
+                "google",
+                "brave",
+            ],
             scrapers=["firecrawl", "jina", "scrapingbee"],
             confidence_threshold=0.60,
             max_depth=2,
@@ -139,18 +152,34 @@ class OperationModes:
             timeout_seconds=90,
             cost_optimization=True,
         ),
-
         "black_ops": OperationConfig(
             name="black_ops",
             description="Modo hardcore — proxies residenciais + móveis, 5-7 scrapers paralelos, "
-                        "deep research com auditoria iterativa. Cobertura máxima, custo máximo.",
+            "deep research com auditoria iterativa. Cobertura máxima, custo máximo.",
             searchers=[
-                "google", "brave", "searxng", "arxiv", "github",
-                "stackoverflow", "hackernews", "reddit", "producthunt", "devto", "medium", "serpapi",
+                "google",
+                "brave",
+                "searxng",
+                "arxiv",
+                "github",
+                "stackoverflow",
+                "hackernews",
+                "reddit",
+                "producthunt",
+                "devto",
+                "medium",
+                "serpapi",
             ],
             scrapers=[
-                "firecrawl", "spider", "steel", "jina",
-                "scrapingbee", "scrapingant", "zenrows", "curl_impersonate", "playwright",
+                "firecrawl",
+                "spider",
+                "steel",
+                "jina",
+                "scrapingbee",
+                "scrapingant",
+                "zenrows",
+                "curl_impersonate",
+                "playwright",
             ],
             confidence_threshold=0.90,
             max_depth=4,
@@ -161,14 +190,22 @@ class OperationModes:
             timeout_seconds=600,
             cost_optimization=False,
         ),
-
         # ── Bloco 3.1 ─────────────────────────────────────────────────────────
         "debate": OperationConfig(
             name="debate",
             description="Multi-Agent Debate — gera hipóteses opostas e as testa com pesquisa paralela. "
-                        "Um juiz LLM avalia os argumentos e decide o vencedor. "
-                        "Ideal para questões controversas, comparações e decisões estratégicas.",
-            searchers=["google", "brave", "arxiv", "github", "stackoverflow", "hackernews", "reddit", "serpapi"],
+            "Um juiz LLM avalia os argumentos e decide o vencedor. "
+            "Ideal para questões controversas, comparações e decisões estratégicas.",
+            searchers=[
+                "google",
+                "brave",
+                "arxiv",
+                "github",
+                "stackoverflow",
+                "hackernews",
+                "reddit",
+                "serpapi",
+            ],
             scrapers=["firecrawl", "jina"],
             confidence_threshold=0.75,
             max_depth=2,
@@ -219,22 +256,81 @@ class OperationModes:
         """
         q = query.lower()
 
-        if any(kw in q for kw in ["rápido", "rapido", "rápida", "rapida", "resumo", "quick", "fast", "summary"]):
+        if any(
+            kw in q
+            for kw in [
+                "rápido",
+                "rapido",
+                "rápida",
+                "rapida",
+                "resumo",
+                "quick",
+                "fast",
+                "summary",
+            ]
+        ):
             return "guerrilha"
 
-        if any(kw in q for kw in ["verificar", "verify", "fact-check", "confiança", "confianca", "evidência", "evidencia"]):
+        if any(
+            kw in q
+            for kw in [
+                "verificar",
+                "verify",
+                "fact-check",
+                "confiança",
+                "confianca",
+                "evidência",
+                "evidencia",
+            ]
+        ):
             return "cirurgia"
 
-        if any(kw in q for kw in ["novidade", "novidades", "trending", "lançamento", "lancamento", "launch", "release", "news"]):
+        if any(
+            kw in q
+            for kw in [
+                "novidade",
+                "novidades",
+                "trending",
+                "lançamento",
+                "lancamento",
+                "launch",
+                "release",
+                "news",
+            ]
+        ):
             return "radar"
 
-        if any(kw in q for kw in ["histórico", "historico", "legado", "deprecated", "antigo", "wayback", "legacy"]):
+        if any(
+            kw in q
+            for kw in [
+                "histórico",
+                "historico",
+                "legado",
+                "deprecated",
+                "antigo",
+                "wayback",
+                "legacy",
+            ]
+        ):
             return "arqueologia"
 
-        if any(kw in q for kw in ["concorrente", "competitor", "alternativa", "alternative", "versus", "vs"]):
+        if any(
+            kw in q
+            for kw in [
+                "concorrente",
+                "competitor",
+                "alternativa",
+                "alternative",
+                "versus",
+                "vs",
+            ]
+        ):
             return "concorrencia"
 
-        if any(kw in q for kw in ["completo", "exhaustive", "deep", "profundo", "tudo sobre"]):
+        if any(
+            kw in q
+            for kw in ["completo", "exhaustive", "deep", "profundo", "tudo sobre"]
+        ):
             return "black_ops"
 
         return cls.DEFAULT_MODE
@@ -260,10 +356,20 @@ class OperationModes:
                     f"Modo '{mode_name}': confidence_threshold={cfg.confidence_threshold} fora do intervalo [0.0, 1.0]."
                 )
             if cfg.max_depth <= 0:
-                errors.append(f"Modo '{mode_name}': max_depth={cfg.max_depth} deve ser > 0.")
+                errors.append(
+                    f"Modo '{mode_name}': max_depth={cfg.max_depth} deve ser > 0."
+                )
             if cfg.timeout_seconds <= 0:
-                errors.append(f"Modo '{mode_name}': timeout_seconds={cfg.timeout_seconds} deve ser > 0.")
-            if cfg.proxy_strategy not in ("rotate", "fixed", "direct", "vps_first", "none"):
+                errors.append(
+                    f"Modo '{mode_name}': timeout_seconds={cfg.timeout_seconds} deve ser > 0."
+                )
+            if cfg.proxy_strategy not in (
+                "rotate",
+                "fixed",
+                "direct",
+                "vps_first",
+                "none",
+            ):
                 errors.append(
                     f"Modo '{mode_name}': proxy_strategy='{cfg.proxy_strategy}' não é um valor reconhecido."
                 )
@@ -273,7 +379,9 @@ class OperationModes:
                 )
         if errors:
             raise ValueError(
-                f"Configuração inválida em {len(errors)} modo(s) de operação:\n" + "\n".join(f"  • {e}" for e in errors)
+                f"Configuração inválida em {len(errors)} modo(s) de operação:\n"
+                + "\n".join(f"  • {e}" for e in errors)
             )
-        logger.info(f"[validate_operation_modes] {len(cls.MODES)} modos validados com sucesso.")
-
+        logger.info(
+            f"[validate_operation_modes] {len(cls.MODES)} modos validados com sucesso."
+        )

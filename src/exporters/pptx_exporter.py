@@ -10,6 +10,7 @@ Estratégia de Slides:
 - Slide 3 em diante: Um slide por item H3 (projetos/ferramentas)
 - Último slide: Recomendação Final
 """
+
 import logging
 import re
 from pathlib import Path
@@ -21,6 +22,7 @@ try:
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
     from pptx.util import Emu, Inches, Pt
+
     _PPTX_AVAILABLE = True
 except ImportError:
     _PPTX_AVAILABLE = False
@@ -29,9 +31,9 @@ except ImportError:
         "Execute `pip install python-pptx` para habilitar exportação PPTX."
     )
 
-_BRAND_BG = (15, 23, 42)       # Azul escuro
+_BRAND_BG = (15, 23, 42)  # Azul escuro
 _BRAND_ACCENT = (99, 102, 241)  # Índigo
-_BRAND_TEXT = (248, 250, 252)   # Quase branco
+_BRAND_TEXT = (248, 250, 252)  # Quase branco
 
 
 class PPTXExporter:
@@ -51,7 +53,9 @@ class PPTXExporter:
             Caminho do arquivo gerado, ou None se python-pptx não disponível.
         """
         if not self.available:
-            logger.warning("PPTXExporter: exportação ignorada — python-pptx não disponível.")
+            logger.warning(
+                "PPTXExporter: exportação ignorada — python-pptx não disponível."
+            )
             return None
 
         pptx_path = str(filepath).replace(".md", ".pptx")
@@ -71,47 +75,90 @@ class PPTXExporter:
             if level == 0:
                 # Slide de título
                 self._add_text_box(
-                    slide, heading, Inches(0.5), Inches(2.5), Inches(12), Inches(1.5),
-                    font_size=Pt(40), bold=True, color=_BRAND_TEXT
+                    slide,
+                    heading,
+                    Inches(0.5),
+                    Inches(2.5),
+                    Inches(12),
+                    Inches(1.5),
+                    font_size=Pt(40),
+                    bold=True,
+                    color=_BRAND_TEXT,
                 )
                 if body_lines:
                     self._add_text_box(
-                        slide, "\n".join(body_lines[:2]), Inches(0.5), Inches(4.2),
-                        Inches(12), Inches(1.5),
-                        font_size=Pt(18), bold=False, color=(160, 170, 200)
+                        slide,
+                        "\n".join(body_lines[:2]),
+                        Inches(0.5),
+                        Inches(4.2),
+                        Inches(12),
+                        Inches(1.5),
+                        font_size=Pt(18),
+                        bold=False,
+                        color=(160, 170, 200),
                     )
             elif level == 2:
                 # Slide de seção principal (H2)
                 self._add_accent_bar(slide)
                 self._add_text_box(
-                    slide, heading, Inches(0.5), Inches(0.3), Inches(12), Inches(0.8),
-                    font_size=Pt(28), bold=True, color=_BRAND_TEXT
+                    slide,
+                    heading,
+                    Inches(0.5),
+                    Inches(0.3),
+                    Inches(12),
+                    Inches(0.8),
+                    font_size=Pt(28),
+                    bold=True,
+                    color=_BRAND_TEXT,
                 )
                 body_text = self._clean(
                     "\n".join(l for l in body_lines[:8] if l.strip())
                 )
                 self._add_text_box(
-                    slide, body_text, Inches(0.5), Inches(1.3), Inches(12), Inches(5.5),
-                    font_size=Pt(14), bold=False, color=_BRAND_TEXT
+                    slide,
+                    body_text,
+                    Inches(0.5),
+                    Inches(1.3),
+                    Inches(12),
+                    Inches(5.5),
+                    font_size=Pt(14),
+                    bold=False,
+                    color=_BRAND_TEXT,
                 )
             else:
                 # Slide de item (H3+)
                 self._add_accent_bar(slide)
                 self._add_text_box(
-                    slide, self._clean(heading), Inches(0.5), Inches(0.3), Inches(12), Inches(0.8),
-                    font_size=Pt(22), bold=True, color=_BRAND_TEXT
+                    slide,
+                    self._clean(heading),
+                    Inches(0.5),
+                    Inches(0.3),
+                    Inches(12),
+                    Inches(0.8),
+                    font_size=Pt(22),
+                    bold=True,
+                    color=_BRAND_TEXT,
                 )
                 body_text = self._clean(
                     "\n".join(l.strip() for l in body_lines[:10] if l.strip())
                 )
                 self._add_text_box(
-                    slide, body_text, Inches(0.5), Inches(1.3), Inches(12), Inches(5.5),
-                    font_size=Pt(13), bold=False, color=_BRAND_TEXT
+                    slide,
+                    body_text,
+                    Inches(0.5),
+                    Inches(1.3),
+                    Inches(12),
+                    Inches(5.5),
+                    font_size=Pt(13),
+                    bold=False,
+                    color=_BRAND_TEXT,
                 )
 
         try:
             prs.save(pptx_path)
-            logger.info(f"PPTXExporter: PPTX gerado em {pptx_path} ({len(prs.slides)} slides)")
+            logger.info(
+                f"PPTXExporter: PPTX gerado em {pptx_path} ({len(prs.slides)} slides)"
+            )
             return pptx_path
         except Exception as e:
             logger.error(f"PPTXExporter: falha ao gerar PPTX: {e}")
@@ -159,6 +206,7 @@ class PPTXExporter:
 
     def _set_bg(self, slide, color: tuple[int, int, int]) -> None:
         from pptx.dml.color import RGBColor
+
         background = slide.background
         fill = background.fill
         fill.solid()
@@ -167,19 +215,33 @@ class PPTXExporter:
     def _add_accent_bar(self, slide) -> None:
         from pptx.dml.color import RGBColor
         from pptx.util import Inches
+
         shape = slide.shapes.add_shape(
             1,  # MSO_SHAPE_TYPE.RECTANGLE
-            Inches(0), Inches(0), Inches(13.33), Inches(0.07)
+            Inches(0),
+            Inches(0),
+            Inches(13.33),
+            Inches(0.07),
         )
         shape.fill.solid()
         shape.fill.fore_color.rgb = RGBColor(*_BRAND_ACCENT)
         shape.line.fill.background()
 
-    def _add_text_box(self, slide, text: str, left, top, width, height,
-                      font_size=None, bold=False,
-                      color: tuple[int, int, int] = (255, 255, 255)) -> None:
+    def _add_text_box(
+        self,
+        slide,
+        text: str,
+        left,
+        top,
+        width,
+        height,
+        font_size=None,
+        bold=False,
+        color: tuple[int, int, int] = (255, 255, 255),
+    ) -> None:
         from pptx.dml.color import RGBColor
         from pptx.util import Pt as _Pt
+
         if font_size is None:
             font_size = _Pt(14)
         txBox = slide.shapes.add_textbox(left, top, width, height)

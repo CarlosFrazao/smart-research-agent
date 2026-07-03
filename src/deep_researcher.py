@@ -12,6 +12,7 @@ confirmed hypotheses into the final report.
 
 Usage: activated only when --mode deep is passed. Cost ~5-10x standard.
 """
+
 import asyncio
 import logging
 import uuid
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ResearchBudget:
     """Orçamento configurável para uma pesquisa profunda."""
+
     max_total_nodes: int = 20
     max_depth: int = 3
     max_branches_per_node: int = 3
@@ -60,12 +62,13 @@ class ResearchBudget:
 @dataclass
 class ResearchNode:
     """One node in the reasoning tree."""
+
     id: str
     query: str
     hypothesis: str
     results: list[SearchResult] = field(default_factory=list)
     children: list["ResearchNode"] = field(default_factory=list)
-    status: str = "pending"          # pending | explored | dead_end | confirmed
+    status: str = "pending"  # pending | explored | dead_end | confirmed
     confidence: float = 0.0
     depth: int = 0
     reasoning: str = ""
@@ -74,8 +77,9 @@ class ResearchNode:
 @dataclass
 class DeepResearchResult:
     """Output of a DeepResearcher.research() call."""
+
     findings: list[SearchResult]
-    reasoning_tree: str              # markdown representation of the tree
+    reasoning_tree: str  # markdown representation of the tree
     total_nodes_explored: int
     confirmed_hypotheses: list[str]
     dead_end_hypotheses: list[str]
@@ -103,14 +107,20 @@ class DeepResearcher:
     CONFIRMED_THRESHOLD: float = 0.75
 
     MODEL_PRICES = {
-        "gemma-4-26b": 0.0,         # Free no OpenRouter
+        "gemma-4-26b": 0.0,  # Free no OpenRouter
         "gemini-2.5-flash": 0.0001,  # Muito barato
         "gpt-4o": 0.005,
         "claude-3-5-sonnet": 0.003,
         "default": 0.001,
     }
 
-    def __init__(self, llm_client: LLMClient, orchestrator=None, memory=None, budget: ResearchBudget | None = None):
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        orchestrator=None,
+        memory=None,
+        budget: ResearchBudget | None = None,
+    ):
         self.llm = llm_client
         self.orchestrator = orchestrator
         # OrvixMemoryV2 opcional — injeta contexto do grafo nas hipóteses
@@ -124,7 +134,9 @@ class DeepResearcher:
             if self.config:
                 max_nodes = getattr(self.config, "max_research_nodes", 20)
                 max_cost = getattr(self.config, "max_research_budget_usd", 5.0)
-            self.budget = ResearchBudget(max_total_nodes=max_nodes, max_cost_usd=max_cost)
+            self.budget = ResearchBudget(
+                max_total_nodes=max_nodes, max_cost_usd=max_cost
+            )
 
     async def research(
         self,
@@ -202,7 +214,9 @@ class DeepResearcher:
         await self._check_budget()
         self.budget.nodes_created += 1
 
-        logger.debug(f"Exploring node id={node.id} depth={node.depth} q='{node.query[:50]}'")
+        logger.debug(
+            f"Exploring node id={node.id} depth={node.depth} q='{node.query[:50]}'"
+        )
 
         node.results = await self._search_for_node(node)
         node.confidence = self._estimate_confidence(node.results)
@@ -255,25 +269,37 @@ class DeepResearcher:
     async def _search_for_node(self, node: ResearchNode) -> list[SearchResult]:
         """Searches using the orchestrator if available, otherwise returns empty list."""
         if self.orchestrator is None:
-            logger.debug(f"No orchestrator attached; skipping search for node {node.id}")
+            logger.debug(
+                f"No orchestrator attached; skipping search for node {node.id}"
+            )
             return []
 
         try:
             expanded_queries = [
-                type("ExpandedQuery", (), {
-                    "query": node.query,
-                    "type": "deep_research",
-                    "priority": "alta",
-                    "rationale": f"deep research node depth={node.depth}",
-                })()
+                type(
+                    "ExpandedQuery",
+                    (),
+                    {
+                        "query": node.query,
+                        "type": "deep_research",
+                        "priority": "alta",
+                        "rationale": f"deep research node depth={node.depth}",
+                    },
+                )()
             ]
-            intent = type("IntentResult", (), {
-                "domain": type("Domain", (), {"value": "general"})(),
-                "intention": type("Intention", (), {"value": "discover"})(),
-                "urgency": "nao",
-                "confidence": "alta",
-            })()
-            source_plan = self.orchestrator.source_planner.plan(intent, expanded_queries)
+            intent = type(
+                "IntentResult",
+                (),
+                {
+                    "domain": type("Domain", (), {"value": "general"})(),
+                    "intention": type("Intention", (), {"value": "discover"})(),
+                    "urgency": "nao",
+                    "confidence": "alta",
+                },
+            )()
+            source_plan = self.orchestrator.source_planner.plan(
+                intent, expanded_queries
+            )
             results = await self.orchestrator._parallel_search(
                 expanded_queries, source_plan, intent
             )
@@ -286,12 +312,18 @@ class DeepResearcher:
             logger.warning(f"Search for node {node.id} failed: {e}")
             # Arquiva a falha na Dead Letter Queue para análise/retry posterior
             if hasattr(self, "dlq") and self.dlq is not None:
-                await self.dlq.push(self.dlq.create_failed_task(
-                    task_type="search",
-                    payload={"query": node.query, "node_id": node.id, "depth": node.depth},
-                    error=str(e),
-                    source="deep_researcher._search_for_node",
-                ))
+                await self.dlq.push(
+                    self.dlq.create_failed_task(
+                        task_type="search",
+                        payload={
+                            "query": node.query,
+                            "node_id": node.id,
+                            "depth": node.depth,
+                        },
+                        error=str(e),
+                        source="deep_researcher._search_for_node",
+                    )
+                )
             return []
 
     async def _generate_hypotheses(
@@ -303,7 +335,8 @@ class DeepResearcher:
         when available, surfacing related past research automatically.
         """
         context_snippets = "\n".join(
-            f"- {r.title or '(sem título)'}: {(r.description or '')[:80]}" for r in parent_results[:5]
+            f"- {r.title or '(sem título)'}: {(r.description or '')[:80]}"
+            for r in parent_results[:5]
         )
 
         # ── Contexto do RAG Híbrido (OrvixMemoryV2) ───────────────────────
@@ -317,11 +350,14 @@ class DeepResearcher:
                         f"({len(memory_context)} chars) para query='{query[:40]}'"
                     )
             except Exception as e:
-                logger.warning(f"DeepResearcher: falha ao recuperar contexto de memória: {e}")
+                logger.warning(
+                    f"DeepResearcher: falha ao recuperar contexto de memória: {e}"
+                )
 
         memory_section = (
             f"\n\nRelated past research (from memory graph):\n{memory_context}"
-            if memory_context else ""
+            if memory_context
+            else ""
         )
 
         prompt = (
@@ -340,7 +376,9 @@ class DeepResearcher:
 
         try:
             await self._track_llm_call(prompt)  # Contabiliza tokens e custo estimado
-            hypotheses = await self.llm.generate_structured(prompt, schema, temperature=0.4)
+            hypotheses = await self.llm.generate_structured(
+                prompt, schema, temperature=0.4
+            )
             if isinstance(hypotheses, list):
                 return [str(h) for h in hypotheses if h][: self.MAX_BRANCHES]
         except Exception as e:
@@ -376,9 +414,7 @@ class DeepResearcher:
                 _walk(child)
 
         _walk(root)
-        collected.sort(
-            key=lambda r: getattr(r, "confidence_score", 0.0), reverse=True
-        )
+        collected.sort(key=lambda r: getattr(r, "confidence_score", 0.0), reverse=True)
         return collected
 
     def _export_tree_as_markdown(self, root: ResearchNode) -> str:

@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""Ponto de entrada CLI do Smart Research Agent.
+
+Expose os subcomandos: ``research``, ``config``, ``version`` e ``schedule``
+via argparse. Cada subcomando delega para uma funcao async correspondente.
+"""
+
 import argparse
 import asyncio
 import logging
@@ -13,6 +19,13 @@ logger = setup_logger("main")
 
 
 def create_parser() -> argparse.ArgumentParser:
+    """Cria e configura o parser de argumentos CLI do Smart Research Agent.
+
+    Subcomandos configurados: ``research``, ``config``, ``version``, ``schedule``.
+
+    Returns:
+        argparse.ArgumentParser: Parser configurado com todos os subcomandos e opcoes.
+    """
     parser = argparse.ArgumentParser(
         description="Smart Research Agent - Pesquisa profunda em tecnologia",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -24,7 +37,9 @@ def create_parser() -> argparse.ArgumentParser:
     research_parser.add_argument("--output", "-o", help="Caminho do arquivo de saida")
     research_parser.add_argument("--max-results", type=int, default=20)
     research_parser.add_argument("--iterations", type=int, default=3)
-    research_parser.add_argument("--sources", help="Fontes a usar (separadas por virgula)")
+    research_parser.add_argument(
+        "--sources", help="Fontes a usar (separadas por virgula)"
+    )
     research_parser.add_argument("--verbose", "-v", action="store_true")
     research_parser.add_argument(
         "--mode",
@@ -38,6 +53,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     from src.operation_modes import OperationModes
+
     research_parser.add_argument(
         "--op-mode",
         choices=OperationModes.list_modes(),
@@ -48,32 +64,51 @@ def create_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("version", help="Mostrar versao")
 
     # ── Schedule subcommands ───────────────────────────────────────────────
-    schedule_parser = subparsers.add_parser("schedule", help="Gerenciar pesquisas agendadas")
+    schedule_parser = subparsers.add_parser(
+        "schedule", help="Gerenciar pesquisas agendadas"
+    )
     schedule_sub = schedule_parser.add_subparsers(dest="schedule_command", help="Acao")
 
     sched_add = schedule_sub.add_parser("add", help="Agendar nova pesquisa recorrente")
     sched_add.add_argument("--query", "-q", required=True, help="Query de pesquisa")
-    sched_add.add_argument("--cron", "-c", required=True, help="Expressao cron (ex: '0 9 * * 1')")
-    sched_add.add_argument("--output-dir", "-o", default="reports/scheduled", help="Diretorio de saida")
-    sched_add.add_argument("--webhook", "-w", help="URL de webhook para alertas (Slack, Discord, N8N)")
-    sched_add.add_argument("--no-alerts", action="store_true", help="Desabilitar alertas de mudancas")
+    sched_add.add_argument(
+        "--cron", "-c", required=True, help="Expressao cron (ex: '0 9 * * 1')"
+    )
+    sched_add.add_argument(
+        "--output-dir", "-o", default="reports/scheduled", help="Diretorio de saida"
+    )
+    sched_add.add_argument(
+        "--webhook", "-w", help="URL de webhook para alertas (Slack, Discord, N8N)"
+    )
+    sched_add.add_argument(
+        "--no-alerts", action="store_true", help="Desabilitar alertas de mudancas"
+    )
 
     schedule_sub.add_parser("list", help="Listar jobs agendados")
 
     sched_cancel = schedule_sub.add_parser("cancel", help="Cancelar um job agendado")
     sched_cancel.add_argument("--id", required=True, help="ID do job a cancelar")
 
-    sched_run = schedule_sub.add_parser("run", help="Executar um job agendado imediatamente")
+    sched_run = schedule_sub.add_parser(
+        "run", help="Executar um job agendado imediatamente"
+    )
     sched_run.add_argument("--id", required=True, help="ID do job a executar")
 
     return parser
 
 
 async def cmd_research(args):
+    """Executa uma pesquisa via CLI e salva o relatorio em disco.
+
+    Args:
+        args: Namespace do argparse com os campos: query, output, max_results,
+              iterations, sources, verbose, mode, formats, op_mode.
+    """
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
     from src.operation_modes import OperationModes
+
     op_mode = getattr(args, "op_mode", None)
     if not op_mode:
         op_mode = OperationModes.auto_select(args.query)
@@ -118,6 +153,7 @@ async def cmd_research(args):
             formats = []
             if getattr(args, "formats", None):
                 from src.types import ReportFormat
+
                 for fmt in args.formats.split(","):
                     fmt_strip = fmt.strip().lower()
                     if fmt_strip == "pdf":
@@ -136,12 +172,17 @@ async def cmd_research(args):
             print("\n" + "=" * 60)
             sys.stdout.buffer.write((report + "\n").encode("utf-8", errors="replace"))
             sys.stdout.buffer.flush()
-    except Exception as e:
+    except Exception:
         logger.exception("Erro durante pesquisa")
         sys.exit(1)
 
 
 def cmd_config(args):
+    """Exibe a configuracao atual do Smart Research Agent na stdout.
+
+    Args:
+        args: Namespace do argparse (nao utilizado, mantido por compatibilidade).
+    """
     config = Config()
     print("Configuracao atual:")
     print(f"  LLM Provider: {config.llm_provider}")
@@ -154,6 +195,11 @@ def cmd_config(args):
 
 
 def cmd_version(args):
+    """Exibe a versao e metadados do Smart Research Agent na stdout.
+
+    Args:
+        args: Namespace do argparse (nao utilizado, mantido por compatibilidade).
+    """
     print("Smart Research Agent v1.0")
     print("Codinome: TechCurator")
     print("Licenca: MIT")
@@ -162,6 +208,7 @@ def cmd_version(args):
 async def cmd_schedule(args):
     """Gerenciador de pesquisas agendadas via CLI."""
     from src.scheduler import ResearchScheduler
+
     config = Config()
     orchestrator = Orchestrator(config)
     scheduler = ResearchScheduler(orchestrator)
@@ -175,7 +222,7 @@ async def cmd_schedule(args):
             webhook_url=getattr(args, "webhook", None),
             alert_on_changes=not getattr(args, "no_alerts", False),
         )
-        print(f"✅ Job agendado com sucesso!")
+        print("✅ Job agendado com sucesso!")
         print(f"   ID:    {job_id}")
         print(f"   Query: {args.query}")
         print(f"   Cron:  {args.cron}")
@@ -209,7 +256,16 @@ async def cmd_schedule(args):
 
 
 async def main():
+    """Funcao principal: inicializa logging, parseia CLI e despacha para o subcomando.
+
+    Dispatches:
+        - ``research`` -> `cmd_research`
+        - ``config`` -> `cmd_config`
+        - ``version`` -> `cmd_version`
+        - ``schedule`` -> `cmd_schedule`
+    """
     from src.utils.logging import setup_logging
+
     setup_logging(json_output=True)
 
     parser = create_parser()

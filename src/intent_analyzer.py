@@ -1,3 +1,10 @@
+"""Analisador de intencao para classificar queries de pesquisa por dominio e objetivo.
+
+Usa heuristicas de palavras-chave para classificar rapidamente o dominio e
+a intencao da query, reduzindo chamadas LLM. Quando necessario, usa o LLM
+para enriquecer a analise com entidades e urgencia detectadas.
+"""
+
 import logging
 import re
 
@@ -7,27 +14,107 @@ from src.types import Domain, Intention, IntentResult
 logger = logging.getLogger(__name__)
 
 DOMAIN_KEYWORDS = {
-    Domain.SAAS_B2B: ["crm", "erp", "helpdesk", "marketing", "saas", "b2b", "sales", "support"],
-    Domain.DEV_TOOLS: ["ide", "linter", "ci/cd", "testing", "debugger", "git", "vscode", "editor"],
-    Domain.AI_ML: ["llm", "model", "ai", "ml", "neural", "transformer", "gpt", "claude", "embedding"],
-    Domain.AUTOMATION: ["n8n", "zapier", "make", "rpa", "workflow", "automation", "pipeline"],
-    Domain.INFRASTRUCTURE: ["docker", "kubernetes", "k8s", "cloud", "serverless", "terraform", "aws"],
-    Domain.OPEN_SOURCE: ["github", "open source", "library", "framework", "package", "npm", "pypi"],
+    Domain.SAAS_B2B: [
+        "crm",
+        "erp",
+        "helpdesk",
+        "marketing",
+        "saas",
+        "b2b",
+        "sales",
+        "support",
+    ],
+    Domain.DEV_TOOLS: [
+        "ide",
+        "linter",
+        "ci/cd",
+        "testing",
+        "debugger",
+        "git",
+        "vscode",
+        "editor",
+    ],
+    Domain.AI_ML: [
+        "llm",
+        "model",
+        "ai",
+        "ml",
+        "neural",
+        "transformer",
+        "gpt",
+        "claude",
+        "embedding",
+    ],
+    Domain.AUTOMATION: [
+        "n8n",
+        "zapier",
+        "make",
+        "rpa",
+        "workflow",
+        "automation",
+        "pipeline",
+    ],
+    Domain.INFRASTRUCTURE: [
+        "docker",
+        "kubernetes",
+        "k8s",
+        "cloud",
+        "serverless",
+        "terraform",
+        "aws",
+    ],
+    Domain.OPEN_SOURCE: [
+        "github",
+        "open source",
+        "library",
+        "framework",
+        "package",
+        "npm",
+        "pypi",
+    ],
 }
 
 INTENTION_KEYWORDS = {
-    Intention.COMPARE: ["compare", "vs", "versus", "better than", "alternative to", "difference"],
+    Intention.COMPARE: [
+        "compare",
+        "vs",
+        "versus",
+        "better than",
+        "alternative to",
+        "difference",
+    ],
     Intention.LEARN: ["how does", "what is", "how to", "tutorial", "explain", "guide"],
-    Intention.IMPLEMENT: ["install", "setup", "deploy", "configure", "self-host", "docker run"],
+    Intention.IMPLEMENT: [
+        "install",
+        "setup",
+        "deploy",
+        "configure",
+        "self-host",
+        "docker run",
+    ],
     Intention.EVALUATE: ["worth it", "pros and cons", "review", "should i use", "good"],
 }
 
 
 class IntentAnalyzer:
+    """Classifica queries de pesquisa por dominio, intencao, urgencia e entidades.
+
+    Usa heuristicas de palavras-chave (custo zero) como curto-circuito antes
+    de chamar o LLM, para economizar tokens em queries com sinais claros.
+    """
+
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
 
     def _heuristic_domain(self, query: str) -> Domain:
+        """Classifica o dominio da query usando correspondencia de palavras-chave.
+
+        Args:
+            query: Query do usuario.
+
+        Returns:
+            Domain: Dominio detectado, ou `Domain.GENERAL` se nenhum sinal encontrado.
+        """
         query_lower = query.lower()
         scores = {domain: 0 for domain in Domain}
         for domain, keywords in DOMAIN_KEYWORDS.items():
@@ -38,6 +125,14 @@ class IntentAnalyzer:
         return best if scores[best] > 0 else Domain.GENERAL
 
     def _heuristic_intention(self, query: str) -> Intention:
+        """Detecta a intencao principal da query usando palavras-chave.
+
+        Args:
+            query: Query do usuario.
+
+        Returns:
+            Intention: Intencao detectada, ou `Intention.DISCOVER` como padrao.
+        """
         query_lower = query.lower()
         for intention, keywords in INTENTION_KEYWORDS.items():
             for kw in keywords:
@@ -46,15 +141,55 @@ class IntentAnalyzer:
         return Intention.DISCOVER
 
     def _heuristic_urgency(self, query: str) -> str:
-        urgent = ["2026", "2025", "new", "latest", "trending", "recent", "now", "this year"]
+        """Detecta se a query tem carater de urgencia ou busca por novidades recentes.
+
+        Args:
+            query: Query do usuario.
+
+        Returns:
+            str: ``"sim"`` se a query indica urgencia ou recencia, ``"nao"`` caso contrario.
+        """
+        urgent = [
+            "2026",
+            "2025",
+            "new",
+            "latest",
+            "trending",
+            "recent",
+            "now",
+            "this year",
+        ]
         return "sim" if any(u in query.lower() for u in urgent) else "nao"
 
     def _extract_entities_heuristic(self, query: str) -> list[str]:
+        """Extrai entidades da query usando expressoes regulares.
+
+        Captura palavras em CamelCase e padroes `org/repo` do GitHub.
+
+        Args:
+            query: Query do usuario.
+
+        Returns:
+            list[str]: Lista deduplicada de entidades identificadas.
+        """
         entities = re.findall(r"\b[A-Z][a-zA-Z0-9]+\b", query)
         repos = re.findall(r"\b[\w-]+/[\w-]+\b", query)
         return list(set(entities + repos))
 
     async def analyze(self, query: str, force_llm: bool = False) -> IntentResult:
+        """Analisa a intencao da query e retorna um `IntentResult` estruturado.
+
+        Usa curto-circuito heuristico para evitar chamada LLM quando o dominio
+        ou intencao for detectado com confianca suficiente.
+
+        Args:
+            query: Query do usuario a ser analisada.
+            force_llm: Se True, forca a chamada LLM mesmo quando a heuristica
+                e suficientemente confiante. Util para testes.
+
+        Returns:
+            IntentResult: Objeto com dominio, intencao, urgencia e entidades detectadas.
+        """
         domain = self._heuristic_domain(query)
         intention = self._heuristic_intention(query)
         urgency = self._heuristic_urgency(query)
@@ -64,6 +199,7 @@ class IntentAnalyzer:
         # Se domínio não é GENERAL e a intenção foi detectada com clareza,
         # as heurísticas já são suficientes — pula o LLM para evitar rate-limit.
         from src.types import Domain, Intention
+
         heuristic_is_confident = (
             domain != Domain.GENERAL
             or intention != Intention.DISCOVER
@@ -89,7 +225,7 @@ class IntentAnalyzer:
             f"Query: {query}\n"
             f"Heuristica inicial: dominio={domain.value}, intencao={intention.value}, urgencia={urgency}\n\n"
             "Responda em JSON valido:\n"
-            '{\n'
+            "{\n"
             f'  "domain": "{domain.value}",\n'
             f'  "entities": {entities},\n'
             f'  "intention": "{intention.value}",\n'

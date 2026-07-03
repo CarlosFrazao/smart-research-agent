@@ -1,17 +1,38 @@
+"""Fábrica de instanciação dinâmica de searchers do Smart Research Agent.
+
+Centraliza a criacao e configuracao de todos os searchers disponíveis,
+permitindo que o orquestrador seja inicializado sem imports acoplados.
+"""
+
 import logging
 import os
 from typing import Any
-from src.search.base_searcher import BaseSearcher
 
 logger = logging.getLogger(__name__)
 
 
 class SearcherFactory:
+    """Fábrica estática para instanciar os searchers do ecossistema de pesquisa.
+
+    Usa lazy imports para evitar dependências circulares e acelerar o boot
+    do orquestrador. Cada searcher recebe o dicionário de configuracao
+    extraído do `Config` do orquestrador.
+    """
+
     @staticmethod
     def create_searchers(orchestrator: Any) -> dict[str, Any]:
-        """
-        Instancia dinamicamente todos os searchers disponíveis no sistema,
-        reduzindo imports acoplados e tempo de boot do orquestrador.
+        """Instancia dinamicamente todos os searchers configurados no sistema.
+
+        Realiza lazy imports dos searchers para evitar dependências circulares
+        e reduzir o tempo de boot. Searchers opcionais (ProductHunt, Firecrawl,
+        Spider, Steel, SerpAPI) só são registrados se suas respectivas chaves de
+        API estiverem configuradas.
+
+        Args:
+            orchestrator: Instância do `Orchestrator` com acesso ao `Config`.
+
+        Returns:
+            dict[str, Any]: Mapa de nome-do-searcher para instancia do searcher.
         """
         cfg = {
             "timeout": orchestrator.config.timeout_per_source,
@@ -46,7 +67,7 @@ class SearcherFactory:
             **cfg,
             "searxng_url": os.getenv("SEARXNG_URL", "http://127.0.0.1:3023"),
             "searxng_engines": os.getenv("SEARXNG_ENGINES", "google,bing,duckduckgo"),
-            "searxng_categories": os.getenv("SEARXNG_CATEGORIES", "general")
+            "searxng_categories": os.getenv("SEARXNG_CATEGORIES", "general"),
         }
 
         searchers: dict[str, Any] = {
@@ -65,39 +86,48 @@ class SearcherFactory:
         # ProductHunt se disponível
         try:
             from src.search.producthunt_searcher import ProductHuntSearcher
+
             searchers["producthunt"] = ProductHuntSearcher(cfg)
         except ImportError:
             logger.warning("ProductHuntSearcher não pôde ser importado")
 
-
-
         # Firecrawl / Jina
         if getattr(orchestrator.config, "host_mode", False):
-            logger.info("HOST MODE ativo — Firecrawl substituido por JinaSearcher como fallback")
+            logger.info(
+                "HOST MODE ativo — Firecrawl substituido por JinaSearcher como fallback"
+            )
             from src.search.jina_searcher import JinaSearcher
+
             jina_cfg = {
                 **cfg,
-                "jina_base_url": getattr(orchestrator.config, "jina_reader_base_url", "https://r.jina.ai/"),
+                "jina_base_url": getattr(
+                    orchestrator.config, "jina_reader_base_url", "https://r.jina.ai/"
+                ),
             }
             searchers["firecrawl"] = JinaSearcher(jina_cfg)
         else:
             from src.search.firecrawl_searcher import FirecrawlSearcher
+
             searchers["firecrawl"] = FirecrawlSearcher(cfg)
 
         # Spider
         if orchestrator.config.spider_enabled:
             from src.search.spider_searcher import SpiderSearcher
+
             searchers["spider"] = SpiderSearcher(cfg)
 
         # Steel
         if orchestrator.config.steel_enabled:
             from src.search.steel_searcher import SteelSearcher
+
             searchers["steel"] = SteelSearcher(cfg)
 
         # Semantic Scholar
         s2_cfg = {
             **cfg,
-            "semantic_scholar_api_key": getattr(orchestrator.config, "semantic_scholar_api_key", None),
+            "semantic_scholar_api_key": getattr(
+                orchestrator.config, "semantic_scholar_api_key", None
+            ),
         }
         semantic_scholar = SemanticScholarSearcher(s2_cfg)
         semantic_scholar.web_fallback = searchers.get("web")
@@ -125,6 +155,7 @@ class SearcherFactory:
         if getattr(orchestrator.config, "playwright_enabled", False):
             from src.anti_blocking.residential_proxy import ResidentialProxyProvider
             from src.search.playwright_searcher import PlaywrightSearcher
+
             proxy_url = None
             if getattr(orchestrator.config, "residential_proxy_provider", None):
                 try:
@@ -140,7 +171,9 @@ class SearcherFactory:
             playwright_cfg = {
                 **cfg,
                 "proxy_url": proxy_url,
-                "playwright_headless": getattr(orchestrator.config, "playwright_headless", True),
+                "playwright_headless": getattr(
+                    orchestrator.config, "playwright_headless", True
+                ),
             }
             searchers["playwright"] = PlaywrightSearcher(playwright_cfg)
 
@@ -149,6 +182,7 @@ class SearcherFactory:
         serpapi_enabled = getattr(orchestrator.config, "serpapi_enabled", True)
         if serpapi_enabled and serpapi_key:
             from src.search.serpapi_searcher import SerpAPISearcher
+
             searchers["serpapi"] = SerpAPISearcher(api_key=serpapi_key)
             logger.info("SerpAPISearcher registrado como fallback de último recurso")
 

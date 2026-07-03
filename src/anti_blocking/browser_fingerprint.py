@@ -1,10 +1,11 @@
 """Gera perfis completos de browser fingerprint para anti-detecção."""
+
 import random
 
 BROWSER_PROFILES: list[dict] = [
     {
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "viewport": {"width": 1920, "height": 1080},
         "locale": "en-US",
         "timezone": "America/New_York",
@@ -15,7 +16,7 @@ BROWSER_PROFILES: list[dict] = [
     },
     {
         "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "viewport": {"width": 1440, "height": 900},
         "locale": "en-US",
         "timezone": "America/Los_Angeles",
@@ -26,7 +27,7 @@ BROWSER_PROFILES: list[dict] = [
     },
     {
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) "
-                      "Gecko/20100101 Firefox/124.0",
+        "Gecko/20100101 Firefox/124.0",
         "viewport": {"width": 1366, "height": 768},
         "locale": "pt-BR",
         "timezone": "America/Sao_Paulo",

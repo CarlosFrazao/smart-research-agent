@@ -1,10 +1,24 @@
+"""Módulo de configuração centralizada do Smart Research Agent.
+
+Lê variáveis de ambiente via pydantic-settings (arquivo .env) e expõe
+uma instância tipada de `Config` com todos os parâmetros do sistema.
+"""
+
 from enum import StrEnum
+import os
+from dotenv import load_dotenv
+
+# Sobrescreve as variáveis do sistema Windows pelas do .env local do workspace em produção (BUG-01)
+if "PYTEST_CURRENT_TEST" not in os.environ:
+    load_dotenv(override=True)
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 class LLMProvider(StrEnum):
+    """Provedores de LLM suportados pelo Smart Research Agent."""
+
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     GEMINI = "gemini"
@@ -14,6 +28,13 @@ class LLMProvider(StrEnum):
 
 
 class Config(BaseSettings):
+    """Configuração global do Smart Research Agent via variáveis de ambiente.
+
+    Lida automaticamente do arquivo `.env` na raiz do projeto.
+    Todos os campos com `| None` são opcionais e habilitam funcionalidades
+    específicas quando fornecidos (ex: chaves de API de scrapers, proxies, etc).
+    """
+
     llm_provider: LLMProvider = Field(default=LLMProvider.ANTHROPIC)
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-20250514"
@@ -44,10 +65,12 @@ class Config(BaseSettings):
     playwright_enabled: bool = Field(default=False)
     playwright_headless: bool = Field(default=True)
 
-    captcha_provider: str | None = Field(default=None)   # "2captcha" | "capsolver"
+    captcha_provider: str | None = Field(default=None)  # "2captcha" | "capsolver"
     captcha_api_key: str | None = Field(default=None)
 
-    residential_proxy_provider: str | None = Field(default=None)  # "brightdata" | "smartproxy"
+    residential_proxy_provider: str | None = Field(
+        default=None
+    )  # "brightdata" | "smartproxy"
     residential_proxy_username: str | None = Field(default=None)
     residential_proxy_password: str | None = Field(default=None)
 
@@ -89,7 +112,6 @@ class Config(BaseSettings):
     log_level: str = "INFO"
     operation_mode: str = "cirurgia"
 
-
     # SerpAPI — fallback de último recurso para buscas na web
     serpapi_api_key: str | None = Field(default=None)
     serpapi_enabled: bool = Field(default=True)
@@ -109,6 +131,15 @@ class Config(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     def get_llm_config(self) -> dict:
+        """Retorna o dicionário de configuração para o provider LLM ativo.
+
+        Returns:
+            dict: Chaves ``api_key`` e ``model`` (mais ``base_url`` para Ollama)
+                  para o provider configurado em ``llm_provider``.
+
+        Raises:
+            ValueError: Se o provider configurado não for suportado.
+        """
         if self.llm_provider == LLMProvider.ANTHROPIC:
             return {"api_key": self.anthropic_api_key, "model": self.anthropic_model}
         elif self.llm_provider == LLMProvider.OPENAI:
@@ -120,19 +151,33 @@ class Config(BaseSettings):
         elif self.llm_provider == LLMProvider.GROQ:
             return {"api_key": self.groq_api_key, "model": self.groq_model}
         elif self.llm_provider == LLMProvider.OLLAMA:
-            return {"base_url": self.ollama_base_url, "model": self.ollama_model, "api_key": self.ollama_api_key}
+            return {
+                "base_url": self.ollama_base_url,
+                "model": self.ollama_model,
+                "api_key": self.ollama_api_key,
+            }
         raise ValueError(f"Provider nao suportado: {self.llm_provider}")
 
     def get_all_llm_configs(self) -> dict:
         """Retorna configs de todos os providers para uso no failover automatico."""
         configs = {}
         if self.openrouter_api_key:
-            configs["openrouter"] = {"api_key": self.openrouter_api_key, "model": self.openrouter_model}
+            configs["openrouter"] = {
+                "api_key": self.openrouter_api_key,
+                "model": self.openrouter_model,
+            }
         if self.gemini_api_key:
-            configs["gemini"] = {"api_key": self.gemini_api_key, "model": self.gemini_model}
+            configs["gemini"] = {
+                "api_key": self.gemini_api_key,
+                "model": self.gemini_model,
+            }
         if self.groq_api_key:
             configs["groq"] = {"api_key": self.groq_api_key, "model": self.groq_model}
-        configs["ollama"] = {"base_url": self.ollama_base_url, "model": self.ollama_model, "api_key": self.ollama_api_key}
+        configs["ollama"] = {
+            "base_url": self.ollama_base_url,
+            "model": self.ollama_model,
+            "api_key": self.ollama_api_key,
+        }
         return configs
 
     def validate_config(self) -> None:

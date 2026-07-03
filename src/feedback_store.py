@@ -20,7 +20,9 @@ _DEFAULT_PATH = Path(__file__).parent.parent / "reports" / "_feedback.jsonl"
 
 class FeedbackStore:
     def __init__(self, store_path: str | None = None):
-        self.path = Path(store_path or os.environ.get("FEEDBACK_STORE_PATH", str(_DEFAULT_PATH)))
+        self.path = Path(
+            store_path or os.environ.get("FEEDBACK_STORE_PATH", str(_DEFAULT_PATH))
+        )
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def record(self, result_id: str, signal: str, query: str = "") -> dict:
@@ -28,7 +30,9 @@ class FeedbackStore:
         if not result_id:
             raise ValueError("result_id não pode ser vazio")
         if signal not in VALID_SIGNALS:
-            raise ValueError(f"signal inválido: '{signal}'. Válidos: {sorted(VALID_SIGNALS)}")
+            raise ValueError(
+                f"signal inválido: '{signal}'. Válidos: {sorted(VALID_SIGNALS)}"
+            )
 
         entry = {
             "result_id": result_id,
@@ -54,7 +58,9 @@ class FeedbackStore:
                 try:
                     records.append(json.loads(line))
                 except json.JSONDecodeError:
-                    logger.warning(f"Linha inválida ignorada no feedback store: {line[:80]}")
+                    logger.warning(
+                        f"Linha inválida ignorada no feedback store: {line[:80]}"
+                    )
         return records
 
     def get_scores(self) -> dict[str, float]:

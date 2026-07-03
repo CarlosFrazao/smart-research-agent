@@ -1,3 +1,5 @@
+"""Detector de conflitos e contradicoes entre resultados de pesquisa sobre a mesma entidade."""
+
 import logging
 import re
 from dataclasses import dataclass
@@ -7,10 +9,10 @@ from src.types import Domain, ExpandedQuery, Intention, IntentResult, SearchResu
 logger = logging.getLogger("conflict_detector")
 
 _NUMBER_PATTERNS = [
-    r"(\d+(?:[\.,]\d+)?)\s*%",                          # porcentagens: "cresceu 18%"
+    r"(\d+(?:[\.,]\d+)?)\s*%",  # porcentagens: "cresceu 18%"
     r"(?:R\$|US\$|\$|€)\s*(\d+(?:[\.,]\d+)?[KkMmBb]?)",  # monetário: "US$ 1.2B"
-    r"(\d+(?:[\.,]\d+)?)\s*(?:milhões?|bilhões?|mil)",   # contagens: "14 mil usuários"
-    r"(\d+(?:[\.,]\d+)?)\s*(?:req\/s|ms|rpm|rps)",       # taxas técnicas
+    r"(\d+(?:[\.,]\d+)?)\s*(?:milhões?|bilhões?|mil)",  # contagens: "14 mil usuários"
+    r"(\d+(?:[\.,]\d+)?)\s*(?:req\/s|ms|rpm|rps)",  # taxas técnicas
 ]
 _DEFAULT_DIVERGENCE_THRESHOLD = 0.20
 
@@ -30,8 +32,8 @@ class NumericClaim:
 class Conflict:
     metric_name: str
     claims: list[NumericClaim]
-    divergence_ratio: float       # abs(max-min)/min
-    severity: str                 # critical | high | medium | low
+    divergence_ratio: float  # abs(max-min)/min
+    severity: str  # critical | high | medium | low
     resolution_query: str
 
 
@@ -51,10 +53,16 @@ class ConflictReport:
 
 
 class ConflictDetector:
-    def __init__(self, llm_client=None, divergence_threshold: float = _DEFAULT_DIVERGENCE_THRESHOLD):
+    def __init__(
+        self,
+        llm_client=None,
+        divergence_threshold: float = _DEFAULT_DIVERGENCE_THRESHOLD,
+    ):
         self.llm = llm_client
         self.divergence_threshold = divergence_threshold
-        self._compiled_patterns = [re.compile(p, re.IGNORECASE) for p in _NUMBER_PATTERNS]
+        self._compiled_patterns = [
+            re.compile(p, re.IGNORECASE) for p in _NUMBER_PATTERNS
+        ]
 
     def detect(self, results: list[SearchResult]) -> ConflictReport:
         """
@@ -66,7 +74,9 @@ class ConflictDetector:
                 claims = self._extract_numeric_claims(r)
                 all_claims.extend(claims)
             except Exception as e:
-                logger.warning(f"ConflictDetector: falha ao extrair de {r.url[:40]}: {e}")
+                logger.warning(
+                    f"ConflictDetector: falha ao extrair de {r.url[:40]}: {e}"
+                )
 
         # Agrupa claims por (metric_name, unit)
         groups: dict[tuple[str, str], list[NumericClaim]] = {}
@@ -81,9 +91,12 @@ class ConflictDetector:
             # Filtra claims repetidas da mesma URL no mesmo grupo para evitar ruído
             unique_sources = {}
             for c in group_claims:
-                if c.source not in unique_sources or c.confidence > unique_sources[c.source].confidence:
+                if (
+                    c.source not in unique_sources
+                    or c.confidence > unique_sources[c.source].confidence
+                ):
                     unique_sources[c.source] = c
-            
+
             filtered_claims = list(unique_sources.values())
             if len(filtered_claims) < 2:
                 continue
@@ -97,7 +110,7 @@ class ConflictDetector:
         return ConflictReport(
             total_claims_extracted=len(all_claims),
             conflicts=conflicts,
-            critical_conflicts=critical_conflicts
+            critical_conflicts=critical_conflicts,
         )
 
     def _extract_numeric_claims(self, result: SearchResult) -> list[NumericClaim]:
@@ -106,60 +119,62 @@ class ConflictDetector:
         """
         claims: list[NumericClaim] = []
         text = f"{result.title or ''} {result.description or ''}"
-        
+
         # Divide em sentenças
         sentences = re.split(r"[.!?]\s+", text)
         for sentence in sentences:
             sentence = sentence.strip()
             if not sentence:
                 continue
-            
+
             for pattern in self._compiled_patterns:
                 for match in pattern.finditer(sentence):
                     matched_str = match.group(0)
                     val_str = match.group(1)
-                    
+
                     try:
                         # Normaliza pontuação numérica
                         clean_val = val_str.replace(",", ".")
-                        
+
                         # Verifica multiplicadores k/m/b colados
                         multiplier = 1.0
                         if clean_val and clean_val[-1].lower() in ["k", "m", "b"]:
                             char = clean_val[-1].lower()
                             clean_val = clean_val[:-1]
                             if char == "k":
-                               multiplier = 1000.0
+                                multiplier = 1000.0
                             elif char == "m":
-                               multiplier = 1000000.0
+                                multiplier = 1000000.0
                             elif char == "b":
-                               multiplier = 1000000000.0
-                        
+                                multiplier = 1000000000.0
+
                         value = float(clean_val) * multiplier
                     except Exception:
                         continue
-                    
+
                     unit = matched_str.replace(val_str, "").strip()
                     if not unit and "%" in matched_str:
                         unit = "%"
-                        
+
                     start_idx = match.start()
                     words_before = sentence[:start_idx].split()
                     context_window = " ".join(words_before[-4:]) if words_before else ""
                     metric_name = self._normalize_metric_name(context_window)
-                    
+
                     if not metric_name:
                         continue
-                        
-                    claims.append(NumericClaim(
-                        value=value,
-                        unit=unit,
-                        context=sentence[:200],  # Limita tamanho do contexto
-                        metric_name=metric_name,
-                        source=result.url or "",
-                        source_name=result.source or "unknown",
-                        confidence=getattr(result, "confidence_score", 0.0)
-                    ))
+
+                    claims.append(
+                        NumericClaim(
+                            value=value,
+                            unit=unit,
+                            context=sentence[:200],  # Limita tamanho do contexto
+                            metric_name=metric_name,
+                            source=result.url or "",
+                            source_name=result.source or "unknown",
+                            confidence=getattr(result, "confidence_score", 0.0),
+                        )
+                    )
         return claims
 
     def _normalize_metric_name(self, text: str) -> str:
@@ -169,22 +184,50 @@ class ConflictDetector:
         text = text.lower()
         text = re.sub(r"[^\w\s]", "", text)
         stopwords = {
-            "de", "da", "do", "em", "no", "na", "o", "a", "os", "as", 
-            "um", "uma", "com", "para", "por", "que", "se", "ao", "aos",
-            "the", "of", "and", "in", "to", "for", "with", "on", "at", "by"
+            "de",
+            "da",
+            "do",
+            "em",
+            "no",
+            "na",
+            "o",
+            "a",
+            "os",
+            "as",
+            "um",
+            "uma",
+            "com",
+            "para",
+            "por",
+            "que",
+            "se",
+            "ao",
+            "aos",
+            "the",
+            "of",
+            "and",
+            "in",
+            "to",
+            "for",
+            "with",
+            "on",
+            "at",
+            "by",
         }
         words = [w for w in text.split() if w not in stopwords]
         # Mantém até as últimas 3 palavras significativas
         return " ".join(words[-3:])
 
-    def _analyze_group(self, metric_name: str, claims: list[NumericClaim]) -> Conflict | None:
+    def _analyze_group(
+        self, metric_name: str, claims: list[NumericClaim]
+    ) -> Conflict | None:
         """
         Calcula a divergência entre claims do mesmo grupo.
         """
         vals = [c.value for c in claims]
         min_val = min(vals)
         max_val = max(vals)
-        
+
         if min_val == 0.0:
             divergence = max_val
         else:
@@ -210,10 +253,12 @@ class ConflictDetector:
             claims=claims,
             divergence_ratio=divergence,
             severity=severity,
-            resolution_query=resolution_query
+            resolution_query=resolution_query,
         )
 
-    def _generate_resolution_query(self, metric_name: str, claims: list[NumericClaim]) -> str:
+    def _generate_resolution_query(
+        self, metric_name: str, claims: list[NumericClaim]
+    ) -> str:
         """
         Gera uma query focada baseada nos valores divergentes.
         """
@@ -225,24 +270,28 @@ class ConflictDetector:
         query += " ".join(source_names)
         return query.strip()
 
-    async def resolve(self, report: ConflictReport, orchestrator, max_conflicts: int = 3) -> list[SearchResult]:
+    async def resolve(
+        self, report: ConflictReport, orchestrator, max_conflicts: int = 3
+    ) -> list[SearchResult]:
         """
         Executa buscas focadas para resolver os conflitos críticos detectados.
         """
         new_results: list[SearchResult] = []
         conflicts_to_resolve = report.critical_conflicts[:max_conflicts]
-        
+
         for conflict in conflicts_to_resolve:
             query = conflict.resolution_query
-            logger.info(f"ConflictDetector: resolvendo conflito para '{conflict.metric_name}' com query: '{query}'")
-            
+            logger.info(
+                f"ConflictDetector: resolvendo conflito para '{conflict.metric_name}' com query: '{query}'"
+            )
+
             try:
                 expanded = [
                     ExpandedQuery(
                         query=query,
                         type="fact_check",
                         priority="alta",
-                        rationale=f"resolve conflict: {conflict.metric_name}"
+                        rationale=f"resolve conflict: {conflict.metric_name}",
                     )
                 ]
                 intent = IntentResult(
@@ -250,15 +299,19 @@ class ConflictDetector:
                     entities=[],
                     intention=Intention.EVALUATE,
                     urgency="nao",
-                    confidence="alta"
+                    confidence="alta",
                 )
-                
+
                 source_plan = orchestrator.source_planner.plan(intent, expanded)
-                results = await orchestrator._parallel_search(expanded, source_plan, intent)
+                results = await orchestrator._parallel_search(
+                    expanded, source_plan, intent
+                )
                 new_results.extend(results[:5])
             except Exception as e:
-                logger.warning(f"ConflictDetector: falha ao buscar resolução de conflito: {e}")
-                
+                logger.warning(
+                    f"ConflictDetector: falha ao buscar resolução de conflito: {e}"
+                )
+
         return new_results
 
     def format_conflicts_for_report(self, report: ConflictReport) -> str:
@@ -273,7 +326,7 @@ class ConflictDetector:
             "## ⚠️ Conflitos Detectados nas Fontes\n",
             "Foi detectada divergência de dados estatísticos/numéricos entre as fontes citadas.\n",
             "| Métrica | Valores Encontrados | Divergência | Severidade |",
-            "| :--- | :--- | :--- | :--- |"
+            "| :--- | :--- | :--- | :--- |",
         ]
 
         for c in report.conflicts:
@@ -281,10 +334,10 @@ class ConflictDetector:
                 "critical": "🔴 critical",
                 "high": "🟠 high",
                 "medium": "🟡 medium",
-                "low": "🟢 low"
+                "low": "🟢 low",
             }
             sev = severity_emojis.get(c.severity, c.severity)
-            
+
             # Formata lista de valores e fontes
             val_sources = []
             for claim in c.claims:
@@ -294,8 +347,10 @@ class ConflictDetector:
                 elif claim.unit:
                     formatted_val += f" {claim.unit}"
                 val_sources.append(f"{formatted_val} ({claim.source_name})")
-            
+
             vals_str = " vs ".join(val_sources)
-            lines.append(f"| {c.metric_name} | {vals_str} | {c.divergence_ratio:.0%} | {sev} |")
+            lines.append(
+                f"| {c.metric_name} | {vals_str} | {c.divergence_ratio:.0%} | {sev} |"
+            )
 
         return "\n".join(lines)

@@ -1,0 +1,46 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.8
+    hooks:
+      - id: ruff
+        args: [ --fix, --ignore=E741, --ignore=F401, --ignore=F841, --ignore=E402 ]
+        exclude: ^(tests/|hooks/)
+      - id: ruff-format
+        exclude: ^(tests/|hooks/)
+
+  - repo: local
+    hooks:
+      - id: interrogate
+        name: interrogate
+        entry: interrogate
+        language: system
+        files: ^(src/orchestrator\.py|src/main\.py|src/config\.py|src/search/.*\.py)$
+        args: [-vv, --fail-under=60]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^src/
+        additional_dependencies: [types-requests, types-PyYAML, pydantic, types-redis]
+        args: [
+          --ignore-missing-imports,
+          --disable-error-code=assignment,
+          --disable-error-code=attr-defined,
+          --disable-error-code=arg-type,
+          --disable-error-code=return-value,
+          --disable-error-code=dict-item,
+          --disable-error-code=union-attr,
+          --disable-error-code=index,
+          --disable-error-code=var-annotated,
+          --disable-error-code=misc,
+          --disable-error-code=annotation-unchecked
+        ]

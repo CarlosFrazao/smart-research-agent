@@ -11,33 +11,42 @@ Testes cobertos:
     T7: test_model_router_deepseek_provider
     T8: test_config_new_flags_default_values
 """
+
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_config(**overrides):
     """Retorna um mock de Config com os defaults do v4.6."""
     cfg = MagicMock()
     cfg.firecrawl_redact_pii = overrides.get("firecrawl_redact_pii", False)
     cfg.firecrawl_lockdown_mode = overrides.get("firecrawl_lockdown_mode", False)
-    cfg.firecrawl_deterministic_json = overrides.get("firecrawl_deterministic_json", False)
-    cfg.firecrawl_research_index_enabled = overrides.get("firecrawl_research_index_enabled", True)
+    cfg.firecrawl_deterministic_json = overrides.get(
+        "firecrawl_deterministic_json", False
+    )
+    cfg.firecrawl_research_index_enabled = overrides.get(
+        "firecrawl_research_index_enabled", True
+    )
     cfg.reasoning_models_enabled = overrides.get("reasoning_models_enabled", False)
     cfg.openai_reasoning_model = overrides.get("openai_reasoning_model", "o3-mini")
     cfg.deepseek_model = overrides.get("deepseek_model", "deepseek-r1")
     cfg.deepseek_api_key = overrides.get("deepseek_api_key", None)
-    cfg.deepseek_base_url = overrides.get("deepseek_base_url", "https://api.deepseek.com/v1")
+    cfg.deepseek_base_url = overrides.get(
+        "deepseek_base_url", "https://api.deepseek.com/v1"
+    )
     return cfg
 
 
 def _build_firecrawl_client(**config_overrides):
     """Cria um FirecrawlClient sem SDK real, inicializando atributos v4.6."""
     from src.clients.firecrawl_client import FirecrawlClient
+
     client = FirecrawlClient.__new__(FirecrawlClient)
     cfg = _make_config(**config_overrides)
     client.config = cfg
@@ -53,6 +62,7 @@ def _build_firecrawl_client(**config_overrides):
 # ---------------------------------------------------------------------------
 # T1 — FirecrawlClient passa redact_pii=True ao SDK quando flag ativa
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_firecrawl_redact_pii_flag():
@@ -79,14 +89,15 @@ async def test_firecrawl_redact_pii_flag():
 
     await client._direct_scrape_call("https://example.com")
 
-    assert captured_kwargs.get("redact_pii") is True, (
-        f"redact_pii deve ser True no payload. kwargs capturados: {captured_kwargs}"
-    )
+    assert (
+        captured_kwargs.get("redact_pii") is True
+    ), f"redact_pii deve ser True no payload. kwargs capturados: {captured_kwargs}"
 
 
 # ---------------------------------------------------------------------------
 # T2 — FirecrawlClient passa lockdown_mode=True ao SDK quando flag ativa
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_firecrawl_lockdown_mode():
@@ -112,14 +123,15 @@ async def test_firecrawl_lockdown_mode():
 
     await client._direct_scrape_call("https://example.com")
 
-    assert captured_kwargs.get("lockdown_mode") is True, (
-        f"lockdown_mode deve ser True no payload. kwargs capturados: {captured_kwargs}"
-    )
+    assert (
+        captured_kwargs.get("lockdown_mode") is True
+    ), f"lockdown_mode deve ser True no payload. kwargs capturados: {captured_kwargs}"
 
 
 # ---------------------------------------------------------------------------
 # T3 — search_research_index chama app.search com index="research"
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_firecrawl_research_index_called():
@@ -146,14 +158,15 @@ async def test_firecrawl_research_index_called():
 
     await client.search_research_index("transformer attention mechanism")
 
-    assert captured_kwargs.get("index") == "research", (
-        f"Deve passar index='research' ao SDK. kwargs: {captured_kwargs}"
-    )
+    assert (
+        captured_kwargs.get("index") == "research"
+    ), f"Deve passar index='research' ao SDK. kwargs: {captured_kwargs}"
 
 
 # ---------------------------------------------------------------------------
 # T4 — ArxivSearcher aciona Research Index quando resultados nativos < 3
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_arxiv_fallback_to_research_index():
@@ -161,9 +174,15 @@ async def test_arxiv_fallback_to_research_index():
     from src.types import SearchResult
 
     mock_firecrawl = MagicMock()
-    mock_firecrawl.search_research_index = AsyncMock(return_value=[
-        {"title": "RI Paper", "url": "https://arxiv.org/abs/9999.0001", "description": "From Research Index"}
-    ])
+    mock_firecrawl.search_research_index = AsyncMock(
+        return_value=[
+            {
+                "title": "RI Paper",
+                "url": "https://arxiv.org/abs/9999.0001",
+                "description": "From Research Index",
+            }
+        ]
+    )
 
     searcher = ArxivSearcher.__new__(ArxivSearcher)
     searcher.max_results = 10
@@ -173,8 +192,14 @@ async def test_arxiv_fallback_to_research_index():
 
     # Simula 2 resultados nativos (abaixo do threshold de 3)
     native_results = [
-        SearchResult(source="arxiv", title=f"Paper {i}", url=f"https://arxiv.org/abs/{i}",
-                     description="", metrics={}, raw={})
+        SearchResult(
+            source="arxiv",
+            title=f"Paper {i}",
+            url=f"https://arxiv.org/abs/{i}",
+            description="",
+            metrics={},
+            raw={},
+        )
         for i in range(2)
     ]
 
@@ -195,13 +220,15 @@ async def test_arxiv_fallback_to_research_index():
 
     mock_firecrawl.search_research_index.assert_called_once()
     assert len(results) > 2, "Deve ter mais de 2 resultados após fallback"
-    assert any(r.source == "arxiv_research_index" for r in results), \
-        "Deve conter resultado do Research Index"
+    assert any(
+        r.source == "arxiv_research_index" for r in results
+    ), "Deve conter resultado do Research Index"
 
 
 # ---------------------------------------------------------------------------
 # T5 — GitHubSearcher aciona search_code quando repos < 2
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_github_code_search_fallback():
@@ -216,14 +243,24 @@ async def test_github_code_search_fallback():
     searcher.fallback = MagicMock(return_value=[])
 
     # Repos: retorna apenas 1 resultado (< 2 → aciona Code Search)
-    repo_result = SearchResult(source="github", title="owner/repo",
-                               url="https://github.com/owner/repo",
-                               description="", metrics={}, raw={})
+    repo_result = SearchResult(
+        source="github",
+        title="owner/repo",
+        url="https://github.com/owner/repo",
+        description="",
+        metrics={},
+        raw={},
+    )
     searcher.normalize = MagicMock(return_value=repo_result)
 
-    code_result = SearchResult(source="github_code", title="code_file.py",
-                               url="https://github.com/x/y/blob/main/code.py",
-                               description="Arquivo em x/y", metrics={}, raw={})
+    code_result = SearchResult(
+        source="github_code",
+        title="code_file.py",
+        url="https://github.com/x/y/blob/main/code.py",
+        description="Arquivo em x/y",
+        metrics={},
+        raw={},
+    )
     searcher.search_code = AsyncMock(return_value=[code_result])
     searcher.http = MagicMock()
     searcher.http.get = AsyncMock(return_value={"items": [{"dummy": True}]})
@@ -231,13 +268,15 @@ async def test_github_code_search_fallback():
     results = await searcher.search("pii redaction python")
 
     searcher.search_code.assert_called_once()
-    assert any(r.source == "github_code" for r in results), \
-        "Deve incluir resultado de Code Search"
+    assert any(
+        r.source == "github_code" for r in results
+    ), "Deve incluir resultado de Code Search"
 
 
 # ---------------------------------------------------------------------------
 # T6 — ModelRouter roteia deep_research para o3-mini (openai + reasoning)
 # ---------------------------------------------------------------------------
+
 
 def test_model_router_reasoning_tier():
     from src.model_router import ModelRouter
@@ -252,6 +291,7 @@ def test_model_router_reasoning_tier():
 # T7 — ModelRouter roteia para deepseek-r1 via provider deepseek
 # ---------------------------------------------------------------------------
 
+
 def test_model_router_deepseek_provider():
     from src.model_router import ModelRouter
 
@@ -265,11 +305,13 @@ def test_model_router_deepseek_provider():
 # T8 — Config tem defaults seguros para todos os novos flags
 # ---------------------------------------------------------------------------
 
+
 def test_config_new_flags_default_values():
     """Verifica defaults via instância direta sem .env."""
     with patch.dict("os.environ", {}, clear=True):
         try:
             from src.config import Config
+
             cfg = Config(
                 _env_file=None,
                 firecrawl_api_key="fc-test",

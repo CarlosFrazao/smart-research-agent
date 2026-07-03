@@ -1,3 +1,9 @@
+"""Searcher do Hacker News via Algolia API.
+
+Busca stories no Hacker News com rate-limiting, cache em memoria,
+circuit breaker e retry automatico.
+"""
+
 import asyncio
 import logging
 import time
@@ -17,12 +23,23 @@ _RETRY_CONFIG = RetryConfig(
     max_delay=10.0,
     exponential_base=2.0,
     jitter=True,
-    retryable_exceptions=(Exception,)
+    retryable_exceptions=(Exception,),
 )
 
 
 class HNSearcher(BaseSearcher):
+    """Busca stories no Hacker News via Algolia API com circuit breaker e cache.
+
+    Implementa rate-limiting de 3.6s entre requests para respeitar limites da API
+    e usa circuit breaker para evitar sobrecarga em caso de falhas consecutivas.
+    """
+
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.base_url = "https://hn.algolia.com/api/v1/search"
         self.http = HTTPClient(timeout=self.timeout)
@@ -34,6 +51,18 @@ class HNSearcher(BaseSearcher):
         )
 
     async def search(self, query: str, **kwargs) -> list[SearchResult]:
+        """Busca stories no Hacker News para a query fornecida.
+
+        Usa cache em memoria para evitar requests duplicados. Delega para
+        o circuit breaker que controla o `_do_search` com retry automatico.
+
+        Args:
+            query: Texto da query de busca.
+            **kwargs: Parametros extras (nao utilizados).
+
+        Returns:
+            list[SearchResult]: Stories do HN normalizados.
+        """
         cache_key = f"{query}:{self.max_results}"
         if cache_key in self._cache:
             logger.info(f"HN search cache hit para: '{query}'")
@@ -52,7 +81,15 @@ class HNSearcher(BaseSearcher):
 
     @with_retry(_RETRY_CONFIG)
     async def _do_search(self, query: str, cache_key: str) -> list[SearchResult]:
+        """Executa a requisicao HTTP a API do Algolia HN com rate-limiting.
 
+        Args:
+            query: Texto da query de busca.
+            cache_key: Chave para armazenar o resultado em cache.
+
+        Returns:
+            list[SearchResult]: Resultados normalizados ou lista vazia em erro.
+        """
         elapsed = time.time() - self.last_request_time
         if elapsed < self.min_interval:
             wait_time = self.min_interval - elapsed
@@ -77,7 +114,18 @@ class HNSearcher(BaseSearcher):
             return self.fallback(query)
 
     def normalize(self, hit: dict) -> SearchResult:
-        url = hit.get("url") or f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
+        """Normaliza um hit da API Algolia HN para o formato `SearchResult`.
+
+        Args:
+            hit: Objeto de hit retornado pela API Algolia do HN.
+
+        Returns:
+            SearchResult: Resultado normalizado com metricas de pontos e comentarios.
+        """
+        url = (
+            hit.get("url")
+            or f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
+        )
         return SearchResult(
             source="hackernews",
             title=hit.get("title", "Sem titulo"),

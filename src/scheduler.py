@@ -5,6 +5,7 @@ Permite agendar pesquisas recorrentes usando APScheduler (dependência opcional)
 Sem APScheduler, os jobs podem ser disparados manualmente via CLI.
 Detecta mudanças entre execuções e envia alertas via webhook.
 """
+
 from __future__ import annotations
 
 import json
@@ -20,11 +21,13 @@ logger = logging.getLogger("scheduler")
 _DEFAULT_JOBS_FILE = "reports/scheduled_jobs.json"
 
 # Regex para detecção de mudanças entre relatórios
-_ENTITY_RE    = re.compile(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b")
-_URL_RE       = re.compile(r"https?://[^\s\)\]>\"']+")
-_NUMBER_RE    = re.compile(r"\b\d+(?:[.,]\d+)?(?:\s*%|\s*(?:milhões?|bilhões?|mil|k|M|B))?\b")
-_HEADING_RE   = re.compile(r"^##\s+(.+)$", re.MULTILINE)
-_SCORE_RE     = re.compile(r"Research Score.*?([A-F][+]?)", re.IGNORECASE | re.DOTALL)
+_ENTITY_RE = re.compile(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b")
+_URL_RE = re.compile(r"https?://[^\s\)\]>\"']+")
+_NUMBER_RE = re.compile(
+    r"\b\d+(?:[.,]\d+)?(?:\s*%|\s*(?:milhões?|bilhões?|mil|k|M|B))?\b"
+)
+_HEADING_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+_SCORE_RE = re.compile(r"Research Score.*?([A-F][+]?)", re.IGNORECASE | re.DOTALL)
 
 
 class ScheduledJob:
@@ -101,9 +104,12 @@ class ResearchScheduler:
     def _check_apscheduler(self) -> bool:
         try:
             import apscheduler  # noqa: F401
+
             return True
         except ImportError:
-            logger.debug("APScheduler não instalado — modo manual ativo (pip install apscheduler).")
+            logger.debug(
+                "APScheduler não instalado — modo manual ativo (pip install apscheduler)."
+            )
             return False
 
     # ── API de Agendamento ────────────────────────────────────────────────────
@@ -131,7 +137,9 @@ class ResearchScheduler:
         )
         self._jobs[job.id] = job
         self._save_jobs()
-        logger.info(f"ResearchScheduler: Job criado — id={job.id} | query='{query}' | cron='{cron_expr}'")
+        logger.info(
+            f"ResearchScheduler: Job criado — id={job.id} | query='{query}' | cron='{cron_expr}'"
+        )
         return job.id
 
     async def run_scheduled_research(self, job_id: str) -> str:
@@ -162,7 +170,9 @@ class ResearchScheduler:
                 with open(job.last_report_path, encoding="utf-8") as f:
                     old_report = f.read()
                 changes = self.compare_with_previous(report, old_report)
-                logger.info(f"ResearchScheduler: {len(changes)} mudança(s) detectada(s).")
+                logger.info(
+                    f"ResearchScheduler: {len(changes)} mudança(s) detectada(s)."
+                )
             except Exception as e:
                 logger.warning(f"ResearchScheduler: Erro ao comparar relatórios: {e}")
 
@@ -250,19 +260,30 @@ class ResearchScheduler:
         if webhook_url:
             try:
                 import aiohttp
+
                 payload = {"text": message}
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                        webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+                        webhook_url,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=10),
                     ) as resp:
                         if resp.status in (200, 204):
-                            logger.info(f"ResearchScheduler: Alerta enviado para webhook (HTTP {resp.status})")
+                            logger.info(
+                                f"ResearchScheduler: Alerta enviado para webhook (HTTP {resp.status})"
+                            )
                         else:
-                            logger.warning(f"ResearchScheduler: Webhook retornou status {resp.status}")
+                            logger.warning(
+                                f"ResearchScheduler: Webhook retornou status {resp.status}"
+                            )
             except Exception as e:
-                logger.warning(f"ResearchScheduler: Falha ao enviar alerta via webhook: {e}")
+                logger.warning(
+                    f"ResearchScheduler: Falha ao enviar alerta via webhook: {e}"
+                )
         else:
-            logger.info(f"ResearchScheduler: Alerta (sem webhook configurado):\n{message}")
+            logger.info(
+                f"ResearchScheduler: Alerta (sem webhook configurado):\n{message}"
+            )
 
     # ── Gerenciamento de Jobs ─────────────────────────────────────────────────
 
@@ -276,7 +297,9 @@ class ResearchScheduler:
         Retorna True se o job foi encontrado e removido.
         """
         if job_id not in self._jobs:
-            logger.warning(f"ResearchScheduler: Job '{job_id}' não encontrado para cancelamento.")
+            logger.warning(
+                f"ResearchScheduler: Job '{job_id}' não encontrado para cancelamento."
+            )
             return False
         del self._jobs[job_id]
         self._save_jobs()
@@ -294,7 +317,9 @@ class ResearchScheduler:
                 raw: dict[str, Any] = json.load(f)
             return {jid: ScheduledJob.from_dict(data) for jid, data in raw.items()}
         except Exception as e:
-            logger.warning(f"ResearchScheduler: Erro ao carregar jobs de '{self.jobs_file}': {e}")
+            logger.warning(
+                f"ResearchScheduler: Erro ao carregar jobs de '{self.jobs_file}': {e}"
+            )
             return {}
 
     def _save_jobs(self) -> None:
@@ -311,4 +336,6 @@ class ResearchScheduler:
                     ensure_ascii=False,
                 )
         except Exception as e:
-            logger.warning(f"ResearchScheduler: Erro ao salvar jobs em '{self.jobs_file}': {e}")
+            logger.warning(
+                f"ResearchScheduler: Erro ao salvar jobs em '{self.jobs_file}': {e}"
+            )

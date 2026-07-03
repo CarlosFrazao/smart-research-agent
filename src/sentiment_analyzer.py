@@ -5,6 +5,7 @@ Analisa o sentimento de cada resultado de pesquisa e do relatório sintetizado g
 detectando vieses emocionais ou falta de neutralidade técnica.
 Suporta vaderSentiment (se instalado) com fallback baseado em léxico estático.
 """
+
 import logging
 import re
 from typing import Any
@@ -13,15 +14,77 @@ logger = logging.getLogger("sentiment_analyzer")
 
 # Léxico simples para fallback de sentimento (Português e Inglês)
 POSITIVE_LEXICON = {
-    "excelente", "ótimo", "bom", "incrível", "rápido", "fácil", "moderno", "seguro", "inovador", "sucesso", "eficiente",
-    "great", "excellent", "good", "amazing", "fast", "easy", "modern", "secure", "innovative", "love", "like", "best",
-    "awesome", "perfect", "clean", "robust", "powerful", "popular", "stable", "valioso", "recomendo", "recomenda", "top"
+    "excelente",
+    "ótimo",
+    "bom",
+    "incrível",
+    "rápido",
+    "fácil",
+    "moderno",
+    "seguro",
+    "inovador",
+    "sucesso",
+    "eficiente",
+    "great",
+    "excellent",
+    "good",
+    "amazing",
+    "fast",
+    "easy",
+    "modern",
+    "secure",
+    "innovative",
+    "love",
+    "like",
+    "best",
+    "awesome",
+    "perfect",
+    "clean",
+    "robust",
+    "powerful",
+    "popular",
+    "stable",
+    "valioso",
+    "recomendo",
+    "recomenda",
+    "top",
 }
 
 NEGATIVE_LEXICON = {
-    "ruim", "lento", "difícil", "ruído", "inseguro", "complicado", "antigo", "erro", "falha", "defeito", "bug", "problema",
-    "bad", "slow", "hard", "difficult", "insecure", "complicated", "old", "error", "fail", "defect", "worst", "hate",
-    "issue", "broke", "expensive", "caro", "limitado", "limitação", "warn", "warning", "flaw", "incompatível"
+    "ruim",
+    "lento",
+    "difícil",
+    "ruído",
+    "inseguro",
+    "complicado",
+    "antigo",
+    "erro",
+    "falha",
+    "defeito",
+    "bug",
+    "problema",
+    "bad",
+    "slow",
+    "hard",
+    "difficult",
+    "insecure",
+    "complicated",
+    "old",
+    "error",
+    "fail",
+    "defect",
+    "worst",
+    "hate",
+    "issue",
+    "broke",
+    "expensive",
+    "caro",
+    "limitado",
+    "limitação",
+    "warn",
+    "warning",
+    "flaw",
+    "incompatível",
 }
 
 # Mapeamento de nomes de fontes para exibição human-readable
@@ -47,13 +110,16 @@ class SentimentAnalyzer:
     def __init__(self):
         try:
             from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
             self.vader = SentimentIntensityAnalyzer()
             self.has_vader = True
             logger.debug("SentimentAnalyzer: VADER carregado com sucesso.")
         except ImportError:
             self.vader = None
             self.has_vader = False
-            logger.debug("SentimentAnalyzer: VADER não instalado — usando analisador léxico de fallback.")
+            logger.debug(
+                "SentimentAnalyzer: VADER não instalado — usando analisador léxico de fallback."
+            )
 
     def _fallback_score(self, text: str) -> dict[str, float]:
         """Análise de sentimento simplificada baseada em léxico de fallback."""
@@ -86,7 +152,7 @@ class SentimentAnalyzer:
             "pos": round(pos_frac, 3),
             "neg": round(neg_frac, 3),
             "neu": round(neu_frac, 3),
-            "compound": round(compound, 3)
+            "compound": round(compound, 3),
         }
 
     def score_result(self, result: Any) -> dict[str, float]:
@@ -109,7 +175,7 @@ class SentimentAnalyzer:
                     "pos": scores["pos"],
                     "neg": scores["neg"],
                     "neu": scores["neu"],
-                    "compound": scores["compound"]
+                    "compound": scores["compound"],
                 }
             except Exception as e:
                 logger.warning(f"SentimentAnalyzer: Erro no VADER: {e}")
@@ -127,26 +193,30 @@ class SentimentAnalyzer:
 
         if self.has_vader:
             try:
-                paragraphs = [p.strip() for p in report.split("\n\n") if len(p.strip()) > 30]
+                paragraphs = [
+                    p.strip() for p in report.split("\n\n") if len(p.strip()) > 30
+                ]
                 if not paragraphs:
                     scores = self.vader.polarity_scores(report[:2000])
                     if scores["compound"] == 0.0:
                         fb = self._fallback_score(report[:2000])
                         return round(1.0 - abs(fb["compound"]), 3)
                     return round(1.0 - abs(scores["compound"]), 3)
-                
+
                 compounds = []
                 for p in paragraphs[:15]:
                     p_score = self.vader.polarity_scores(p)["compound"]
                     if p_score == 0.0:
                         p_score = self._fallback_score(p)["compound"]
                     compounds.append(p_score)
-                
+
                 mean_compound = sum(compounds) / len(compounds)
                 return round(1.0 - abs(mean_compound), 3)
             except Exception as e:
-                logger.warning(f"SentimentAnalyzer: Erro no VADER ao medir neutralidade: {e}")
-        
+                logger.warning(
+                    f"SentimentAnalyzer: Erro no VADER ao medir neutralidade: {e}"
+                )
+
         scores = self._fallback_score(report)
         return round(1.0 - abs(scores["compound"]), 3)
 
@@ -195,7 +265,7 @@ class SentimentAnalyzer:
                 source = r.sources[0]
             if not source:
                 source = "unknown"
-            
+
             scores = self.score_result(r)
             sources_sentiment.setdefault(source, []).append(scores["compound"])
 
@@ -215,7 +285,7 @@ class SentimentAnalyzer:
         for src, comps in sorted(sources_sentiment.items()):
             mean_c = sum(comps) / len(comps)
             total_compounds.extend(comps)
-            
+
             # Formata emoji de tom
             if mean_c > 0.15:
                 tone = "🟢 Positivo"
@@ -223,9 +293,11 @@ class SentimentAnalyzer:
                 tone = "🔴 Negativo"
             else:
                 tone = "🟡 Neutro / Técnico"
-            
+
             src_display = SOURCE_DISPLAY_MAP.get(src.lower(), src.capitalize())
-            lines.append(f"| {src_display} | {len(comps)} item(ns) | `{mean_c:+.2f}` | {tone} |")
+            lines.append(
+                f"| {src_display} | {len(comps)} item(ns) | `{mean_c:+.2f}` | {tone} |"
+            )
 
         lines.append("")
 
@@ -248,9 +320,13 @@ class SentimentAnalyzer:
             ]
 
         # Calcula neutralidade teórica
-        overall_neutrality = 1.0 - abs(sum(total_compounds) / len(total_compounds)) if total_compounds else 1.0
+        overall_neutrality = (
+            1.0 - abs(sum(total_compounds) / len(total_compounds))
+            if total_compounds
+            else 1.0
+        )
         neutrality_pct = overall_neutrality * 100
-        
+
         # Barra visual de neutralidade
         bar_len = int((overall_neutrality) * 10)
         bar = "█" * max(1, bar_len) + "░" * (10 - max(1, bar_len))
@@ -263,7 +339,7 @@ class SentimentAnalyzer:
             "",
             "*(Um índice acima de 70% indica que as referências são predominantemente descritivas e técnicas,"
             " focando em dados empíricos em vez de opiniões polarizadas).* ",
-            ""
+            "",
         ]
 
         return "\n".join(lines)

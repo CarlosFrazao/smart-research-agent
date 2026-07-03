@@ -7,13 +7,19 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
+
 class ScrapingRaceClient:
     def __init__(self, firecrawl_client: Any, timeout: float | None = None):
         self.firecrawl_client = firecrawl_client
-        
+
         # Garante que timeout é um int ou float real e não um MagicMock
         from unittest.mock import MagicMock
-        if timeout is not None and isinstance(timeout, (int, float)) and not isinstance(timeout, MagicMock):
+
+        if (
+            timeout is not None
+            and isinstance(timeout, (int, float))
+            and not isinstance(timeout, MagicMock)
+        ):
             self.timeout = float(timeout)
         else:
             config_timeout = 30.0
@@ -25,38 +31,48 @@ class ScrapingRaceClient:
                         config_timeout = float(val)
             self.timeout = config_timeout
 
-    async def scrape(self, url: str, formats: list[str] | None = None) -> dict[str, Any]:
+    async def scrape(
+        self, url: str, formats: list[str] | None = None
+    ) -> dict[str, Any]:
         """
         Dispara requisições concorrentes para raspar a URL e retorna o primeiro sucesso válido.
         Cancela as conexões excedentes no mesmo instante.
         """
         formats = formats or ["markdown"]
         tasks = []
-        
+
         # 1. Tarefa Competidora A: Firecrawl Local (Playwright com Stealth e Rotação de Proxies)
-        tasks.append(asyncio.create_task(
-            self._wrap_task("firecrawl", self._scrape_via_firecrawl(url, formats))
-        ))
-        
+        tasks.append(
+            asyncio.create_task(
+                self._wrap_task("firecrawl", self._scrape_via_firecrawl(url, formats))
+            )
+        )
+
         # 2. Tarefa Competidora B: Requisição Direta Resiliente (aiohttp sem JS, ideal para páginas rápidas e estáticas)
-        tasks.append(asyncio.create_task(
-            self._wrap_task("direct_http", self._scrape_direct_http(url))
-        ))
-        
+        tasks.append(
+            asyncio.create_task(
+                self._wrap_task("direct_http", self._scrape_direct_http(url))
+            )
+        )
+
         # 3. Tarefa Competidora C: Jina Reader API (Gratuito, robusto, ideal para bypass de Cloudflare)
-        tasks.append(asyncio.create_task(
-            self._wrap_task("jina_reader", self._scrape_via_jina(url))
-        ))
-        
+        tasks.append(
+            asyncio.create_task(
+                self._wrap_task("jina_reader", self._scrape_via_jina(url))
+            )
+        )
+
         result = {}
         winner_name = None
-        
+
         try:
             for future in asyncio.as_completed(tasks, timeout=self.timeout):
                 try:
                     task_result = await future
                     if task_result and task_result.get("success"):
-                        content = task_result.get("markdown", "") or task_result.get("html", "")
+                        content = task_result.get("markdown", "") or task_result.get(
+                            "html", ""
+                        )
                         if len(content.strip()) > 150:
                             result = task_result
                             winner_name = task_result.get("engine")
@@ -65,17 +81,19 @@ class ScrapingRaceClient:
                     logger.debug(f"Competidor da corrida falhou com exceção: {e}")
         except TimeoutError:
             logger.warning(f"Timeout na corrida de scraping para {url}")
-            
+
         # Cancela todos os competidores que ainda não concluíram
         for task in tasks:
             if not task.done():
                 task.cancel()
-                
+
         # Garante o encerramento seguro no event loop
         await asyncio.gather(*tasks, return_exceptions=True)
-            
+
         if result:
-            logger.info(f"🏆 Corrida de scraping concluída! Vencedor: {winner_name} para URL: {url}")
+            logger.info(
+                f"🏆 Corrida de scraping concluída! Vencedor: {winner_name} para URL: {url}"
+            )
             return {
                 "success": True,
                 "markdown": result.get("markdown", ""),
@@ -83,12 +101,14 @@ class ScrapingRaceClient:
                 "metadata": {
                     "engine": winner_name,
                     "url": url,
-                    "length": len(result.get("markdown", ""))
-                }
+                    "length": len(result.get("markdown", "")),
+                },
             }
-            
+
         # Se todos falharam na corrida, tenta um último fallback sequencial completo via Firecrawl simples
-        logger.warning(f"⚠️ Todos os competidores rápidos da corrida falharam para {url}. Tentando fallback direto sequencial...")
+        logger.warning(
+            f"⚠️ Todos os competidores rápidos da corrida falharam para {url}. Tentando fallback direto sequencial..."
+        )
         try:
             fallback_res = await self._scrape_via_firecrawl(url, formats)
             if fallback_res.get("success"):
@@ -99,12 +119,16 @@ class ScrapingRaceClient:
                     "metadata": {
                         "engine": "firecrawl_fallback",
                         "url": url,
-                        "length": len(fallback_res.get("markdown", ""))
-                    }
+                        "length": len(fallback_res.get("markdown", "")),
+                    },
                 }
         except Exception as e:
             logger.error(f"Erro fatal no fallback final de scraping para {url}: {e}")
-        return {"success": False, "markdown": "", "error": "Todos os motores de scraping falharam."}
+        return {
+            "success": False,
+            "markdown": "",
+            "error": "Todos os motores de scraping falharam.",
+        }
 
     async def _wrap_task(self, name: str, coro) -> dict[str, Any]:
         """Encapsulador para identificar qual motor venceu a corrida."""
@@ -117,14 +141,16 @@ class ScrapingRaceClient:
             logger.debug(f"Engine {name} falhou: {e}")
         return {"success": False, "engine": name}
 
-    async def _scrape_via_firecrawl(self, url: str, formats: list[str]) -> dict[str, Any]:
+    async def _scrape_via_firecrawl(
+        self, url: str, formats: list[str]
+    ) -> dict[str, Any]:
         """Interface com o FirecrawlClient existente (que chama o contêiner Docker)."""
         try:
             res = await self.firecrawl_client._direct_scrape_call(url, formats=formats)
             if res and (res.get("markdown") or res.get("content")):
                 return {
                     "success": True,
-                    "markdown": res.get("markdown") or res.get("content") or ""
+                    "markdown": res.get("markdown") or res.get("content") or "",
                 }
         except Exception as e:
             logger.debug(f"Erro no scraping via Firecrawl na corrida: {e}")
@@ -137,82 +163,93 @@ class ScrapingRaceClient:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
             "Cache-Control": "no-cache",
-            "Pragma": "no-cache"
+            "Pragma": "no-cache",
         }
-        
+
         # Garante timeouts curtos para não atrasar a corrida (capado no timeout global)
         timeout_val = min(15.0, self.timeout)
-        timeout = aiohttp.ClientTimeout(total=timeout_val, connect=min(5.0, timeout_val))
-        
+        timeout = aiohttp.ClientTimeout(
+            total=timeout_val, connect=min(5.0, timeout_val)
+        )
+
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url, headers=headers, ssl=False) as response:
                     if response.status == 200:
                         html = await response.text(errors="ignore")
-                        
+
                         # Conversão básica inline de HTML para Markdown simplificado (fallback rápido)
                         # Isso poupa tempo de CPU e rede. Se precisar de markdown perfeito, o Firecrawl vence.
                         markdown = self._simple_html_to_markdown(html)
-                        return {
-                            "success": True,
-                            "markdown": markdown,
-                            "html": html
-                        }
+                        return {"success": True, "markdown": markdown, "html": html}
                     else:
-                        logger.debug(f"Direct HTTP returned status {response.status} for {url}")
+                        logger.debug(
+                            f"Direct HTTP returned status {response.status} for {url}"
+                        )
         except Exception as e:
             logger.debug(f"Direct HTTP failed in race: {e}")
-            
+
         return {"success": False}
 
     def _simple_html_to_markdown(self, html: str) -> str:
         """Converte HTML básico para markdown semântico simplificado (remoção de tags de script/estilo)."""
         import re
-        
+
         # Remove scripts e estilos
-        text = re.sub(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', '', html, flags=re.IGNORECASE)
-        text = re.sub(r'<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>', '', text, flags=re.IGNORECASE)
-        
+        text = re.sub(
+            r"<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>",
+            "",
+            html,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+
         # Converte títulos
-        text = re.sub(r'<h[1-6]\b[^>]*>(.*?)</h[1-6]>', r'\n# \1\n', text, flags=re.IGNORECASE)
-        
+        text = re.sub(
+            r"<h[1-6]\b[^>]*>(.*?)</h[1-6]>", r"\n# \1\n", text, flags=re.IGNORECASE
+        )
+
         # Converte parágrafos e quebras
-        text = re.sub(r'<p\b[^>]*>(.*?)</p>', r'\n\1\n', text, flags=re.IGNORECASE)
-        text = re.sub(r'<br\s*/?>', r'\n', text, flags=re.IGNORECASE)
-        
+        text = re.sub(r"<p\b[^>]*>(.*?)</p>", r"\n\1\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"<br\s*/?>", r"\n", text, flags=re.IGNORECASE)
+
         # Remove todas as outras tags HTML
-        text = re.sub(r'<[^>]+>', ' ', text)
-        
+        text = re.sub(r"<[^>]+>", " ", text)
+
         # Normaliza espaços em branco e novas linhas
-        text = re.sub(r'[ \t]+', ' ', text)
-        text = re.sub(r'\n\s*\n+', '\n\n', text)
-        
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n\s*\n+", "\n\n", text)
+
         return text.strip()
 
     async def _scrape_via_jina(self, url: str) -> dict[str, Any]:
         """Raspagem via Jina Reader API (https://r.jina.ai/<url>)."""
         import os
         import sys
+
         if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
             return {"success": False}
         jina_url = f"https://r.jina.ai/{quote(url, safe=':/.?=#&')}"
-        headers = {
-            "Accept": "text/markdown",
-            "User-Agent": "curl/8.6.0"
-        }
+        headers = {"Accept": "text/markdown", "User-Agent": "curl/8.6.0"}
         timeout_val = min(20.0, self.timeout)
-        timeout = aiohttp.ClientTimeout(total=timeout_val, connect=min(5.0, timeout_val))
+        timeout = aiohttp.ClientTimeout(
+            total=timeout_val, connect=min(5.0, timeout_val)
+        )
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(jina_url, headers=headers) as response:
                     if response.status == 200:
                         content = await response.text()
                         if content and len(content.strip()) > 150:
-                            return {
-                                "success": True,
-                                "markdown": content
-                            }
-                    logger.debug(f"Jina Reader returned status {response.status} for {url}")
+                            return {"success": True, "markdown": content}
+                    logger.debug(
+                        f"Jina Reader returned status {response.status} for {url}"
+                    )
         except Exception as e:
             logger.debug(f"Jina Reader failed in race: {e}")
         return {"success": False}

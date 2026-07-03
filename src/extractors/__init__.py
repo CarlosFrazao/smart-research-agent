@@ -1,1 +1,1 @@
-﻿# __init__.py for extractors and reasoning
+# __init__.py for extractors and reasoning

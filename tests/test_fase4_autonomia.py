@@ -2,7 +2,7 @@
 Testes unitários da Fase 4 — Autonomia
 Cobre: OperationModes, ResearchAuditor, HealthMonitor
 """
-import asyncio
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,7 +15,15 @@ def test_operation_modes_all_seven_exist():
     """Verifica que os 7 modos estão registrados."""
     modes = OperationModes.list_modes()
     assert len(modes) == 7
-    expected = {"guerrilha", "cirurgia", "radar", "arqueologia", "concorrencia", "black_ops", "debate"}
+    expected = {
+        "guerrilha",
+        "cirurgia",
+        "radar",
+        "arqueologia",
+        "concorrencia",
+        "black_ops",
+        "debate",
+    }
     assert set(modes) == expected
 
 
@@ -51,7 +59,10 @@ def test_operation_modes_auto_select():
     assert OperationModes.auto_select("ultimas novidades em LLMs") == "radar"
     assert OperationModes.auto_select("historico legado do Python 2") == "arqueologia"
     assert OperationModes.auto_select("concorrente do Cursor IDE") == "concorrencia"
-    assert OperationModes.auto_select("pesquisa completa sobre deep learning") == "black_ops"
+    assert (
+        OperationModes.auto_select("pesquisa completa sobre deep learning")
+        == "black_ops"
+    )
 
 
 def test_operation_modes_to_dict():
@@ -72,11 +83,13 @@ from src.research_auditor import ResearchAuditor, AuditClaim
 @pytest.fixture
 def mock_llm():
     llm = MagicMock()
-    llm.generate_structured = AsyncMock(return_value=[
-        "Python 3.13 supports GIL-free execution.",
-        "The latest version of FastAPI is 0.115.",
-        "ChromaDB supports cosine distance natively.",
-    ])
+    llm.generate_structured = AsyncMock(
+        return_value=[
+            "Python 3.13 supports GIL-free execution.",
+            "The latest version of FastAPI is 0.115.",
+            "ChromaDB supports cosine distance natively.",
+        ]
+    )
     return llm
 
 
@@ -85,9 +98,18 @@ def mock_results():
     """Resultados simulados com conteúdo relevante."""
     results = []
     for title, desc in [
-        ("Python 3.13 Release Notes", "Python 3.13 supports free-threaded mode and GIL-free execution natively."),
-        ("FastAPI Changelog", "FastAPI 0.115 was released with improved async support and OpenAPI 3.1."),
-        ("ChromaDB Docs", "ChromaDB supports cosine, l2, and IP distance metrics for vector search."),
+        (
+            "Python 3.13 Release Notes",
+            "Python 3.13 supports free-threaded mode and GIL-free execution natively.",
+        ),
+        (
+            "FastAPI Changelog",
+            "FastAPI 0.115 was released with improved async support and OpenAPI 3.1.",
+        ),
+        (
+            "ChromaDB Docs",
+            "ChromaDB supports cosine, l2, and IP distance metrics for vector search.",
+        ),
     ]:
         r = MagicMock()
         r.title = title
@@ -159,7 +181,9 @@ async def test_health_monitor_healthy_service():
 
     monitor = HealthMonitor(extra_services=[])
     monitor.services = [
-        ServiceCheck(name="test_svc", url="http://test.local/health", timeout_seconds=3.0)
+        ServiceCheck(
+            name="test_svc", url="http://test.local/health", timeout_seconds=3.0
+        )
     ]
 
     mock_response = MagicMock(spec=httpx.Response)
@@ -184,7 +208,9 @@ async def test_health_monitor_offline_service():
 
     monitor = HealthMonitor(extra_services=[])
     monitor.services = [
-        ServiceCheck(name="offline_svc", url="http://offline.local/health", timeout_seconds=1.0)
+        ServiceCheck(
+            name="offline_svc", url="http://offline.local/health", timeout_seconds=1.0
+        )
     ]
 
     mock_client = MagicMock()

@@ -18,7 +18,6 @@ import sys
 import json
 import re
 import os
-import hashlib
 from pathlib import Path
 
 
@@ -65,14 +64,19 @@ _WHITELIST = re.compile(
 
 # ── Cache de histórico leve ───────────────────────────────────────────────────
 
-_HISTORY_FILE = Path(os.environ.get("SMART_RESEARCH_HOOK_CACHE", "/tmp")) / "sra_prompt_history.jsonl"
+_HISTORY_FILE = (
+    Path(os.environ.get("SMART_RESEARCH_HOOK_CACHE", "/tmp"))
+    / "sra_prompt_history.jsonl"
+)
 _MAX_HISTORY = 10
 
 
 def _load_history() -> list[str]:
     try:
         lines = _HISTORY_FILE.read_text(encoding="utf-8").splitlines()
-        return [json.loads(l).get("prompt", "") for l in lines[-_MAX_HISTORY:] if l.strip()]
+        return [
+            json.loads(l).get("prompt", "") for l in lines[-_MAX_HISTORY:] if l.strip()
+        ]
     except Exception:
         return []
 
@@ -85,12 +89,15 @@ def _append_history(prompt: str) -> None:
         # Rotaciona se passar de MAX_HISTORY * 3 linhas
         lines = _HISTORY_FILE.read_text(encoding="utf-8").splitlines()
         if len(lines) > _MAX_HISTORY * 3:
-            _HISTORY_FILE.write_text("\n".join(lines[-_MAX_HISTORY:]) + "\n", encoding="utf-8")
+            _HISTORY_FILE.write_text(
+                "\n".join(lines[-_MAX_HISTORY:]) + "\n", encoding="utf-8"
+            )
     except Exception:
         pass
 
 
 # ── Analisadores ─────────────────────────────────────────────────────────────
+
 
 def _is_error_paste(prompt: str) -> bool:
     lines = [l for l in prompt.splitlines() if l.strip()]
@@ -158,6 +165,7 @@ def analyze(prompt: str, history: list[str]) -> tuple[bool, list[str]]:
 
 
 # ── Entrada principal ─────────────────────────────────────────────────────────
+
 
 def main() -> None:
     try:

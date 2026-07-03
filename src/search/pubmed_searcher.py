@@ -7,6 +7,7 @@ Processo de Busca:
 Rate-limits: NCBI limita a 3 requisições/s sem API key.
 Fallback: Conecta ao WebSearcher se retornar < 2 resultados.
 """
+
 import asyncio
 import logging
 import re
@@ -29,14 +30,28 @@ class PubMedSearcher(BaseSearcher):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.http = HTTPClient(timeout=self.timeout)
         self.api_key: str | None = config.get("ncbi_api_key")
         self.web_fallback = None  # Injetado pelo Orchestrator se disponível
 
     async def search(self, query: str, **kwargs) -> list[SearchResult]:
+        """Realiza busca assíncrona por termos no Pubmed.
+
+        Args:
+            query (str): Termo ou query de busca a ser pesquisada.
+            **kwargs: Parâmetros de pesquisa adicionais específicos do buscador.
+
+        Returns:
+            list[SearchResult]: Lista contendo os resultados padronizados encontrados.
+        """
         headers = {}
-        
+
         # 1. ESearch — Buscar IDs
         search_params = {
             "db": "pubmed",
@@ -50,13 +65,17 @@ class PubMedSearcher(BaseSearcher):
         try:
             # Respeita o rate-limit geral da NCBI (máx 3 req/s sem key)
             await asyncio.sleep(0.35)
-            
-            search_resp = await self.http.get(_ESEARCH_URL, params=search_params, headers=headers)
+
+            search_resp = await self.http.get(
+                _ESEARCH_URL, params=search_params, headers=headers
+            )
             search_data = search_resp.get("json", {}) or {}
             id_list = search_data.get("esearchresult", {}).get("idlist", [])
 
             if not id_list:
-                logger.info(f"PubMedSearcher: nenhum ID encontrado para a query '{query[:40]}'")
+                logger.info(
+                    f"PubMedSearcher: nenhum ID encontrado para a query '{query[:40]}'"
+                )
                 return await self._run_web_fallback(query)
 
             # 2. ESummary — Buscar detalhes dos IDs
@@ -69,7 +88,9 @@ class PubMedSearcher(BaseSearcher):
                 summary_params["api_key"] = self.api_key
 
             await asyncio.sleep(0.35)
-            summary_resp = await self.http.get(_ESUMMARY_URL, params=summary_params, headers=headers)
+            summary_resp = await self.http.get(
+                _ESUMMARY_URL, params=summary_params, headers=headers
+            )
             summary_data = summary_resp.get("json", {}) or {}
             uid_results = summary_data.get("result", {})
 
@@ -79,19 +100,23 @@ class PubMedSearcher(BaseSearcher):
                 paper_info = uid_results.get(str(uid))
                 if not paper_info:
                     continue
-                
+
                 parsed = self._parse_summary(uid, paper_info)
                 if parsed:
                     results.append(parsed)
 
-            logger.info(f"PubMedSearcher: {len(results)} artigos encontrados para '{query[:40]}'")
+            logger.info(
+                f"PubMedSearcher: {len(results)} artigos encontrados para '{query[:40]}'"
+            )
 
             if len(results) < 2:
-                logger.info("PubMedSearcher: resultados insuficientes. Acionando fallback...")
+                logger.info(
+                    "PubMedSearcher: resultados insuficientes. Acionando fallback..."
+                )
                 fallback_res = await self._run_web_fallback(query)
                 results.extend(fallback_res)
 
-            return results[:self.max_results]
+            return results[: self.max_results]
 
         except Exception as e:
             logger.error(f"PubMed search error: {e}")
@@ -108,7 +133,7 @@ class PubMedSearcher(BaseSearcher):
 
             pub_date = info.get("pubdate", "")
             source = info.get("source", "")
-            
+
             authors_raw = info.get("authors", [])
             authors_names = [a.get("name", "") for a in authors_raw[:3] if a]
             authors_str = ", ".join(authors_names)
@@ -125,7 +150,7 @@ class PubMedSearcher(BaseSearcher):
                 desc_parts.append(f"Data: {pub_date}.")
             if authors_str:
                 desc_parts.append(f"Autores: {authors_str}.")
-            
+
             # Detalhes adicionais se existirem
             article_ids = info.get("articleids", [])
             doi = ""
@@ -133,7 +158,7 @@ class PubMedSearcher(BaseSearcher):
                 if aid.get("idtype") == "doi":
                     doi = aid.get("value", "")
                     break
-            
+
             if doi:
                 desc_parts.append(f"DOI: {doi}.")
 
@@ -172,4 +197,3 @@ class PubMedSearcher(BaseSearcher):
             metrics=raw_result.get("metrics", {}),
             raw=raw_result,
         )
-

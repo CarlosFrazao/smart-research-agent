@@ -1,11 +1,9 @@
 """Tests for src/comparator.py — Bloco 4.3."""
 
-import pytest
 from unittest.mock import MagicMock
 
 from src.comparator import (
     Comparator,
-    EntityProfile,
     _recency_label,
     _sentiment_label,
     _clean_entity,
@@ -16,6 +14,7 @@ from src.types import SynthesizedResult
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_result(
     title: str = "Result",
@@ -47,6 +46,7 @@ def make_result(
 # ---------------------------------------------------------------------------
 # detect_comparison_query
 # ---------------------------------------------------------------------------
+
 
 class TestDetectComparisonQuery:
     comp = Comparator()
@@ -82,13 +82,16 @@ class TestDetectComparisonQuery:
         assert ok is False
 
     def test_qual_e_melhor(self):
-        ok, entities = self.comp.detect_comparison_query("qual é melhor Python ou Ruby?")
+        ok, entities = self.comp.detect_comparison_query(
+            "qual é melhor Python ou Ruby?"
+        )
         assert ok is True
 
 
 # ---------------------------------------------------------------------------
 # build_entity_profiles
 # ---------------------------------------------------------------------------
+
 
 class TestBuildEntityProfiles:
     comp = Comparator()
@@ -131,12 +134,15 @@ class TestBuildEntityProfiles:
 # generate_comparison_section
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateComparisonSection:
     comp = Comparator()
 
     def test_non_comparative_query_returns_empty(self):
         results = [make_result()]
-        section = self.comp.generate_comparison_section("best python libraries", results)
+        section = self.comp.generate_comparison_section(
+            "best python libraries", results
+        )
         assert section == ""
 
     def test_comparative_query_returns_table(self):
@@ -171,27 +177,35 @@ class TestGenerateComparisonSection:
 # Label helpers
 # ---------------------------------------------------------------------------
 
+
 def test_recency_label_recent():
     assert "Recente" in _recency_label(0.9)
+
 
 def test_recency_label_moderate():
     assert "Moderado" in _recency_label(0.5)
 
+
 def test_recency_label_old():
     assert "Desatualizado" in _recency_label(0.1)
+
 
 def test_sentiment_label_positive():
     assert "Positivo" in _sentiment_label(0.5)
 
+
 def test_sentiment_label_negative():
     assert "Negativo" in _sentiment_label(-0.5)
+
 
 def test_sentiment_label_neutral():
     assert "Neutro" in _sentiment_label(0.0)
 
+
 def test_clean_entity_strips_articles():
     assert _clean_entity("the Python") == "Python"
     assert _clean_entity("o Django") == "Django"
+
 
 def test_clean_entity_strips_punctuation():
     assert _clean_entity("FastAPI,") == "FastAPI"

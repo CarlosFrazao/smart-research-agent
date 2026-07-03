@@ -1,13 +1,16 @@
 """
 Tests para Bloco 3: Circuit Breaker, Retry Decorator, SmartCache
 """
+
 import pytest
 import asyncio
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from src.utils.circuit_breaker import (
-    CircuitBreaker, CircuitState, CircuitBreakerOpen, CircuitBreakerRegistry
+    CircuitBreaker,
+    CircuitState,
+    CircuitBreakerOpen,
+    CircuitBreakerRegistry,
 )
 from src.utils.retry import with_retry, RetryConfig
 from src.cache import Cache as SmartCache
@@ -15,8 +18,8 @@ from src.cache import Cache as SmartCache
 
 # ─────────────────────────── CIRCUIT BREAKER TESTS ───────────────────────────
 
-class TestCircuitBreaker:
 
+class TestCircuitBreaker:
     @pytest.fixture(autouse=True)
     def reset_registry(self):
         """Limpa o registry entre testes para evitar estado compartilhado."""
@@ -118,8 +121,8 @@ class TestCircuitBreaker:
 
 # ─────────────────────────── RETRY DECORATOR TESTS ───────────────────────────
 
-class TestRetryDecorator:
 
+class TestRetryDecorator:
     @pytest.mark.asyncio
     async def test_success_on_first_try(self):
         call_count = 0
@@ -171,25 +174,31 @@ class TestRetryDecorator:
     async def test_exponential_backoff_delays(self):
         sleep_calls = []
 
-        @with_retry(RetryConfig(max_retries=3, base_delay=2.0, exponential_base=2.0, jitter=False))
+        @with_retry(
+            RetryConfig(
+                max_retries=3, base_delay=2.0, exponential_base=2.0, jitter=False
+            )
+        )
         async def always_fails():
             raise RuntimeError("fail")
 
-        with patch("src.utils.retry.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with patch(
+            "src.utils.retry.asyncio.sleep", new_callable=AsyncMock
+        ) as mock_sleep:
             mock_sleep.side_effect = lambda d: sleep_calls.append(d)
             with pytest.raises(RuntimeError):
                 await always_fails()
 
         assert len(sleep_calls) == 3
-        assert abs(sleep_calls[0] - 2.0) < 0.01   # 2^0 * 2.0
-        assert abs(sleep_calls[1] - 4.0) < 0.01   # 2^1 * 2.0
-        assert abs(sleep_calls[2] - 8.0) < 0.01   # 2^2 * 2.0
+        assert abs(sleep_calls[0] - 2.0) < 0.01  # 2^0 * 2.0
+        assert abs(sleep_calls[1] - 4.0) < 0.01  # 2^1 * 2.0
+        assert abs(sleep_calls[2] - 8.0) < 0.01  # 2^2 * 2.0
 
 
 # ─────────────────────────── SMART CACHE TESTS ───────────────────────────────
 
-class TestSmartCache:
 
+class TestSmartCache:
     @pytest.mark.asyncio
     async def test_get_returns_none_on_miss(self):
         cache = SmartCache()
@@ -208,8 +217,8 @@ class TestSmartCache:
         cache = SmartCache()
         await cache.set("short_key", "value", ttl_seconds=0)  # TTL de 0s já expirado
         # Forçar vencimento setando expires no passado
-        import json
         from datetime import datetime, timezone, timedelta
+
         data = cache.memory.get("short_key")
         if data:
             past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
@@ -242,6 +251,7 @@ class TestSmartCache:
         await cache.set("g1", "val", source_type="github")
         await cache.set("n1", "val2", source_type="news")
         from datetime import datetime, timezone
+
         g_expires = datetime.fromisoformat(cache.memory["g1"]["expires"])
         n_expires = datetime.fromisoformat(cache.memory["n1"]["expires"])
         now = datetime.now(timezone.utc)

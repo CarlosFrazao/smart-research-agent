@@ -2,6 +2,7 @@
 Integração com serviços de CAPTCHA solving.
 Suporta: 2captcha, anticaptcha, capsolver.
 """
+
 import asyncio
 import logging
 
@@ -11,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class CaptchaSolver:
-    POLL_INTERVAL = 5   # segundos entre polls
-    MAX_POLLS = 30      # 150s timeout total
+    POLL_INTERVAL = 5  # segundos entre polls
+    MAX_POLLS = 30  # 150s timeout total
 
     def __init__(self, provider: str, api_key: str):
         self.provider = provider
@@ -40,7 +41,7 @@ class CaptchaSolver:
                     "googlekey": site_key,
                     "pageurl": page_url,
                     "json": 1,
-                }
+                },
             )
             task_id = r.json().get("request")
             if not task_id:
@@ -52,7 +53,12 @@ class CaptchaSolver:
                 await asyncio.sleep(self.POLL_INTERVAL)
                 result = await self.client.get(
                     "https://2captcha.com/res.php",
-                    params={"key": self.api_key, "action": "get", "id": task_id, "json": 1}
+                    params={
+                        "key": self.api_key,
+                        "action": "get",
+                        "id": task_id,
+                        "json": 1,
+                    },
                 )
                 data = result.json()
                 if data.get("status") == 1:
@@ -73,8 +79,8 @@ class CaptchaSolver:
                         "type": "ReCaptchaV2TaskProxyless",
                         "websiteURL": page_url,
                         "websiteKey": site_key,
-                    }
-                }
+                    },
+                },
             )
             task_id = r.json().get("taskId")
             if not task_id:
@@ -85,7 +91,7 @@ class CaptchaSolver:
                 await asyncio.sleep(self.POLL_INTERVAL)
                 result = await self.client.post(
                     "https://api.capsolver.com/getTaskResult",
-                    json={"clientKey": self.api_key, "taskId": task_id}
+                    json={"clientKey": self.api_key, "taskId": task_id},
                 )
                 data = result.json()
                 if data.get("status") == "ready":

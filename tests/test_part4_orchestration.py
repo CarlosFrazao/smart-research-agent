@@ -2,8 +2,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 from src.types import (
-    SynthesizedResult, ResearchMetadata, IntentResult, Domain, Intention,
-    ExpandedQuery, RankedResult,
+    SynthesizedResult,
+    ResearchMetadata,
 )
 
 
@@ -16,7 +16,12 @@ def _make_synthesized(n: int = 3) -> list:
             sources=["github"],
             urls=[f"https://github.com/p{i}"],
             combined_score=float(90 - i * 5),
-            metrics={"stars": 1000 * (n - i), "forks": 100, "language": "Python", "license": "MIT"},
+            metrics={
+                "stars": 1000 * (n - i),
+                "forks": 100,
+                "language": "Python",
+                "license": "MIT",
+            },
             highlights=[f"{1000 * (n - i)} stars no GitHub"],
             first_seen=datetime.now(),
             last_seen=datetime.now(),
@@ -39,6 +44,7 @@ def _make_metadata(query: str = "test") -> ResearchMetadata:
 
 # ─── Report Generator ─────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_report_generator_structure():
     with patch("anthropic.AsyncAnthropic") as MockAnthropic:
@@ -51,7 +57,9 @@ async def test_report_generator_structure():
         from src.clients.llm_client import LLMClient, LLMProvider
         from src.report_generator import ReportGenerator
 
-        llm = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+        llm = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         rg = ReportGenerator(llm)
 
         results = _make_synthesized(5)
@@ -81,7 +89,9 @@ async def test_report_generator_llm_fallback():
         from src.clients.llm_client import LLMClient, LLMProvider
         from src.report_generator import ReportGenerator
 
-        llm = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+        llm = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         rg = ReportGenerator(llm)
 
         results = _make_synthesized(2)
@@ -97,14 +107,18 @@ async def test_report_generator_empty_results():
     with patch("anthropic.AsyncAnthropic") as MockAnthropic:
         mock_instance = MagicMock()
         mock_instance.messages.create = AsyncMock(
-            return_value=MagicMock(content=[MagicMock(text="Nenhum resultado encontrado.")])
+            return_value=MagicMock(
+                content=[MagicMock(text="Nenhum resultado encontrado.")]
+            )
         )
         MockAnthropic.return_value = mock_instance
 
         from src.clients.llm_client import LLMClient, LLMProvider
         from src.report_generator import ReportGenerator
 
-        llm = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+        llm = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         rg = ReportGenerator(llm)
 
         metadata = _make_metadata("empty query")
@@ -118,12 +132,15 @@ def test_report_generator_save(tmp_path):
         from src.clients.llm_client import LLMClient, LLMProvider
         from src.report_generator import ReportGenerator
 
-        llm = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+        llm = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         rg = ReportGenerator(llm)
 
         filepath = rg.save_report("# Test Report", "test query", str(tmp_path))
         assert filepath.endswith(".md")
         import os
+
         assert os.path.exists(filepath)
         with open(filepath, encoding="utf-8") as f:
             content = f.read()
@@ -132,10 +149,12 @@ def test_report_generator_save(tmp_path):
 
 # ─── Orchestrator ─────────────────────────────────────────────────────────────
 
+
 def test_orchestrator_init_no_api():
     with patch("anthropic.AsyncAnthropic"):
         from src.orchestrator import Orchestrator
         from src.config import Config
+
         config = Config(anthropic_api_key="test-key")
         orch = Orchestrator(config)
         assert orch.searchers is not None
@@ -151,6 +170,7 @@ def test_orchestrator_searchers_are_base_searcher():
         from src.orchestrator import Orchestrator
         from src.config import Config
         from src.search.base_searcher import BaseSearcher
+
         config = Config(anthropic_api_key="test-key")
         orch = Orchestrator(config)
         for name, searcher in orch.searchers.items():
@@ -162,7 +182,9 @@ async def test_orchestrator_research_mocked():
     with patch("anthropic.AsyncAnthropic") as MockAnthropic:
         mock_instance = MagicMock()
         mock_instance.messages.create = AsyncMock(
-            return_value=MagicMock(content=[MagicMock(text="Resumo executivo de teste.")])
+            return_value=MagicMock(
+                content=[MagicMock(text="Resumo executivo de teste.")]
+            )
         )
         MockAnthropic.return_value = mock_instance
 
@@ -173,12 +195,20 @@ async def test_orchestrator_research_mocked():
         orch = Orchestrator(config)
 
         from src.types import SearchResult
+
         mock_results = [
             SearchResult(
-                source=src, title=f"Project {i} / repo{i}", url=f"https://github.com/p{i}/r{i}",
+                source=src,
+                title=f"Project {i} / repo{i}",
+                url=f"https://github.com/p{i}/r{i}",
                 description=f"An open source project {i} with many features",
-                metrics={"stars": 1000 * (i + 1), "forks": 100, "language": "Python",
-                         "updated_at": "2026-01-01", "license": "MIT"},
+                metrics={
+                    "stars": 1000 * (i + 1),
+                    "forks": 100,
+                    "language": "Python",
+                    "updated_at": "2026-01-01",
+                    "license": "MIT",
+                },
             )
             for i, src in enumerate(["github", "reddit", "hackernews", "arxiv"] * 4)
         ]
@@ -186,17 +216,38 @@ async def test_orchestrator_research_mocked():
         # Mock _parallel_search diretamente para garantir que resultados chegam
         orch._parallel_search = AsyncMock(return_value=mock_results)
         orch.llm.generate = AsyncMock(return_value="Resumo executivo de teste.")
-        orch.llm.generate_structured = AsyncMock(side_effect=[
-            # intent
-            {"domain": "saas_b2b", "entities": ["HubSpot"], "intention": "discover", "urgency": "nao", "confidence": "alta"},
-            # query expand
-            {"queries": [
-                {"query": f"open source crm {i}", "type": "qualificador", "priority": "alta", "rationale": "test"}
-                for i in range(8)
-            ]},
-            # gap detect (is_complete = True)
-            {"is_complete": True, "missing_aspects": [], "new_queries": [], "confidence": "alta", "rationale": "ok"},
-        ])
+        orch.llm.generate_structured = AsyncMock(
+            side_effect=[
+                # intent
+                {
+                    "domain": "saas_b2b",
+                    "entities": ["HubSpot"],
+                    "intention": "discover",
+                    "urgency": "nao",
+                    "confidence": "alta",
+                },
+                # query expand
+                {
+                    "queries": [
+                        {
+                            "query": f"open source crm {i}",
+                            "type": "qualificador",
+                            "priority": "alta",
+                            "rationale": "test",
+                        }
+                        for i in range(8)
+                    ]
+                },
+                # gap detect (is_complete = True)
+                {
+                    "is_complete": True,
+                    "missing_aspects": [],
+                    "new_queries": [],
+                    "confidence": "alta",
+                    "rationale": "ok",
+                },
+            ]
+        )
 
         report = await orch.research("CRM open source parecido com HubSpot")
 
@@ -209,9 +260,11 @@ async def test_orchestrator_research_mocked():
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
+
 def test_cli_version(capsys):
     with patch("anthropic.AsyncAnthropic"):
         from src.main import cmd_version
+
         cmd_version(None)
         captured = capsys.readouterr()
         assert "Smart Research Agent" in captured.out
@@ -221,7 +274,7 @@ def test_cli_version(capsys):
 def test_cli_config(capsys):
     with patch("anthropic.AsyncAnthropic"):
         from src.main import cmd_config
-        from src.config import Config
+
         args = MagicMock()
         cmd_config(args)
         captured = capsys.readouterr()
@@ -232,6 +285,7 @@ def test_cli_config(capsys):
 def test_cli_parser():
     with patch("anthropic.AsyncAnthropic"):
         from src.main import create_parser
+
         parser = create_parser()
         args = parser.parse_args(["version"])
         assert args.command == "version"
@@ -246,8 +300,10 @@ def test_cli_parser():
 
 # ─── MCP Server ───────────────────────────────────────────────────────────────
 
+
 def test_mcp_server_imports():
     from src import mcp_server
+
     assert hasattr(mcp_server, "app")
     assert hasattr(mcp_server, "health")
 
@@ -255,12 +311,14 @@ def test_mcp_server_imports():
 @pytest.mark.asyncio
 async def test_mcp_health_endpoint():
     from src.mcp_server import health
+
     result = await health()
     assert result["status"] == "ok"
     assert "smart-research-agent" in result["service"]
 
 
 # ─── Benchmark Queries (unit-level smoke test) ────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_benchmark_pipeline_smoke():
@@ -287,10 +345,17 @@ async def test_benchmark_pipeline_smoke():
 
         mock_results = [
             SearchResult(
-                source="github", title=f"tool/project-{i}", url=f"https://github.com/t/p{i}",
+                source="github",
+                title=f"tool/project-{i}",
+                url=f"https://github.com/t/p{i}",
                 description=f"Tool {i} description",
-                metrics={"stars": 5000 + i * 100, "forks": 500, "language": "TypeScript",
-                         "updated_at": "2026-01-01", "license": "MIT"},
+                metrics={
+                    "stars": 5000 + i * 100,
+                    "forks": 500,
+                    "language": "TypeScript",
+                    "updated_at": "2026-01-01",
+                    "license": "MIT",
+                },
             )
             for i in range(10)
         ]

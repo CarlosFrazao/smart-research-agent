@@ -4,6 +4,7 @@ temporal_analyzer.py — Análise Temporal e Tendências (Bloco 4.1)
 Extrai informações de data dos resultados da pesquisa, constrói uma linha do tempo (timeline),
 computa um histograma de interesse e detecta a tendência geral usando regressão linear simples.
 """
+
 import logging
 import re
 from datetime import datetime
@@ -14,16 +15,36 @@ logger = logging.getLogger("temporal_analyzer")
 # Padrões regex para encontrar datas no texto (descrições, títulos, destaques, etc.)
 DATE_PATTERNS = [
     r"\b(\d{4})-(\d{2})-(\d{2})\b",  # YYYY-MM-DD
-    r"\b(\d{2})/(\d{4})\b",           # MM/YYYY
-    r"\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+de\s+(\d{4})\b", # Mês de YYYY
-    r"\b(19\d{2}|20\d{2})\b",         # YYYY isolado (entre 1900 e 2099)
+    r"\b(\d{2})/(\d{4})\b",  # MM/YYYY
+    r"\b(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+de\s+(\d{4})\b",  # Mês de YYYY
+    r"\b(19\d{2}|20\d{2})\b",  # YYYY isolado (entre 1900 e 2099)
 ]
 
 MONTHS_MAP = {
-    "janeiro": 1, "jan": 1, "fevereiro": 2, "feb": 2, "março": 3, "mar": 3,
-    "abril": 4, "apr": 4, "maio": 5, "may": 5, "junho": 6, "jun": 6,
-    "julho": 7, "jul": 7, "agosto": 8, "aug": 8, "setembro": 9, "sep": 9,
-    "outubro": 10, "oct": 10, "novembro": 11, "nov": 11, "dezembro": 12, "dec": 12
+    "janeiro": 1,
+    "jan": 1,
+    "fevereiro": 2,
+    "feb": 2,
+    "março": 3,
+    "mar": 3,
+    "abril": 4,
+    "apr": 4,
+    "maio": 5,
+    "may": 5,
+    "junho": 6,
+    "jun": 6,
+    "julho": 7,
+    "jul": 7,
+    "agosto": 8,
+    "aug": 8,
+    "setembro": 9,
+    "sep": 9,
+    "outubro": 10,
+    "oct": 10,
+    "novembro": 11,
+    "nov": 11,
+    "dezembro": 12,
+    "dec": 12,
 }
 
 
@@ -45,7 +66,7 @@ class TemporalAnalyzer:
 
         for r in results:
             title = getattr(r, "title", "(sem título)")
-            
+
             # Coleta textos associados a esse resultado para buscar datas
             texts_to_search = []
             if getattr(r, "description", None):
@@ -55,15 +76,45 @@ class TemporalAnalyzer:
 
             # Também considera metadados explícitos de data se existirem
             metrics = getattr(r, "metrics", {}) or {}
-            updated_at = metrics.get("updated_at")
-            if updated_at:
-                if isinstance(updated_at, datetime):
-                    timeline.append((updated_at, title, "Última atualização do repositório/fonte"))
-                elif isinstance(updated_at, str):
+            for date_key in (
+                "updated_at",
+                "created_at",
+                "published",
+                "created",
+                "date",
+            ):
+                dt_val = metrics.get(date_key)
+                if not dt_val:
+                    continue
+                if isinstance(dt_val, datetime):
+                    timeline.append(
+                        (dt_val, title, f"Data de publicação/atualização ({date_key})")
+                    )
+                    break
+                elif isinstance(dt_val, (int, float)):
+                    try:
+                        timeline.append(
+                            (
+                                datetime.fromtimestamp(dt_val),
+                                title,
+                                f"Timestamp de publicação ({date_key})",
+                            )
+                        )
+                        break
+                    except Exception:
+                        pass
+                elif isinstance(dt_val, str):
                     try:
                         # Limpa string para tentar parsear
-                        clean_dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-                        timeline.append((clean_dt, title, "Última atualização do repositório/fonte"))
+                        clean_dt = datetime.fromisoformat(dt_val.replace("Z", "+00:00"))
+                        timeline.append(
+                            (
+                                clean_dt,
+                                title,
+                                f"Data de publicação/atualização ({date_key})",
+                            )
+                        )
+                        break
                     except ValueError:
                         pass
 
@@ -71,14 +122,24 @@ class TemporalAnalyzer:
             for text in texts_to_search:
                 if not text:
                     continue
-                
+
                 matched_intervals = []
 
                 # 1. YYYY-MM-DD
                 for m in re.finditer(DATE_PATTERNS[0], text):
                     try:
                         dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                        timeline.append((dt, title, text[max(0, m.start()-40):min(len(text), m.end()+40)].strip()))
+                        timeline.append(
+                            (
+                                dt,
+                                title,
+                                text[
+                                    max(0, m.start() - 40) : min(
+                                        len(text), m.end() + 40
+                                    )
+                                ].strip(),
+                            )
+                        )
                         matched_intervals.append((m.start(), m.end()))
                     except ValueError:
                         pass
@@ -87,7 +148,17 @@ class TemporalAnalyzer:
                 for m in re.finditer(DATE_PATTERNS[1], text):
                     try:
                         dt = datetime(int(m.group(2)), int(m.group(1)), 1)
-                        timeline.append((dt, title, text[max(0, m.start()-40):min(len(text), m.end()+40)].strip()))
+                        timeline.append(
+                            (
+                                dt,
+                                title,
+                                text[
+                                    max(0, m.start() - 40) : min(
+                                        len(text), m.end() + 40
+                                    )
+                                ].strip(),
+                            )
+                        )
                         matched_intervals.append((m.start(), m.end()))
                     except ValueError:
                         pass
@@ -99,7 +170,17 @@ class TemporalAnalyzer:
                         month = MONTHS_MAP.get(month_name, 1)
                         year = int(m.group(2))
                         dt = datetime(year, month, 1)
-                        timeline.append((dt, title, text[max(0, m.start()-40):min(len(text), m.end()+40)].strip()))
+                        timeline.append(
+                            (
+                                dt,
+                                title,
+                                text[
+                                    max(0, m.start() - 40) : min(
+                                        len(text), m.end() + 40
+                                    )
+                                ].strip(),
+                            )
+                        )
                         matched_intervals.append((m.start(), m.end()))
                     except ValueError:
                         pass
@@ -122,15 +203,23 @@ class TemporalAnalyzer:
                     year_val = int(m.group(1))
 
                     # Garante que não é parte de uma versão (como "v1.2024" ou "2024.1")
-                    if start_idx > 0 and text[start_idx-1] in (".", "v", "V"):
+                    if start_idx > 0 and text[start_idx - 1] in (".", "v", "V"):
                         continue
                     if end_idx < len(text) and text[end_idx] == ".":
                         # Só descarta se o caractere depois do ponto for dígito (ex: 2026.1)
-                        if end_idx + 1 < len(text) and text[end_idx+1].isdigit():
+                        if end_idx + 1 < len(text) and text[end_idx + 1].isdigit():
                             continue
 
                     dt = datetime(year_val, 1, 1)
-                    timeline.append((dt, title, text[max(0, m.start()-30):min(len(text), m.end()+30)].strip()))
+                    timeline.append(
+                        (
+                            dt,
+                            title,
+                            text[
+                                max(0, m.start() - 30) : min(len(text), m.end() + 30)
+                            ].strip(),
+                        )
+                    )
 
         # Remove duplicados exatos (mesma data, projeto e descrição próxima)
         seen = set()
@@ -150,7 +239,9 @@ class TemporalAnalyzer:
         unique_timeline.sort(key=lambda x: x[0])
         return unique_timeline
 
-    def compute_histogram(self, timeline: list[tuple[datetime, str, str]]) -> dict[str, int]:
+    def compute_histogram(
+        self, timeline: list[tuple[datetime, str, str]]
+    ) -> dict[str, int]:
         """
         Agrupa os eventos em um histograma por ano (ou YYYY-MM se o intervalo for muito curto).
         Retorna dicionário { "YYYY": contagem } ordenado por ano.
@@ -159,7 +250,7 @@ class TemporalAnalyzer:
         for dt, _, _ in timeline:
             key = str(dt.year)
             histogram[key] = histogram.get(key, 0) + 1
-        
+
         # Ordena por ano string
         return dict(sorted(histogram.items()))
 
@@ -194,7 +285,9 @@ class TemporalAnalyzer:
         else:
             normalized_slope = slope
 
-        logger.debug(f"Trend detection: slope={slope:.4f}, normalized={normalized_slope:.4f}")
+        logger.debug(
+            f"Trend detection: slope={slope:.4f}, normalized={normalized_slope:.4f}"
+        )
 
         # Limiares de classificação
         if normalized_slope > 0.08:
@@ -214,7 +307,7 @@ class TemporalAnalyzer:
 
         histogram = self.compute_histogram(timeline)
         trend = self.detect_trend(histogram)
-        
+
         trend_badges = {
             "crescente": "📈 **Tendência Crescente (Alta de Interesse / Atividade)**",
             "decrescente": "📉 **Tendência Decrescente (Queda de Interesse / Atividade)**",
@@ -252,11 +345,17 @@ class TemporalAnalyzer:
         for dt, proj, desc in timeline[:10]:
             clean_desc = desc.replace("\n", " ").strip()
             # Destaca datas
-            date_str = dt.strftime("%d/%m/%Y") if dt.day != 1 or dt.month != 1 else str(dt.year)
+            date_str = (
+                dt.strftime("%d/%m/%Y")
+                if dt.day != 1 or dt.month != 1
+                else str(dt.year)
+            )
             lines.append(f"- **{date_str}** — *{proj}*: ... {clean_desc} ...")
 
         if len(timeline) > 10:
-            lines.append(f"\n*(Mais {len(timeline) - 10} referências temporais ocultadas para concisão)*")
+            lines.append(
+                f"\n*(Mais {len(timeline) - 10} referências temporais ocultadas para concisão)*"
+            )
 
         lines.append("")
         return "\n".join(lines)

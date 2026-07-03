@@ -32,11 +32,14 @@ logger = logging.getLogger("migration_v1_to_v2")
 # ─── Defaults ────────────────────────────────────────────────────────────────
 
 DEFAULT_V1_DB = os.environ.get("RESEARCH_MEMORY_DB", "reports/.research_memory.db")
-DEFAULT_V2_DB = os.environ.get("RESEARCH_MEMORY_DB_V2", "reports/.research_memory_v2.db")
-DEFAULT_KUZU  = os.environ.get("KUZU_DATA_PATH", "kuzu_data")
+DEFAULT_V2_DB = os.environ.get(
+    "RESEARCH_MEMORY_DB_V2", "reports/.research_memory_v2.db"
+)
+DEFAULT_KUZU = os.environ.get("KUZU_DATA_PATH", "kuzu_data")
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
 
 def _connect_v1(v1_db: str) -> sqlite3.Connection:
     """Abre o banco v1 em modo SOMENTE LEITURA."""
@@ -124,7 +127,9 @@ def _run_migration(
     v1_conn.close()
 
     if dry_run:
-        logger.info(f"[DRY-RUN] Migração simulada: {len(records)} registros seriam migrados.")
+        logger.info(
+            f"[DRY-RUN] Migração simulada: {len(records)} registros seriam migrados."
+        )
         return {"total": len(records), "migrated": 0, "errors": 0, "dry_run": True}
 
     # 3. Instancia a v2 com paths explícitos
@@ -142,7 +147,9 @@ def _run_migration(
             )
             migrated += 1
             if migrated % 50 == 0:
-                logger.info(f"Progresso: {migrated}/{len(records)} registros migrados...")
+                logger.info(
+                    f"Progresso: {migrated}/{len(records)} registros migrados..."
+                )
         except Exception as e:
             v1_id = record["metadata"].get("_v1_id", "?")
             msg = f"ERRO ao migrar v1_id={v1_id}: {e}"
@@ -174,14 +181,23 @@ def _run_migration(
 
 # ─── Entry Point ─────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Migração OrvixMemory v1 (SQLite puro) → OrvixMemoryV2 (RAG Híbrido)"
     )
-    parser.add_argument("--v1-db",    default=DEFAULT_V1_DB,  help="Caminho do banco SQLite v1")
-    parser.add_argument("--v2-db",    default=DEFAULT_V2_DB,  help="Caminho destino do banco SQLite v2")
-    parser.add_argument("--kuzu-dir", default=DEFAULT_KUZU,   help="Diretório do KuzuDB v2")
-    parser.add_argument("--dry-run",  action="store_true",    help="Simula a migração sem escrever")
+    parser.add_argument(
+        "--v1-db", default=DEFAULT_V1_DB, help="Caminho do banco SQLite v1"
+    )
+    parser.add_argument(
+        "--v2-db", default=DEFAULT_V2_DB, help="Caminho destino do banco SQLite v2"
+    )
+    parser.add_argument(
+        "--kuzu-dir", default=DEFAULT_KUZU, help="Diretório do KuzuDB v2"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Simula a migração sem escrever"
+    )
     args = parser.parse_args()
 
     if not Path(args.v1_db).exists():
@@ -213,7 +229,9 @@ def main() -> None:
     if not report.get("dry_run") and report.get("errors", 0) == 0:
         logger.info("✅ Migração concluída com SUCESSO — zero erros.")
     elif report.get("errors", 0) > 0:
-        logger.warning(f"⚠️  Migração concluída com {report['errors']} erro(s). Verifique migration_errors.log")
+        logger.warning(
+            f"⚠️  Migração concluída com {report['errors']} erro(s). Verifique migration_errors.log"
+        )
 
 
 if __name__ == "__main__":

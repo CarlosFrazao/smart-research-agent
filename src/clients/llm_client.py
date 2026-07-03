@@ -9,14 +9,23 @@ Ordem de failover ao receber 429 / 503 / RateLimitError:
 
 O provider ativo é determinado por LLM_PROVIDER no .env.
 Se ele falhar com rate-limit, a cadeia acima é tentada automaticamente.
+
+Retry com backoff exponencial:
+  Antes de acionar o failover, tenta até RATE_LIMIT_MAX_RETRIES vezes
+  com espera progressiva (1s, 2s, 4s) para absorver picos transitórios de 429.
 """
 
+import asyncio
 import json
 import logging
 from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ── Retry com backoff exponencial antes de acionar failover ───────────────────
+RATE_LIMIT_MAX_RETRIES: int = 3
+RATE_LIMIT_INITIAL_WAIT_S: float = 1.0  # 1s, 2s, 4s
 
 # ── Códigos / mensagens que indicam rate-limit ou indisponibilidade ──────────
 _RATE_LIMIT_CODES = {429, 503, 529}
@@ -39,6 +48,20 @@ def _is_rate_limit(exc: Exception) -> bool:
     # openai.RateLimitError / openai.APIStatusError têm .status_code
     code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
     return code in _RATE_LIMIT_CODES
+
+
+_DAILY_QUOTA_MESSAGES = (
+    "free-models-per-day",
+    "daily limit",
+    "quota exceeded",
+    "free model requests",
+)
+
+
+def _is_daily_quota(exc: Exception) -> bool:
+    """Retorna True se é cota diária esgotada (sem retry, ir direto ao failover)."""
+    msg = str(exc).lower()
+    return any(kw in msg for kw in _DAILY_QUOTA_MESSAGES)
 
 
 class LLMProvider(StrEnum):
@@ -69,10 +92,12 @@ class LLMClient:
         self._init_providers_safely()
         self._init_client()
         from src.token_economy import TokenEconomy
+
         self.token_economy = TokenEconomy(default_model=self.model)
 
     def _init_providers_safely(self) -> None:
         import importlib
+
         PROVIDER_MAP = [
             ("openrouter", "openai", "api_key"),
             ("anthropic", "anthropic", "api_key"),
@@ -93,22 +118,24 @@ class LLMClient:
             except Exception as e:
                 logger.error(f"Provider {name} falhou: {e}")
 
-
     # ── Inicialização ─────────────────────────────────────────────────────────
 
     def _init_client(self):
         if self.provider == LLMProvider.ANTHROPIC:
             import anthropic
+
             self._client = anthropic.AsyncAnthropic(api_key=self.config.get("api_key"))
             self.model = self.config.get("model", "claude-sonnet-4-20250514")
 
         elif self.provider == LLMProvider.OPENAI:
             import openai
+
             self._client = openai.AsyncOpenAI(api_key=self.config.get("api_key"))
             self.model = self.config.get("model", "gpt-4.1")
 
         elif self.provider == LLMProvider.OPENROUTER:
             import openai
+
             self._client = openai.AsyncOpenAI(
                 api_key=self.config.get("api_key"),
                 base_url="https://openrouter.ai/api/v1",
@@ -118,6 +145,7 @@ class LLMClient:
         elif self.provider == LLMProvider.GROQ:
             try:
                 from groq import AsyncGroq
+
                 self._client = AsyncGroq(api_key=self.config.get("api_key"))
             except ImportError:
                 logger.warning("groq SDK não instalado. Groq indisponível.")
@@ -126,6 +154,7 @@ class LLMClient:
 
         elif self.provider == LLMProvider.OLLAMA:
             import openai
+
             self._client = openai.AsyncOpenAI(
                 base_url=f"{self.config.get('base_url', 'http://localhost:11434')}/v1",
                 api_key=self.config.get("api_key") or "ollama-local",
@@ -135,6 +164,7 @@ class LLMClient:
         elif self.provider == LLMProvider.GEMINI:
             try:
                 from google import genai
+
                 self._client = genai.Client(api_key=self.config.get("api_key"))
             except ImportError:
                 logger.warning("google-genai não instalado. Gemini indisponível.")
@@ -149,17 +179,41 @@ class LLMClient:
     async def generate(
         self, prompt: str, temperature: float = 0.3, max_tokens: int = 4000
     ) -> str:
-        """Tenta o provider atual; em caso de rate-limit, percorre a cadeia de fallback."""
-        try:
-            return await self._generate_raw(prompt, temperature, max_tokens)
-        except Exception as exc:
-            if _is_rate_limit(exc):
-                logger.warning(
-                    f"[Failover] {self.provider.value} retornou rate-limit: {exc}. "
-                    "Tentando próximo provider..."
-                )
-                return await self._failover_generate(prompt, temperature, max_tokens, skip=self.provider)
-            raise
+        """Tenta o provider atual com retry de backoff; em caso de rate-limit persistente, aciona failover."""
+        last_exc: Exception | None = None
+        wait = RATE_LIMIT_INITIAL_WAIT_S
+
+        for attempt in range(1, RATE_LIMIT_MAX_RETRIES + 1):
+            try:
+                return await self._generate_raw(prompt, temperature, max_tokens)
+            except Exception as exc:
+                if _is_daily_quota(exc):
+                    logger.warning(
+                        f"[QuotaDiária] {self.provider.value} esgotou cota diária. "
+                        "Acionando cadeia de failover imediatamente..."
+                    )
+                    break
+                elif _is_rate_limit(exc):
+                    last_exc = exc
+                    if attempt < RATE_LIMIT_MAX_RETRIES:
+                        logger.warning(
+                            f"[RateLimit] {self.provider.value} — tentativa {attempt}/{RATE_LIMIT_MAX_RETRIES}. "
+                            f"Aguardando {wait:.0f}s antes de retry..."
+                        )
+                        await asyncio.sleep(wait)
+                        wait *= 2
+                    else:
+                        logger.warning(
+                            f"[Failover] {self.provider.value} esgotou {RATE_LIMIT_MAX_RETRIES} tentativas. "
+                            "Acionando cadeia de failover..."
+                        )
+                else:
+                    raise
+
+        # Todos os retries esgotados — acionar failover
+        return await self._failover_generate(
+            prompt, temperature, max_tokens, skip=self.provider
+        )
 
     async def _generate_raw(
         self, prompt: str, temperature: float, max_tokens: int
@@ -174,7 +228,11 @@ class LLMClient:
             )
             return response.content[0].text
 
-        elif self.provider in (LLMProvider.OPENAI, LLMProvider.OPENROUTER, LLMProvider.OLLAMA):
+        elif self.provider in (
+            LLMProvider.OPENAI,
+            LLMProvider.OPENROUTER,
+            LLMProvider.OLLAMA,
+        ):
             response = await self._client.chat.completions.create(
                 model=self.model,
                 temperature=temperature,
@@ -198,6 +256,7 @@ class LLMClient:
             if not self._client:
                 raise RuntimeError("Gemini SDK não instalado")
             from google.genai import types as genai_types
+
             response = await self._client.aio.models.generate_content(
                 model=self.model,
                 contents=prompt,
@@ -242,9 +301,13 @@ class LLMClient:
                 return result
             except Exception as exc:
                 if _is_rate_limit(exc):
-                    logger.warning(f"[Failover] {provider_name} também com rate-limit: {exc}. Continuando...")
+                    logger.warning(
+                        f"[Failover] {provider_name} também com rate-limit: {exc}. Continuando..."
+                    )
                 else:
-                    logger.warning(f"[Failover] {provider_name} falhou: {exc}. Continuando...")
+                    logger.warning(
+                        f"[Failover] {provider_name} falhou: {exc}. Continuando..."
+                    )
 
         logger.error("[Failover] Todos os providers falharam. Retornando string vazia.")
         return ""
@@ -260,6 +323,7 @@ class LLMClient:
         """Cria um client temporário para o provider de fallback e executa a chamada."""
         if provider in (LLMProvider.OPENROUTER, LLMProvider.OPENAI, LLMProvider.OLLAMA):
             import openai
+
             if provider == LLMProvider.OPENROUTER:
                 client = openai.AsyncOpenAI(
                     api_key=cfg["api_key"],
@@ -285,6 +349,7 @@ class LLMClient:
 
         elif provider == LLMProvider.GROQ:
             from groq import AsyncGroq
+
             client = AsyncGroq(api_key=cfg["api_key"])
             model = cfg.get("model", "llama-3.3-70b-versatile")
             resp = await client.chat.completions.create(
@@ -298,6 +363,7 @@ class LLMClient:
         elif provider == LLMProvider.GEMINI:
             from google import genai
             from google.genai import types as genai_types
+
             client = genai.Client(api_key=cfg["api_key"])
             model = cfg.get("model", "gemini-2.5-flash")
             resp = await client.aio.models.generate_content(
@@ -328,7 +394,7 @@ class LLMClient:
         response = response.strip()
         for fence in ("```json", "```"):
             if response.startswith(fence):
-                response = response[len(fence):]
+                response = response[len(fence) :]
         if response.endswith("```"):
             response = response[:-3]
         response = response.strip()
@@ -347,22 +413,29 @@ class LLMClient:
     ) -> str:
         """
         High-level completion que seleciona o modelo via SmartModelRouter.
-        Inclui failover automático em caso de rate-limit.
+        Inclui failover automático e retry com backoff em caso de rate-limit.
         """
-        target_model = model_override
-        if not target_model:
-            if self.model_router is not None:
-                provider_name = self.provider.value
-                target_model = self.model_router.route(task_type, provider_name)
-            else:
-                target_model = self.model
+        target_model: str = model_override or self.model
+        if not model_override and self.model_router is not None:
+            provider_name = self.provider.value
+            decision = self.model_router.route(task_type, provider_name)
+            # Extrai o model_id do RoutingDecision (string), não o objeto inteiro
+            target_model = (
+                decision.model_id if hasattr(decision, "model_id") else str(decision)
+            )
+            logger.debug(
+                f"SmartModelRouter: task={task_type} → model={target_model} "
+                f"tier={getattr(decision, 'tier', '?')} score={getattr(decision, 'score', '?')}"
+            )
 
         # Verifica budget
         if not self.token_economy.check_budget(prompt, target_model):
             logger.warning(
                 f"TokenEconomy: Budget excedido para modelo {target_model}. Usando fallback Groq/Ollama."
             )
-            return await self._failover_generate(prompt, temperature, max_tokens, skip=LLMProvider("__none__"))
+            return await self._failover_generate(
+                prompt, temperature, max_tokens, skip=LLMProvider("__none__")
+            )
 
         # Aplica truncamento inteligente
         truncated_prompt = self.token_economy.smart_truncate(
@@ -370,27 +443,18 @@ class LLMClient:
         )
 
         response = ""
-        if model_override:
-            original_model = self.model
-            self.model = model_override
-            try:
-                response = await self.generate(truncated_prompt, temperature=temperature, max_tokens=max_tokens)
-            finally:
-                self.model = original_model
-        elif self.model_router is not None:
-            provider_name = self.provider.value
-            routed_model = self.model_router.route(task_type, provider_name)
-            original_model = self.model
-            self.model = routed_model
-            try:
-                response = await self.generate(
-                    truncated_prompt, temperature=temperature, max_tokens=max_tokens
-                )
-            finally:
-                self.model = original_model
-            logger.debug(f"LLMClient.complete: task={task_type} routed to {routed_model}")
-        else:
-            response = await self.generate(truncated_prompt, temperature=temperature, max_tokens=max_tokens)
+        original_model = self.model
+        self.model = target_model
+        try:
+            response = await self.generate(
+                truncated_prompt, temperature=temperature, max_tokens=max_tokens
+            )
+        finally:
+            self.model = original_model
+        logger.debug(
+            f"LLMClient.complete: task={task_type} model={target_model} "
+            f"chars_in={len(truncated_prompt)} chars_out={len(response)}"
+        )
 
         # Registra uso de tokens
         input_tokens = self.token_economy.count_tokens(truncated_prompt, target_model)
@@ -419,7 +483,12 @@ class LLMClient:
         Compatível com SSE via FastAPI StreamingResponse.
         """
         # Providers que suportam streaming nativo via openai SDK
-        if self.provider in (LLMProvider.OPENAI, LLMProvider.OPENROUTER, LLMProvider.OLLAMA, LLMProvider.GROQ):
+        if self.provider in (
+            LLMProvider.OPENAI,
+            LLMProvider.OPENROUTER,
+            LLMProvider.OLLAMA,
+            LLMProvider.GROQ,
+        ):
             try:
                 client = self._client
                 if self.provider == LLMProvider.GROQ and not client:
@@ -437,7 +506,9 @@ class LLMClient:
                         yield delta
                 return
             except Exception as exc:
-                logger.warning(f"[complete_stream] Streaming nativo falhou: {exc}. Usando fallback chunked.")
+                logger.warning(
+                    f"[complete_stream] Streaming nativo falhou: {exc}. Usando fallback chunked."
+                )
 
         # Anthropic streaming
         if self.provider == LLMProvider.ANTHROPIC:
@@ -451,12 +522,15 @@ class LLMClient:
                         yield text
                 return
             except Exception as exc:
-                logger.warning(f"[complete_stream] Anthropic stream falhou: {exc}. Usando fallback chunked.")
+                logger.warning(
+                    f"[complete_stream] Anthropic stream falhou: {exc}. Usando fallback chunked."
+                )
 
         # Gemini streaming
         if self.provider == LLMProvider.GEMINI and self._client:
             try:
                 from google.genai import types as genai_types
+
                 response = await self._client.aio.models.generate_content(
                     model=model_override or self.model,
                     contents=prompt,
@@ -472,22 +546,28 @@ class LLMClient:
                     yield text[i : i + chunk_size]
                 return
             except Exception as exc:
-                logger.warning(f"[complete_stream] Gemini stream falhou: {exc}. Usando fallback chunked.")
+                logger.warning(
+                    f"[complete_stream] Gemini stream falhou: {exc}. Usando fallback chunked."
+                )
 
         # Fallback universal: complete() normal, chunked sem sleep
         full_response = await self.complete(
-            prompt, task_type=task_type, model_override=model_override,
-            temperature=temperature, max_tokens=max_tokens
+            prompt,
+            task_type=task_type,
+            model_override=model_override,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         chunk_size = 80
         for i in range(0, len(full_response), chunk_size):
             yield full_response[i : i + chunk_size]
 
-
-
-    async def _fallback_to_ollama(self, prompt: str, temperature: float, max_tokens: int) -> str:
+    async def _fallback_to_ollama(
+        self, prompt: str, temperature: float, max_tokens: int
+    ) -> str:
         try:
             import openai
+
             client = openai.AsyncOpenAI(
                 base_url="http://host.docker.internal:11434/v1",
                 api_key="ollama-local",

@@ -5,6 +5,7 @@ Simula comportamento humano completo com fingerprint camuflado.
 Custo: ~500ms-3s por página. Use apenas como fallback de último recurso.
 O browser é inicializado apenas na primeira chamada (lazy init) e reutilizado entre requests.
 """
+
 import asyncio
 import logging
 import random
@@ -28,6 +29,11 @@ class PlaywrightSearcher(BaseSearcher):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self._browser = None
         self._playwright = None
@@ -38,6 +44,7 @@ class PlaywrightSearcher(BaseSearcher):
         """Inicia o browser apenas na primeira chamada (lazy init)."""
         if self._browser is None:
             from playwright.async_api import async_playwright
+
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(
                 headless=self._headless,
@@ -50,7 +57,7 @@ class PlaywrightSearcher(BaseSearcher):
                     "--disable-background-networking",
                     "--disable-extensions",
                     "--disable-default-apps",
-                ]
+                ],
             )
         return self._browser
 
@@ -86,6 +93,7 @@ class PlaywrightSearcher(BaseSearcher):
         page = None
         try:
             from playwright_stealth import Stealth
+
             page = await context.new_page()
             await Stealth().apply_stealth_async(page)
 
@@ -120,14 +128,16 @@ class PlaywrightSearcher(BaseSearcher):
         if not html:
             return []
 
-        return [SearchResult(
-            source="playwright",
-            title=f"Playwright: {url}",
-            url=url,
-            description=html[:5000],   # captura os primeiros 5KB de conteúdo
-            metrics={},
-            raw={"html": html},
-        )]
+        return [
+            SearchResult(
+                source="playwright",
+                title=f"Playwright: {url}",
+                url=url,
+                description=html[:5000],  # captura os primeiros 5KB de conteúdo
+                metrics={},
+                raw={"html": html},
+            )
+        ]
 
     def normalize(self, raw_result: Any) -> SearchResult:
         """Normalização básica para compatibilidade com BaseSearcher."""

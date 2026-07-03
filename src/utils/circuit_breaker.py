@@ -2,6 +2,7 @@
 Circuit Breaker — Desliga automaticamente fontes que falham repetidamente.
 Estados: CLOSED (normal) → OPEN (desligado) → HALF_OPEN (testando recuperação)
 """
+
 import asyncio
 import logging
 import time
@@ -12,13 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 class CircuitState(Enum):
-    CLOSED = "closed"        # Operação normal
-    OPEN = "open"            # Desligado — não chamar
+    CLOSED = "closed"  # Operação normal
+    OPEN = "open"  # Desligado — não chamar
     HALF_OPEN = "half_open"  # Testando se voltou
 
 
 class CircuitBreakerOpen(Exception):
     """Circuit breaker está aberto — serviço temporariamente indisponível."""
+
     pass
 
 
@@ -67,7 +69,9 @@ class CircuitBreaker:
 
             if self.state == CircuitState.HALF_OPEN:
                 if self.half_open_calls >= self.half_open_max_calls:
-                    raise CircuitBreakerOpen(f"Circuit '{self.name}': limite half_open atingido")
+                    raise CircuitBreakerOpen(
+                        f"Circuit '{self.name}': limite half_open atingido"
+                    )
                 self.half_open_calls += 1
 
         try:
@@ -95,10 +99,14 @@ class CircuitBreaker:
             self.last_failure_time = time.time()
             if self.state == CircuitState.HALF_OPEN:
                 self.state = CircuitState.OPEN
-                logger.warning(f"Circuit {self.name}: HALF_OPEN → OPEN (falha no teste)")
+                logger.warning(
+                    f"Circuit {self.name}: HALF_OPEN → OPEN (falha no teste)"
+                )
             elif self.failure_count >= self.failure_threshold:
                 self.state = CircuitState.OPEN
-                logger.warning(f"Circuit {self.name}: CLOSED → OPEN após {self.failure_count} falhas")
+                logger.warning(
+                    f"Circuit {self.name}: CLOSED → OPEN após {self.failure_count} falhas"
+                )
 
     def reset(self) -> None:
         """Reset completo do circuit breaker (uso em testes ou admin)."""

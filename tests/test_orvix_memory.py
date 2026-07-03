@@ -1,6 +1,7 @@
 """
 Testes unificados para a OrvixMemory (RAG Híbrido avançado SQLite + ChromaDB + KuzuDB)
 """
+
 import pytest
 import os
 import uuid
@@ -26,8 +27,7 @@ def temp_memory():
     # Substitui a coleção ChromaDB pelo nome único para isolamento total
     try:
         memory.chroma_collection = memory.chroma_client.get_or_create_collection(
-            name=test_collection,
-            metadata={"hnsw:space": "cosine"}
+            name=test_collection, metadata={"hnsw:space": "cosine"}
         )
     except Exception:
         pass  # Fallback: cliente efêmero já está isolado
@@ -57,6 +57,7 @@ def temp_memory():
 # Testes do Schema e Stats
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_creates_db_file(temp_memory):
     assert Path(temp_memory._db_path).exists()
 
@@ -71,6 +72,7 @@ def test_stats_empty_db(temp_memory):
 # ─────────────────────────────────────────────────────────────────────────────
 # Testes de Add (Inserção)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_add_returns_id(temp_memory):
     id_ = temp_memory.add("Claude AI is a language model")
@@ -106,6 +108,7 @@ def test_add_links_entities(temp_memory):
 # Testes de Delete
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_delete_removes_record(temp_memory):
     id_ = temp_memory.add("To be deleted")
     temp_memory.delete(id_)
@@ -120,6 +123,7 @@ def test_delete_nonexistent_no_error(temp_memory):
 # Testes de Search (Busca RRF)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_search_empty_returns_empty(temp_memory):
     result = temp_memory.search("anything")
     assert isinstance(result, MemorySearchResult)
@@ -129,21 +133,27 @@ def test_search_empty_returns_empty(temp_memory):
 def test_search_bm25_finds_relevant(temp_memory):
     temp_memory.add("n8n is a workflow automation tool", metadata={"source": "test"})
     temp_memory.add("HubSpot is a CRM platform", metadata={"source": "test"})
-    result = temp_memory.search("workflow automation", use_bm25=True, use_vector=False, use_graph=False)
+    result = temp_memory.search(
+        "workflow automation", use_bm25=True, use_vector=False, use_graph=False
+    )
     assert len(result.entries) >= 1
     assert any("n8n" in e.content for e in result.entries)
 
 
 def test_search_bm25_mode_reported(temp_memory):
     temp_memory.add("n8n workflow automation")
-    result = temp_memory.search("workflow", use_bm25=True, use_vector=False, use_graph=False)
+    result = temp_memory.search(
+        "workflow", use_bm25=True, use_vector=False, use_graph=False
+    )
     if result.entries:
         assert "bm25" in result.modes_used
 
 
 def test_search_graph_finds_entity_overlap(temp_memory):
     temp_memory.add("Twenty CRM integrates with GitHub for issue tracking")
-    result = temp_memory.search("Twenty CRM", use_bm25=False, use_vector=False, use_graph=True)
+    result = temp_memory.search(
+        "Twenty CRM", use_bm25=False, use_vector=False, use_graph=True
+    )
     assert isinstance(result, MemorySearchResult)
 
 
@@ -156,7 +166,9 @@ def test_search_top_k_respected(temp_memory):
 
 def test_search_returns_memory_entry_type(temp_memory):
     temp_memory.add("Test content here")
-    result = temp_memory.search("test", use_bm25=True, use_vector=False, use_graph=False)
+    result = temp_memory.search(
+        "test", use_bm25=True, use_vector=False, use_graph=False
+    )
     if result.entries:
         e = result.entries[0]
         assert isinstance(e, MemoryEntry)
@@ -175,6 +187,7 @@ def test_search_vector_disabled_graceful(temp_memory):
 # ─────────────────────────────────────────────────────────────────────────────
 # Testes de Context e Store
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_get_context_empty_returns_empty_string(temp_memory):
     assert temp_memory.get_context("anything") == ""
@@ -218,6 +231,7 @@ def test_store_truncates_top_entities_to_5(temp_memory):
     with temp_memory._conn() as conn:
         row = conn.execute("SELECT metadata FROM memories").fetchone()
         import json
+
         meta = json.loads(row["metadata"])
         assert len(meta["top_entities"]) <= 5
 
@@ -233,6 +247,7 @@ def test_store_metadata_fields(temp_memory):
     with temp_memory._conn() as conn:
         row = conn.execute("SELECT metadata FROM memories").fetchone()
         import json
+
         meta = json.loads(row["metadata"])
         assert meta["type"] == "research_result"
         assert meta["domain"] == "saas_b2b"
@@ -247,7 +262,9 @@ def test_store_result_searchable_after(temp_memory):
         top_entities=["n8n"],
         domain="automation",
     )
-    result = temp_memory.search("workflow automation n8n", use_bm25=True, use_vector=False, use_graph=False)
+    result = temp_memory.search(
+        "workflow automation n8n", use_bm25=True, use_vector=False, use_graph=False
+    )
     assert len(result.entries) >= 1
 
 
@@ -255,17 +272,18 @@ def test_store_result_searchable_after(temp_memory):
 # Testes Evolutivos da V2
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_orvix_memory_v2_add_and_stats(temp_memory):
     """Verifica inserção nos 3 backends e contagem de estatísticas."""
     memory = temp_memory
 
     id1 = memory.add(
         content="Python is an amazing language created by Guido van Rossum.",
-        metadata={"category": "language"}
+        metadata={"category": "language"},
     )
     id2 = memory.add(
         content="Postgres is a relational database developed by Michael Stonebraker.",
-        metadata={"category": "database"}
+        metadata={"category": "database"},
     )
 
     assert id1 > 0
@@ -287,8 +305,7 @@ def test_orvix_memory_v2_search_rrf(temp_memory):
     memory.add("Kubernetes is used to orchestrate Docker services at scale.")
 
     result = memory.search(
-        "Docker", top_k=5,
-        use_bm25=True, use_vector=True, use_graph=True
+        "Docker", top_k=5, use_bm25=True, use_vector=True, use_graph=True
     )
 
     assert len(result.entries) >= 1

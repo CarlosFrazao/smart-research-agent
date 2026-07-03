@@ -2,6 +2,7 @@
 Retry com exponential backoff e jitter aleatório.
 Uso como decorator: @with_retry(RetryConfig(max_retries=3))
 """
+
 import asyncio
 import logging
 import random
@@ -43,7 +44,7 @@ def with_retry(config: RetryConfig = None):
                     if attempt == config.max_retries:
                         break
                     delay = min(
-                        config.base_delay * (config.exponential_base ** attempt),
+                        config.base_delay * (config.exponential_base**attempt),
                         config.max_delay,
                     )
                     if config.jitter:
@@ -54,5 +55,7 @@ def with_retry(config: RetryConfig = None):
                     )
                     await asyncio.sleep(delay)
             raise last_exc
+
         return async_wrapper
+
     return decorator

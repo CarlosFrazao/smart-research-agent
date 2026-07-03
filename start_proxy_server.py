@@ -2,14 +2,18 @@
 Script de inicialização do ProxyServer local na porta 3017.
 Inicia o servidor IMEDIATAMENTE e depois colhe proxies em background.
 """
+
 import asyncio
 import logging
 import sys
 
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 from proxy_manager import ProxyManager, ProxyServer
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
 
 async def main():
     manager = ProxyManager()
@@ -34,6 +38,7 @@ async def main():
 
     # Mantém o servidor vivo indefinidamente
     await asyncio.Event().wait()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

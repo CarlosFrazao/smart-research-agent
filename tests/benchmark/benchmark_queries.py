@@ -3,11 +3,13 @@ Benchmark E2E do Smart Research Agent.
 Requer API keys reais configuradas no .env para rodar com dados reais.
 Use --mock para rodar em modo simulado (padrao para CI).
 """
+
 import asyncio
 import time
 import sys
 import os
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 BENCHMARK_QUERIES = [
@@ -36,14 +38,23 @@ async def run_benchmark(mock: bool = False):
                 title=f"tool/{src}-project-{i}",
                 url=f"https://github.com/{src}/project{i}",
                 description=f"Amazing open source tool {i} for your needs",
-                metrics={"stars": 5000 + i * 1000, "forks": 500, "language": "Python",
-                         "updated_at": "2026-01-01", "license": "MIT"},
+                metrics={
+                    "stars": 5000 + i * 1000,
+                    "forks": 500,
+                    "language": "Python",
+                    "updated_at": "2026-01-01",
+                    "license": "MIT",
+                },
             )
             for i, src in enumerate(["github", "reddit", "hackernews", "awesome"] * 4)
         ]
         orchestrator._parallel_search = AsyncMock(return_value=mock_results)
-        orchestrator.llm.generate = AsyncMock(return_value="Sumario executivo de benchmark.")
-        orchestrator.llm.generate_structured = AsyncMock(side_effect=Exception("Mock mode"))
+        orchestrator.llm.generate = AsyncMock(
+            return_value="Sumario executivo de benchmark."
+        )
+        orchestrator.llm.generate_structured = AsyncMock(
+            side_effect=Exception("Mock mode")
+        )
 
     results = []
 
@@ -59,20 +70,31 @@ async def run_benchmark(mock: bool = False):
             has_recommendation = "Recomendacao" in report
             has_projects = "2.1" in report or "2.2" in report
 
-            results.append({
-                "query": query,
-                "duration": duration,
-                "success": True,
-                "has_table": has_table,
-                "has_recommendation": has_recommendation,
-                "has_projects": has_projects,
-                "report_length": len(report),
-            })
-            print(f"  OK {round(duration, 1)}s | {len(report)} chars | table={has_table} reco={has_recommendation}")
+            results.append(
+                {
+                    "query": query,
+                    "duration": duration,
+                    "success": True,
+                    "has_table": has_table,
+                    "has_recommendation": has_recommendation,
+                    "has_projects": has_projects,
+                    "report_length": len(report),
+                }
+            )
+            print(
+                f"  OK {round(duration, 1)}s | {len(report)} chars | table={has_table} reco={has_recommendation}"
+            )
 
         except Exception as e:
             duration = time.time() - start
-            results.append({"query": query, "duration": duration, "success": False, "error": str(e)})
+            results.append(
+                {
+                    "query": query,
+                    "duration": duration,
+                    "success": False,
+                    "error": str(e),
+                }
+            )
             print(f"  ERRO {round(duration, 1)}s | {e}")
 
     print("\n" + "=" * 60)

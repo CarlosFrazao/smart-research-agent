@@ -1,3 +1,10 @@
+"""Planejador de fontes de busca por dominio e intencao do usuario.
+
+Mapeia o domínio detectado pela análise de intenção para listas prioritizadas
+de searchers primarios e secundários, e distribui as queries expandidas
+entre os searchers mais compativel com cada tipo de busca.
+"""
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -39,15 +46,31 @@ DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
 
 
 class SourcePlanner:
+    """Planeja a distribuição de buscas entre searchers com base no dominio.
+
+    Usa um mapa de domínio-fontes (via `domains.yaml` ou embutido) para
+    determinar quais searchers são primários e secundários para cada
+    tipo de pesquisa detectado pelo `IntentAnalyzer`.
+    """
+
     def __init__(self, config: dict[str, Any] = None):
         self.config = config or {}
         self.domain_map = self._load_domain_map()
 
     def _load_domain_map(self) -> dict:
+        """Carrega o mapeamento de dominios para fontes do arquivo YAML de config.
+
+        Tenta ler de ``config/domains.yaml`` relativo ao projeto. Em caso de
+        falha (arquivo ausente ou YAML inválido), usa `DOMAIN_SOURCES` embutido.
+
+        Returns:
+            dict: Mapa de dominio -> {primary: [...], secondary: [...]}.
+        """
         config_path = Path(__file__).parent.parent / "config" / "domains.yaml"
         if config_path.exists():
             try:
                 import yaml
+
                 with open(config_path, encoding="utf-8") as f:
                     data = yaml.safe_load(f)
                     return data.get("domains", DOMAIN_SOURCES)
@@ -56,6 +79,16 @@ class SourcePlanner:
         return DOMAIN_SOURCES
 
     def plan(self, intent: IntentResult, queries: list[ExpandedQuery]) -> SourcePlan:
+        """Gera um plano de buscas priorizando as fontes mais relevantes para o dominio.
+
+        Args:
+            intent: Resultado da analise de intencao contendo o dominio detectado.
+            queries: Lista de queries expandidas geradas pelo `QueryExpander`.
+
+        Returns:
+            SourcePlan: Plano com sources mapeando cada searcher as suas queries,
+                mais listas separadas de searchers primarios e secundarios.
+        """
         domain_key = intent.domain.value
         mapping = self.domain_map.get(domain_key, DOMAIN_SOURCES["general"])
 
@@ -79,7 +112,14 @@ class SourcePlanner:
         This method maps all of them to the right sources.
         """
         # Type sets that each source prefers
-        GITHUB_TYPES = {"plataforma", "qualificador", "synonym", "evidence", "temporal", "original"}
+        GITHUB_TYPES = {
+            "plataforma",
+            "qualificador",
+            "synonym",
+            "evidence",
+            "temporal",
+            "original",
+        }
         REDDIT_TYPES = {"caso_de_uso", "comparacao", "community", "perspective"}
         HN_TYPES = {"plataforma", "comparacao", "community", "perspective", "evidence"}
         ARXIV_TYPES = {"academic", "evidence", "synonym"}
@@ -87,7 +127,7 @@ class SourcePlanner:
         AWESOME_TYPES = {"qualificador", "plataforma", "synonym", "evidence"}
         STACKOVERFLOW_TYPES = {"community", "evidence", "perspective", "caso_de_uso"}
         WAYBACK_TYPES = {"temporal", "evidence", "original"}
-        WEB_TYPES = set()   # accepts everything
+        WEB_TYPES = set()  # accepts everything
         FIRECRAWL_TYPES = set()  # accepts everything
         SEARXNG_TYPES = set()  # accepts everything
 
@@ -103,7 +143,7 @@ class SourcePlanner:
             "web": WEB_TYPES,
             "firecrawl": FIRECRAWL_TYPES,
             "searxng": SEARXNG_TYPES,
-            "rss": set(),      # accepts everything — scored by keyword overlap
+            "rss": set(),  # accepts everything — scored by keyword overlap
         }
 
         accepted_types = source_type_map.get(source, set())
@@ -134,5 +174,3 @@ class SourcePlanner:
                 unique.append(q)
 
         return unique[:5]
-
-

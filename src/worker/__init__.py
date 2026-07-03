@@ -1,1 +1,1 @@
-﻿# __init__.py for worker
+# __init__.py for worker

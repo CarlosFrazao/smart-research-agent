@@ -30,6 +30,7 @@ def _make_llm(hypotheses: list | None = None) -> MagicMock:
 
 # ─── ResearchNode ────────────────────────────────────────────────────────────
 
+
 def test_research_node_defaults():
     node = ResearchNode(id="n1", query="test", hypothesis="test hyp")
     assert node.status == "pending"
@@ -41,12 +42,15 @@ def test_research_node_defaults():
 
 def test_research_node_with_children():
     child = ResearchNode(id="c1", query="child", hypothesis="child hyp", depth=1)
-    parent = ResearchNode(id="p1", query="parent", hypothesis="parent hyp", children=[child])
+    parent = ResearchNode(
+        id="p1", query="parent", hypothesis="parent hyp", children=[child]
+    )
     assert len(parent.children) == 1
     assert parent.children[0].depth == 1
 
 
 # ─── DeepResearchResult ──────────────────────────────────────────────────────
+
 
 def test_deep_research_result_fields():
     result = DeepResearchResult(
@@ -62,6 +66,7 @@ def test_deep_research_result_fields():
 
 
 # ─── _estimate_confidence ────────────────────────────────────────────────────
+
 
 def test_estimate_confidence_empty_results():
     dr = DeepResearcher(llm_client=_make_llm())
@@ -81,6 +86,7 @@ def test_estimate_confidence_capped_at_1():
 
 
 # ─── _generate_hypotheses ────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_generate_hypotheses_uses_llm():
@@ -110,6 +116,7 @@ async def test_generate_hypotheses_respects_max_branches():
 
 
 # ─── _explore_node: status transitions ───────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_explore_node_confirms_when_high_confidence():
@@ -170,6 +177,7 @@ async def test_explore_node_spawns_children_at_medium_confidence():
 
 # ─── _consolidate_tree ───────────────────────────────────────────────────────
 
+
 def test_consolidate_tree_skips_dead_ends():
     dead = ResearchNode(id="d1", query="dead", hypothesis="dead", status="dead_end")
     dead.results = [_make_result("https://dead.com")]
@@ -222,8 +230,11 @@ def test_consolidate_tree_sorted_by_confidence():
 
 # ─── _export_tree_as_markdown ────────────────────────────────────────────────
 
+
 def test_export_tree_contains_reasoning_tree_heading():
-    root = ResearchNode(id="root", query="Python ORMs", hypothesis="Python ORMs", status="confirmed")
+    root = ResearchNode(
+        id="root", query="Python ORMs", hypothesis="Python ORMs", status="confirmed"
+    )
     dr = DeepResearcher(llm_client=_make_llm())
     md = dr._export_tree_as_markdown(root)
     assert "## Reasoning Tree" in md
@@ -231,8 +242,12 @@ def test_export_tree_contains_reasoning_tree_heading():
 
 def test_export_tree_shows_status_icons():
     root = ResearchNode(id="root", query="q", hypothesis="root q", status="confirmed")
-    child_dead = ResearchNode(id="c1", query="q1", hypothesis="dead hyp", status="dead_end", depth=1)
-    child_exp = ResearchNode(id="c2", query="q2", hypothesis="explored hyp", status="explored", depth=1)
+    child_dead = ResearchNode(
+        id="c1", query="q1", hypothesis="dead hyp", status="dead_end", depth=1
+    )
+    child_exp = ResearchNode(
+        id="c2", query="q2", hypothesis="explored hyp", status="explored", depth=1
+    )
     root.children = [child_dead, child_exp]
 
     dr = DeepResearcher(llm_client=_make_llm())
@@ -244,7 +259,12 @@ def test_export_tree_shows_status_icons():
 
 
 def test_export_tree_includes_root_query():
-    root = ResearchNode(id="root", query="best Python ORMs 2026", hypothesis="best Python ORMs 2026", status="explored")
+    root = ResearchNode(
+        id="root",
+        query="best Python ORMs 2026",
+        hypothesis="best Python ORMs 2026",
+        status="explored",
+    )
     dr = DeepResearcher(llm_client=_make_llm())
     md = dr._export_tree_as_markdown(root)
     assert "best Python ORMs 2026" in md
@@ -252,9 +272,14 @@ def test_export_tree_includes_root_query():
 
 # ─── _collect_by_status ──────────────────────────────────────────────────────
 
+
 def test_collect_by_status_confirmed():
-    confirmed_child = ResearchNode(id="c1", query="q", hypothesis="confirmed hyp", status="confirmed")
-    dead_child = ResearchNode(id="c2", query="q", hypothesis="dead hyp", status="dead_end")
+    confirmed_child = ResearchNode(
+        id="c1", query="q", hypothesis="confirmed hyp", status="confirmed"
+    )
+    dead_child = ResearchNode(
+        id="c2", query="q", hypothesis="dead hyp", status="dead_end"
+    )
     root = ResearchNode(id="root", query="root", hypothesis="root", status="explored")
     root.children = [confirmed_child, dead_child]
 
@@ -267,6 +292,7 @@ def test_collect_by_status_confirmed():
 
 
 # ─── _count_nodes ────────────────────────────────────────────────────────────
+
 
 def test_count_nodes_single():
     root = ResearchNode(id="root", query="q", hypothesis="h")
@@ -286,6 +312,7 @@ def test_count_nodes_with_children():
 
 
 # ─── research() integration (no orchestrator) ────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_research_returns_deep_research_result():

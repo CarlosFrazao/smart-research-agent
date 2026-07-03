@@ -3,23 +3,27 @@ Testes do Bloco 5 — Anti-Blocking Avançado.
 Cobre: BrowserFingerprintGenerator, TLSFingerprintClient, CaptchaSolver,
 ResidentialProxyProvider, PlaywrightSearcher, e a integração no cascateamento.
 """
-import asyncio
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.config import Config
-from src.anti_blocking.browser_fingerprint import BrowserFingerprintGenerator, BROWSER_PROFILES
-from src.anti_blocking.tls_fingerprint import TLSFingerprintClient, BROWSER_IMPERSONATIONS
+from src.anti_blocking.browser_fingerprint import (
+    BrowserFingerprintGenerator,
+    BROWSER_PROFILES,
+)
+from src.anti_blocking.tls_fingerprint import TLSFingerprintClient
 from src.anti_blocking.captcha_solver import CaptchaSolver
 from src.anti_blocking.residential_proxy import ResidentialProxyProvider
 from src.search.playwright_searcher import PlaywrightSearcher
 from src.services.search_service import SearchService
-from src.types import SearchResult, ExpandedQuery, Domain, Intention, IntentResult
+from src.types import SearchResult
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Testes do BrowserFingerprintGenerator
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestBrowserFingerprintGenerator:
     def test_generate_returns_valid_profile(self):
@@ -46,6 +50,7 @@ class TestBrowserFingerprintGenerator:
 # ─────────────────────────────────────────────────────────────────────────────
 # Testes do TLSFingerprintClient
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestTLSFingerprintClient:
     @patch("curl_cffi.requests.Session")
@@ -75,7 +80,7 @@ class TestTLSFingerprintClient:
         client = TLSFingerprintClient()
         client._available = True
         client._session = MagicMock()
-        
+
         mock_response = MagicMock()
         mock_response.text = "<html>HTML Retornado</html>"
         client._session.get.return_value = mock_response
@@ -103,6 +108,7 @@ class TestTLSFingerprintClient:
 # Testes do CaptchaSolver
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestCaptchaSolver:
     @pytest.mark.asyncio
     async def test_solve_returns_none_with_empty_key(self):
@@ -120,7 +126,7 @@ class TestCaptchaSolver:
     @patch("httpx.AsyncClient.post")
     async def test_solve_2captcha_success(self, mock_post):
         solver = CaptchaSolver("2captcha", "fakekey")
-        
+
         # Mock submissão inicial
         mock_resp_submit = MagicMock()
         mock_resp_submit.json.return_value = {"request": "task_id_999"}
@@ -129,9 +135,9 @@ class TestCaptchaSolver:
         # Mock polling do resultado
         mock_resp_poll = MagicMock()
         mock_resp_poll.json.return_value = {"status": 1, "request": "solved_token_abc"}
-        
+
         with patch("httpx.AsyncClient.get", return_value=mock_resp_poll) as mock_get:
-            with patch("asyncio.sleep", AsyncMock()): # skip delay no teste
+            with patch("asyncio.sleep", AsyncMock()):  # skip delay no teste
                 res = await solver.solve_recaptcha_v2("sitekey", "https://url.com")
                 assert res == "solved_token_abc"
                 mock_get.assert_called_once()
@@ -146,7 +152,10 @@ class TestCaptchaSolver:
         mock_resp_submit.json.return_value = {"taskId": "task_id_888"}
 
         mock_resp_poll = MagicMock()
-        mock_resp_poll.json.return_value = {"status": "ready", "solution": {"gRecaptchaResponse": "solved_token_xyz"}}
+        mock_resp_poll.json.return_value = {
+            "status": "ready",
+            "solution": {"gRecaptchaResponse": "solved_token_xyz"},
+        }
 
         mock_post.side_effect = [mock_resp_submit, mock_resp_poll]
 
@@ -158,6 +167,7 @@ class TestCaptchaSolver:
 # ─────────────────────────────────────────────────────────────────────────────
 # Testes do ResidentialProxyProvider
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestResidentialProxyProvider:
     def test_brightdata_url_format(self):
@@ -188,6 +198,7 @@ class TestResidentialProxyProvider:
 # Testes do PlaywrightSearcher
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestPlaywrightSearcher:
     def test_init_defaults(self):
         cfg = {"timeout": 10, "max_results": 5, "enabled": True}
@@ -211,7 +222,12 @@ class TestPlaywrightSearcher:
         mock_context.new_page = AsyncMock(return_value=mock_page)
         mock_page.content = AsyncMock(return_value="<html>Hello Stealth</html>")
 
-        cfg = {"timeout": 10, "max_results": 5, "enabled": True, "playwright_headless": True}
+        cfg = {
+            "timeout": 10,
+            "max_results": 5,
+            "enabled": True,
+            "playwright_headless": True,
+        }
         searcher = PlaywrightSearcher(cfg)
 
         with patch("playwright_stealth.Stealth") as mock_stealth_cls:
@@ -221,10 +237,10 @@ class TestPlaywrightSearcher:
             with patch("asyncio.sleep", AsyncMock()):
                 html = await searcher.scrape("https://example.com")
                 assert html == "<html>Hello Stealth</html>"
-                
+
                 # Deve instanciar lazy e salvar
                 assert searcher._browser == mock_browser
-                
+
                 # Fechar
                 await searcher.close()
                 assert searcher._browser is None
@@ -257,7 +273,9 @@ class TestPlaywrightSearcher:
                 assert "example.com" in res[0].url
                 assert "Conteúdo de teste" in res[0].description
 
-                norm = searcher.normalize({"title": "T", "url": "U", "description": "D"})
+                norm = searcher.normalize(
+                    {"title": "T", "url": "U", "description": "D"}
+                )
                 assert isinstance(norm, SearchResult)
                 assert norm.title == "T"
                 assert norm.url == "U"
@@ -268,12 +286,13 @@ class TestPlaywrightSearcher:
 # Testes da Integração na Cascata de Scrapers (select_scraper_for_url)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestAntiBlockingIntegration:
     @pytest.mark.asyncio
     async def test_cascade_tries_playwright_after_steel_before_jina(self):
         # Mocks para o Orchestrator
         mock_orch = MagicMock()
-        
+
         # Config customizada
         config = Config()
         config.playwright_enabled = True
@@ -286,19 +305,19 @@ class TestAntiBlockingIntegration:
         mock_spider = AsyncMock()
         mock_steel = AsyncMock()
         mock_playwright = AsyncMock()
-        
+
         # Todos os primeiros scrapers falham retornando nada ou lançando exceção
         mock_firecrawl.search.side_effect = Exception("Firecrawl block")
         mock_spider.search.return_value = []
         mock_steel.search.return_value = []
-        
+
         # Playwright é bem-sucedido
         mock_playwright.search.return_value = [
             SearchResult(
                 source="playwright",
                 title="Playwright Success",
                 url="https://site-protegido.com",
-                description="Conteúdo completo extraído pelo browser stealth " * 20
+                description="Conteúdo completo extraído pelo browser stealth " * 20,
             )
         ]
 
@@ -306,7 +325,7 @@ class TestAntiBlockingIntegration:
             "firecrawl": mock_firecrawl,
             "spider": mock_spider,
             "steel": mock_steel,
-            "playwright": mock_playwright
+            "playwright": mock_playwright,
         }
 
         search_service = SearchService(mock_orch)

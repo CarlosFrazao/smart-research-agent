@@ -27,11 +27,11 @@ from src.types import SynthesizedResult
 _COMPARISON_PATTERNS = [
     r"\bvs\.?\b",
     r"\bversus\b",
-    r"\bou\b",       # Portuguese: "A ou B"
+    r"\bou\b",  # Portuguese: "A ou B"
     r"\bor\b",
-    r"\bx\b",        # common in PT: "Python x Java"
+    r"\bx\b",  # common in PT: "Python x Java"
     r"\bcompar[ae]",
-    r"\bmelhor\b",   # "qual é melhor"
+    r"\bmelhor\b",  # "qual é melhor"
     r"\bbetter\b",
     r"\bdiferen[çc]a",
     r"\bdifference\b",
@@ -53,22 +53,25 @@ _SPLITTER_RE = re.compile(
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class EntityProfile:
     """Aggregated profile for one entity in a comparison."""
+
     name: str
     result_count: int = 0
     avg_score: float = 0.0
     sources: list[str] = field(default_factory=list)
     total_stars: int = 0
     top_titles: list[str] = field(default_factory=list)
-    avg_recency: float = 0.0   # 0-1 normalised
+    avg_recency: float = 0.0  # 0-1 normalised
     avg_sentiment: float = 0.0  # -1 to +1
 
 
 # ---------------------------------------------------------------------------
 # Core class
 # ---------------------------------------------------------------------------
+
 
 class Comparator:
     """Detects comparison queries and builds side-by-side comparison reports."""
@@ -77,9 +80,7 @@ class Comparator:
     # Public API                                                           #
     # ------------------------------------------------------------------ #
 
-    def detect_comparison_query(
-        self, query: str
-    ) -> tuple[bool, list[str]]:
+    def detect_comparison_query(self, query: str) -> tuple[bool, list[str]]:
         """
         Check whether the query is a comparison and extract the entities.
 
@@ -124,9 +125,7 @@ class Comparator:
             for r in results:
                 urls_str = " ".join(r.urls) if hasattr(r, "urls") and r.urls else ""
                 desc = r.description if hasattr(r, "description") else ""
-                text = " ".join(
-                    filter(None, [r.title, desc, urls_str])
-                ).lower()
+                text = " ".join(filter(None, [r.title, desc, urls_str])).lower()
                 if entity_lower in text:
                     matched.append(r)
 
@@ -160,22 +159,16 @@ class Comparator:
             profile.total_stars = sum(stars_list)
 
             # Top titles (up to 3)
-            profile.top_titles = [
-                r.title for r in matched[:3] if r.title
-            ]
+            profile.top_titles = [r.title for r in matched[:3] if r.title]
 
             # Recency (0-1 stored in metrics as "recency_score")
-            recency_list = [
-                r.metrics.get("recency_score", 0.5) for r in matched
-            ]
+            recency_list = [r.metrics.get("recency_score", 0.5) for r in matched]
             profile.avg_recency = (
                 sum(recency_list) / len(recency_list) if recency_list else 0.5
             )
 
             # Sentiment (if stored by SentimentAnalyzer in metrics)
-            sentiment_list = [
-                r.metrics.get("sentiment_score", 0.0) for r in matched
-            ]
+            sentiment_list = [r.metrics.get("sentiment_score", 0.0) for r in matched]
             profile.avg_sentiment = (
                 sum(sentiment_list) / len(sentiment_list) if sentiment_list else 0.0
             )
@@ -203,7 +196,7 @@ class Comparator:
         lines: list[str] = [
             "## ⚖️ Comparação Side-by-Side",
             "",
-            f"A query **\"{query}\"** é comparativa. Abaixo um confronto direto entre as opções identificadas:",
+            f'A query **"{query}"** é comparativa. Abaixo um confronto direto entre as opções identificadas:',
             "",
         ]
 
@@ -219,40 +212,52 @@ class Comparator:
             return "| " + " | ".join([label] + list(values)) + " |"
 
         # Results count
-        lines.append(row(
-            "📊 Resultados encontrados",
-            *[str(p.result_count) for p in profiles],
-        ))
+        lines.append(
+            row(
+                "📊 Resultados encontrados",
+                *[str(p.result_count) for p in profiles],
+            )
+        )
 
         # Avg score
-        lines.append(row(
-            "🏆 Score médio",
-            *[f"`{p.avg_score:.2f}`" for p in profiles],
-        ))
+        lines.append(
+            row(
+                "🏆 Score médio",
+                *[f"`{p.avg_score:.2f}`" for p in profiles],
+            )
+        )
 
         # Stars
-        lines.append(row(
-            "⭐ Stars (GitHub)",
-            *[f"{p.total_stars:,}" if p.total_stars else "—" for p in profiles],
-        ))
+        lines.append(
+            row(
+                "⭐ Stars (GitHub)",
+                *[f"{p.total_stars:,}" if p.total_stars else "—" for p in profiles],
+            )
+        )
 
         # Recency
-        lines.append(row(
-            "🕐 Recência",
-            *[_recency_label(p.avg_recency) for p in profiles],
-        ))
+        lines.append(
+            row(
+                "🕐 Recência",
+                *[_recency_label(p.avg_recency) for p in profiles],
+            )
+        )
 
         # Sentiment
-        lines.append(row(
-            "💬 Sentimento da comunidade",
-            *[_sentiment_label(p.avg_sentiment) for p in profiles],
-        ))
+        lines.append(
+            row(
+                "💬 Sentimento da comunidade",
+                *[_sentiment_label(p.avg_sentiment) for p in profiles],
+            )
+        )
 
         # Sources
-        lines.append(row(
-            "🔗 Fontes",
-            *[", ".join(p.sources[:4]) or "—" for p in profiles],
-        ))
+        lines.append(
+            row(
+                "🔗 Fontes",
+                *[", ".join(p.sources[:4]) or "—" for p in profiles],
+            )
+        )
 
         lines.append("")
 
@@ -325,6 +330,7 @@ class Comparator:
 # ---------------------------------------------------------------------------
 # Label helpers
 # ---------------------------------------------------------------------------
+
 
 def _recency_label(score: float) -> str:
     if score >= 0.75:

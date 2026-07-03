@@ -5,6 +5,7 @@ Endpoint: https://api.semanticscholar.org/graph/v1/paper/search
 Rate-limit: 100 req/5min sem API key, 1000 req/5min com key.
 Fallback: WebSearcher quando a API retorna < 2 resultados.
 """
+
 import logging
 from typing import Any
 
@@ -15,7 +16,9 @@ from src.utils.http_client import HTTPClient
 logger = logging.getLogger(__name__)
 
 _API_BASE = "https://api.semanticscholar.org/graph/v1/paper/search"
-_FIELDS = "paperId,title,abstract,year,authors,externalIds,openAccessPdf,citationCount,venue"
+_FIELDS = (
+    "paperId,title,abstract,year,authors,externalIds,openAccessPdf,citationCount,venue"
+)
 
 
 class SemanticScholarSearcher(BaseSearcher):
@@ -27,12 +30,26 @@ class SemanticScholarSearcher(BaseSearcher):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.http = HTTPClient(timeout=self.timeout)
         self.api_key: str | None = config.get("semantic_scholar_api_key")
         self.web_fallback = None  # Injetado pelo Orchestrator se disponível
 
     async def search(self, query: str, **kwargs) -> list[SearchResult]:
+        """Realiza busca assíncrona por termos no Semantic Scholar.
+
+        Args:
+            query (str): Termo ou query de busca a ser pesquisada.
+            **kwargs: Parâmetros de pesquisa adicionais específicos do buscador.
+
+        Returns:
+            list[SearchResult]: Lista contendo os resultados padronizados encontrados.
+        """
         params = {
             "query": query,
             "fields": _FIELDS,
@@ -55,15 +72,21 @@ class SemanticScholarSearcher(BaseSearcher):
             logger.info(f"SemanticScholar: {len(results)} papers para '{query[:50]}'")
 
             # Fallback se retornar < 2 resultados
-            if len(results) < 2 and self.web_fallback and getattr(self.web_fallback, "enabled", False):
+            if (
+                len(results) < 2
+                and self.web_fallback
+                and getattr(self.web_fallback, "enabled", False)
+            ):
                 logger.info("SemanticScholar: fallback para WebSearcher ativado.")
                 try:
-                    web_results = await self.web_fallback.search(f"research paper {query}")
+                    web_results = await self.web_fallback.search(
+                        f"research paper {query}"
+                    )
                     results.extend(web_results[:5])
                 except Exception as e:
                     logger.warning(f"SemanticScholar WebFallback falhou: {e}")
 
-            return results[:self.max_results]
+            return results[: self.max_results]
 
         except Exception as e:
             logger.error(f"SemanticScholar search error: {e}")
@@ -82,15 +105,16 @@ class SemanticScholarSearcher(BaseSearcher):
             citations = paper.get("citationCount", 0)
 
             authors_raw = paper.get("authors", [])
-            authors_str = ", ".join(
-                a.get("name", "") for a in authors_raw[:3]
-            )
+            authors_str = ", ".join(a.get("name", "") for a in authors_raw[:3])
             if len(authors_raw) > 3:
                 authors_str += " et al."
 
             # Constrói URL: prefere openAccessPdf, senão usa página do paper
             pdf_info = paper.get("openAccessPdf") or {}
-            url = pdf_info.get("url") or f"https://www.semanticscholar.org/paper/{paper_id}"
+            url = (
+                pdf_info.get("url")
+                or f"https://www.semanticscholar.org/paper/{paper_id}"
+            )
 
             # Extrai DOI se disponível
             external_ids = paper.get("externalIds") or {}
@@ -133,4 +157,3 @@ class SemanticScholarSearcher(BaseSearcher):
             metrics=raw_result.get("metrics", {}),
             raw=raw_result,
         )
-

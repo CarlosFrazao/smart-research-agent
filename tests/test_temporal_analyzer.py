@@ -35,11 +35,11 @@ def test_extract_timeline_various_formats(analyzer):
             highlights=[],
             first_seen=datetime.now(),
             last_seen=datetime.now(),
-        )
+        ),
     ]
 
     timeline = analyzer.extract_timeline(results)
-    
+
     # Deve encontrar:
     # 1. 2023-05-15 (de Proj A)
     # 2. 2025-02-10 (de updated_at Proj A)

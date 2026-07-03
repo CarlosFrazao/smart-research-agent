@@ -4,7 +4,9 @@ from src.clients.llm_client import LLMClient, LLMProvider
 from src.model_router import ModelRouter
 
 
-def _make_client(provider: LLMProvider = LLMProvider.ANTHROPIC, router=None) -> LLMClient:
+def _make_client(
+    provider: LLMProvider = LLMProvider.ANTHROPIC, router=None
+) -> LLMClient:
     with patch("anthropic.AsyncAnthropic"):
         client = LLMClient(
             provider,
@@ -15,6 +17,7 @@ def _make_client(provider: LLMProvider = LLMProvider.ANTHROPIC, router=None) -> 
 
 
 # ─── __init__: model_router parameter ───────────────────────────────────────
+
 
 def test_llm_client_accepts_model_router():
     router = ModelRouter()
@@ -30,13 +33,16 @@ def test_llm_client_default_no_router():
 def test_llm_client_existing_tests_still_pass():
     """Confirms backward compatibility: init without router works identically."""
     with patch("anthropic.AsyncAnthropic"):
-        client = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+        client = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
     assert client.model == "claude-test"
     assert client.provider == LLMProvider.ANTHROPIC
     assert client.model_router is None
 
 
 # ─── complete(): no router → delegates to generate ──────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_complete_no_router_calls_generate(caplog):
@@ -46,7 +52,9 @@ async def test_complete_no_router_calls_generate(caplog):
     result = await client.complete("test prompt")
 
     assert result == "generated text"
-    client.generate.assert_called_once_with("test prompt", temperature=0.3, max_tokens=4000)
+    client.generate.assert_called_once_with(
+        "test prompt", temperature=0.3, max_tokens=4000
+    )
 
 
 @pytest.mark.asyncio
@@ -60,6 +68,7 @@ async def test_complete_no_router_passes_temperature_and_max_tokens():
 
 
 # ─── complete(): with router → selects model automatically ──────────────────
+
 
 @pytest.mark.asyncio
 async def test_complete_with_router_routes_simple_task():
@@ -120,6 +129,7 @@ async def test_complete_with_router_restores_model_even_on_error():
 
 # ─── complete(): model_override bypasses router ──────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_complete_model_override_ignores_router():
     router = ModelRouter()
@@ -133,7 +143,9 @@ async def test_complete_model_override_ignores_router():
 
     client.generate = capture
 
-    await client.complete("prompt", task_type="intent_analysis", model_override="claude-opus-4-5")
+    await client.complete(
+        "prompt", task_type="intent_analysis", model_override="claude-opus-4-5"
+    )
 
     assert used_models[0] == "claude-opus-4-5"
 
@@ -168,14 +180,18 @@ async def test_complete_model_override_no_router_still_works():
 
 # ─── complete(): different task_type levels ──────────────────────────────────
 
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("task_type,expected_model", [
-    ("intent_analysis", "claude-haiku-4-5"),
-    ("query_expansion", "claude-sonnet-4-5"),
-    ("deep_research", "claude-opus-4-5"),
-    ("report_generation", "claude-opus-4-5"),
-    ("synthesis", "claude-sonnet-4-5"),
-])
+@pytest.mark.parametrize(
+    "task_type,expected_model",
+    [
+        ("intent_analysis", "claude-haiku-4-5"),
+        ("query_expansion", "claude-sonnet-4-5"),
+        ("deep_research", "claude-opus-4-5"),
+        ("report_generation", "claude-opus-4-5"),
+        ("synthesis", "claude-sonnet-4-5"),
+    ],
+)
 async def test_complete_routes_all_task_types(task_type, expected_model):
     router = ModelRouter()
     client = _make_client(router=router)
@@ -189,12 +205,13 @@ async def test_complete_routes_all_task_types(task_type, expected_model):
 
     await client.complete("test", task_type=task_type)
 
-    assert used_models[0] == expected_model, (
-        f"task_type={task_type}: expected {expected_model}, got {used_models[0]}"
-    )
+    assert (
+        used_models[0] == expected_model
+    ), f"task_type={task_type}: expected {expected_model}, got {used_models[0]}"
 
 
 # ─── backward compat: generate() signature unchanged ────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_generate_signature_unchanged():
@@ -206,7 +223,9 @@ async def test_generate_signature_unchanged():
         )
         MockAnthropic.return_value = mock_instance
 
-        client = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+        client = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         result = await client.generate("test prompt")
 
     assert result == "response"

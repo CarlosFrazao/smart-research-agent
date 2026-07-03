@@ -1,4 +1,5 @@
 """Filtra conteúdo raspado para remover tentativas de prompt injection."""
+
 import asyncio
 import logging
 from dataclasses import dataclass
@@ -6,10 +7,17 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 INJECTION_MARKERS = [
-    "ignore all previous", "ignore todas as instruções",
-    "você é agora", "you are now", "aja como", "act as",
-    "forget your instructions", "new system prompt", "jailbreak",
+    "ignore all previous",
+    "ignore todas as instruções",
+    "você é agora",
+    "you are now",
+    "aja como",
+    "act as",
+    "forget your instructions",
+    "new system prompt",
+    "jailbreak",
 ]
+
 
 @dataclass
 class SanitizedContent:
@@ -17,6 +25,7 @@ class SanitizedContent:
     cleaned: str
     was_injection_detected: bool
     risk_score: float
+
 
 SANITIZER_PROMPT = """\
 Você é um filtro de segurança. Extraia APENAS FATOS OBJETIVOS do texto.
@@ -29,6 +38,7 @@ TEXTO:
 {content}
 ---
 FATOS LIMPOS:"""
+
 
 class LLMSanitizer:
     def __init__(self, llm_client, model: str = "google/gemma-4-26b-a4b-it:free"):
@@ -47,7 +57,8 @@ class LLMSanitizer:
             # Chama generate do LLMClient para limpar o prompt
             cleaned = await self.llm.generate(
                 SANITIZER_PROMPT.format(content=content[:6000]),
-                temperature=0.0, max_tokens=2000,
+                temperature=0.0,
+                max_tokens=2000,
             )
             reduction = 1 - (len(cleaned) / max(len(content), 1))
             risk = min(1.0, reduction * 2 + (0.5 if was_injection else 0.0))

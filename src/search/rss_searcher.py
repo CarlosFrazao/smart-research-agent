@@ -26,28 +26,110 @@ logger = logging.getLogger(__name__)
 # ── Feed catalog ─────────────────────────────────────────────────────────────
 
 DEFAULT_FEEDS: list[dict[str, Any]] = [
-    {"id": "anthropic",       "name": "Anthropic News",          "url": "https://www.anthropic.com/news/rss.xml",               "weight": 1.5},
-    {"id": "openai",          "name": "OpenAI News",             "url": "https://openai.com/news/rss.xml",                      "weight": 1.4},
-    {"id": "deepmind",        "name": "Google DeepMind Blog",    "url": "https://deepmind.google/blog/rss.xml",                  "weight": 1.2},
-    {"id": "huggingface",     "name": "Hugging Face Blog",       "url": "https://huggingface.co/blog/feed.xml",                  "weight": 1.1},
-    {"id": "simonwillison",   "name": "Simon Willison",          "url": "https://simonwillison.net/atom/everything/",            "weight": 1.3},
-    {"id": "latentspace",     "name": "Latent Space",            "url": "https://www.latent.space/feed",                        "weight": 1.1},
-    {"id": "langchain",       "name": "LangChain Blog",          "url": "https://blog.langchain.dev/rss",                       "weight": 1.0},
-    {"id": "mistral",         "name": "Mistral News",            "url": "https://mistral.ai/news/rss.xml",                      "weight": 1.0},
-    {"id": "cohere",          "name": "Cohere Blog",             "url": "https://cohere.com/blog/rss.xml",                      "weight": 0.9},
-    {"id": "arxiv_ai",        "name": "arXiv cs.AI",             "url": "http://export.arxiv.org/rss/cs.AI",                    "weight": 1.0},
-    {"id": "hn_frontpage",    "name": "Hacker News Frontpage",   "url": "https://hnrss.org/frontpage",                          "weight": 0.8},
-    {"id": "reddit_localllm", "name": "Reddit r/LocalLLaMA",     "url": "https://www.reddit.com/r/LocalLLaMA/.rss",             "weight": 0.9},
-    {"id": "reddit_claudeai", "name": "Reddit r/ClaudeAI",       "url": "https://www.reddit.com/r/ClaudeAI/.rss",               "weight": 1.0},
-    {"id": "import_ai",       "name": "Import AI",               "url": "https://importai.substack.com/feed",                   "weight": 1.0},
-    {"id": "gh_trending_py",  "name": "GitHub Trending Python",  "url": "https://github.com/trending/python?since=weekly&format=atom", "weight": 0.8},
+    {
+        "id": "anthropic",
+        "name": "Anthropic News",
+        "url": "https://www.anthropic.com/news/rss.xml",
+        "weight": 1.5,
+    },
+    {
+        "id": "openai",
+        "name": "OpenAI News",
+        "url": "https://openai.com/news/rss.xml",
+        "weight": 1.4,
+    },
+    {
+        "id": "deepmind",
+        "name": "Google DeepMind Blog",
+        "url": "https://deepmind.google/blog/rss.xml",
+        "weight": 1.2,
+    },
+    {
+        "id": "huggingface",
+        "name": "Hugging Face Blog",
+        "url": "https://huggingface.co/blog/feed.xml",
+        "weight": 1.1,
+    },
+    {
+        "id": "simonwillison",
+        "name": "Simon Willison",
+        "url": "https://simonwillison.net/atom/everything/",
+        "weight": 1.3,
+    },
+    {
+        "id": "latentspace",
+        "name": "Latent Space",
+        "url": "https://www.latent.space/feed",
+        "weight": 1.1,
+    },
+    {
+        "id": "langchain",
+        "name": "LangChain Blog",
+        "url": "https://blog.langchain.dev/rss",
+        "weight": 1.0,
+    },
+    {
+        "id": "mistral",
+        "name": "Mistral News",
+        "url": "https://mistral.ai/news/rss.xml",
+        "weight": 1.0,
+    },
+    {
+        "id": "cohere",
+        "name": "Cohere Blog",
+        "url": "https://cohere.com/blog/rss.xml",
+        "weight": 0.9,
+    },
+    {
+        "id": "arxiv_ai",
+        "name": "arXiv cs.AI",
+        "url": "http://export.arxiv.org/rss/cs.AI",
+        "weight": 1.0,
+    },
+    {
+        "id": "hn_frontpage",
+        "name": "Hacker News Frontpage",
+        "url": "https://hnrss.org/frontpage",
+        "weight": 0.8,
+    },
+    {
+        "id": "reddit_localllm",
+        "name": "Reddit r/LocalLLaMA",
+        "url": "https://www.reddit.com/r/LocalLLaMA/.rss",
+        "weight": 0.9,
+    },
+    {
+        "id": "reddit_claudeai",
+        "name": "Reddit r/ClaudeAI",
+        "url": "https://www.reddit.com/r/ClaudeAI/.rss",
+        "weight": 1.0,
+    },
+    {
+        "id": "import_ai",
+        "name": "Import AI",
+        "url": "https://importai.substack.com/feed",
+        "weight": 1.0,
+    },
+    {
+        "id": "gh_trending_py",
+        "name": "GitHub Trending Python",
+        "url": "https://github.com/trending/python?since=weekly&format=atom",
+        "weight": 0.8,
+    },
 ]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPACE_RE = re.compile(r"\s+")
-_ENTITY_MAP = {"&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " "}
+_ENTITY_MAP = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&nbsp;": " ",
+}
 _ENTITY_RE = re.compile("|".join(re.escape(k) for k in _ENTITY_MAP))
 
 
@@ -72,7 +154,7 @@ def _parse_date(raw: str | None) -> str | None:
     # Try ISO 8601 (Atom updated/published)
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d"):
         try:
-            dt = datetime.strptime(raw[:19], fmt[:len(raw[:19])])
+            dt = datetime.strptime(raw[:19], fmt[: len(raw[:19])])
             return dt.replace(tzinfo=UTC).isoformat()
         except ValueError:
             continue
@@ -94,7 +176,21 @@ def _score_relevance(query: str, title: str, description: str, weight: float) ->
         return weight * 30.0
 
     terms = set(re.findall(r"\w+", query.lower()))
-    terms -= {"the", "a", "an", "is", "are", "and", "or", "for", "of", "to", "in", "on", "at"}
+    terms -= {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "and",
+        "or",
+        "for",
+        "of",
+        "to",
+        "in",
+        "on",
+        "at",
+    }
     if not terms:
         return weight * 30.0
 
@@ -108,6 +204,7 @@ def _score_relevance(query: str, title: str, description: str, weight: float) ->
 
 
 # ── Parser XML mínimo sem deps externas ──────────────────────────────────────
+
 
 def _extract_tag(xml: str, tag: str) -> str | None:
     m = re.search(rf"<{tag}[^>]*>([\s\S]*?)</{tag}>", xml)
@@ -124,12 +221,25 @@ def _parse_rss_items(xml: str, feed_name: str) -> list[dict[str, str]]:
     for block in re.finditer(r"<item>([\s\S]*?)</item>", xml):
         raw = block.group(1)
         title = _xml_text(_extract_tag(raw, "title"))
-        link = _xml_text(_extract_tag(raw, "link")) or _xml_text(_extract_tag(raw, "guid"))
-        desc = _xml_text(_extract_tag(raw, "description") or _extract_tag(raw, "summary") or "")
-        pub_date = _xml_text(_extract_tag(raw, "pubDate") or _extract_tag(raw, "dc:date") or "")
+        link = _xml_text(_extract_tag(raw, "link")) or _xml_text(
+            _extract_tag(raw, "guid")
+        )
+        desc = _xml_text(
+            _extract_tag(raw, "description") or _extract_tag(raw, "summary") or ""
+        )
+        pub_date = _xml_text(
+            _extract_tag(raw, "pubDate") or _extract_tag(raw, "dc:date") or ""
+        )
         if title and link:
-            items.append({"title": title, "url": link, "description": desc[:600],
-                          "published": _parse_date(pub_date), "feed": feed_name})
+            items.append(
+                {
+                    "title": title,
+                    "url": link,
+                    "description": desc[:600],
+                    "published": _parse_date(pub_date),
+                    "feed": feed_name,
+                }
+            )
     return items
 
 
@@ -139,12 +249,25 @@ def _parse_atom_entries(xml: str, feed_name: str) -> list[dict[str, str]]:
         raw = block.group(1)
         title = _xml_text(_extract_tag(raw, "title"))
         # atom link: <link href="..."/> or <link>...</link>
-        link = _extract_attr(raw, "link", "href") or _xml_text(_extract_tag(raw, "link"))
-        desc = _xml_text(_extract_tag(raw, "summary") or _extract_tag(raw, "content") or "")
-        pub_date = _xml_text(_extract_tag(raw, "updated") or _extract_tag(raw, "published") or "")
+        link = _extract_attr(raw, "link", "href") or _xml_text(
+            _extract_tag(raw, "link")
+        )
+        desc = _xml_text(
+            _extract_tag(raw, "summary") or _extract_tag(raw, "content") or ""
+        )
+        pub_date = _xml_text(
+            _extract_tag(raw, "updated") or _extract_tag(raw, "published") or ""
+        )
         if title and link:
-            items.append({"title": title, "url": link, "description": desc[:600],
-                          "published": _parse_date(pub_date), "feed": feed_name})
+            items.append(
+                {
+                    "title": title,
+                    "url": link,
+                    "description": desc[:600],
+                    "published": _parse_date(pub_date),
+                    "feed": feed_name,
+                }
+            )
     return items
 
 
@@ -159,10 +282,16 @@ def parse_feed_xml(xml: str, feed_name: str) -> list[dict[str, str]]:
 
 # ── RSSSearcher ───────────────────────────────────────────────────────────────
 
+
 class RSSSearcher(BaseSearcher):
     """Busca em feeds RSS/Atom de fontes curadas de IA/tech por relevância de query."""
 
     def __init__(self, config: dict[str, Any] = None):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config or {})
         self.http = HTTPClient(timeout=self.timeout, max_retries=2)
         feeds_cfg = (config or {}).get("feeds", DEFAULT_FEEDS)
@@ -170,6 +299,15 @@ class RSSSearcher(BaseSearcher):
         self.max_feeds = (config or {}).get("max_feeds", len(self.feeds))
 
     async def search(self, query: str, **kwargs) -> list[SearchResult]:
+        """Realiza busca assíncrona por termos no RSS.
+
+        Args:
+            query (str): Termo ou query de busca a ser pesquisada.
+            **kwargs: Parâmetros de pesquisa adicionais específicos do buscador.
+
+        Returns:
+            list[SearchResult]: Lista contendo os resultados padronizados encontrados.
+        """
         if not self.enabled:
             return []
 
@@ -192,7 +330,12 @@ class RSSSearcher(BaseSearcher):
         weight = float(feed.get("weight", 1.0))
 
         try:
-            resp = await self.http.get(url, headers={"Accept": "application/rss+xml, application/atom+xml, text/xml, */*"})
+            resp = await self.http.get(
+                url,
+                headers={
+                    "Accept": "application/rss+xml, application/atom+xml, text/xml, */*"
+                },
+            )
             xml = resp.get("text", "")
         except Exception as e:
             logger.debug(f"RSSSearcher: falha ao buscar {url}: {e}")
@@ -210,6 +353,14 @@ class RSSSearcher(BaseSearcher):
         return results
 
     def normalize(self, raw: Any) -> SearchResult:
+        """Normaliza um resultado bruto vindo do RSS para a entidade padrão `SearchResult`.
+
+        Args:
+            raw_result (Any): O resultado bruto retornado pela API ou scraper.
+
+        Returns:
+            SearchResult: Objeto padronizado contendo os dados normalizados.
+        """
         if not isinstance(raw, dict):
             return SearchResult(source="rss", title="", url="", description="")
 

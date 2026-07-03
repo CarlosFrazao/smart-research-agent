@@ -68,4 +68,3 @@ extraPaths = ["."]
 executionEnvironments = [
     { root = "." }
 ]
-

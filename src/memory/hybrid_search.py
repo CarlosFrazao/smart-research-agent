@@ -1,3 +1,5 @@
+"""Busca hibrida combinando busca vetorial (ChromaDB) e busca lexical (BM25/SQLite) para recuperacao de memorias."""
+
 from __future__ import annotations
 
 import logging
@@ -7,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 class HybridSearcher:
-    def __init__(self, chroma_client: Any | None = None, cohere_api_key: str | None = None):
+    def __init__(
+        self, chroma_client: Any | None = None, cohere_api_key: str | None = None
+    ):
         """
         chroma_client: uma Colecao ou Cliente do ChromaDB.
         cohere_api_key: chave de API do Cohere para reranking.
@@ -21,10 +25,13 @@ class HybridSearcher:
         if self._encoder is None:
             try:
                 from sentence_transformers import SentenceTransformer
+
                 self._encoder = SentenceTransformer("all-MiniLM-L6-v2")
                 logger.info("HybridSearcher: Modelo sentence-transformers carregado.")
             except Exception as e:
-                logger.warning(f"Nao foi possivel carregar o modelo sentence-transformers: {e}")
+                logger.warning(
+                    f"Nao foi possivel carregar o modelo sentence-transformers: {e}"
+                )
         return self._encoder
 
     def index_documents(self, documents: list[dict[str, Any]]) -> None:
@@ -46,7 +53,7 @@ class HybridSearcher:
 
         # 4. Rerank com Cohere se disponivel
         if self.cohere_key and combined:
-            reranked = await self._cohere_rerank(query, combined[:top_k * 2], top_k)
+            reranked = await self._cohere_rerank(query, combined[: top_k * 2], top_k)
             return reranked
 
         return combined[:top_k]
@@ -56,10 +63,13 @@ class HybridSearcher:
             return []
         try:
             from rank_bm25 import BM25Okapi
+
             corpus = [d.get("text", "").split() for d in self._documents]
             bm25 = BM25Okapi(corpus)
             scores = bm25.get_scores(query.split())
-            paired = sorted(zip(self._documents, scores), key=lambda x: x[1], reverse=True)
+            paired = sorted(
+                zip(self._documents, scores), key=lambda x: x[1], reverse=True
+            )
             return [doc for doc, score in paired[:top_k] if score > 0]
         except ImportError:
             logger.warning("rank_bm25 nao instalado. Ignorando busca BM25.")
@@ -78,7 +88,9 @@ class HybridSearcher:
             embedding = encoder.encode(query).tolist()
             # Suporta se for Collection
             if hasattr(self.chroma, "query"):
-                results = self.chroma.query(query_embeddings=[embedding], n_results=top_k)
+                results = self.chroma.query(
+                    query_embeddings=[embedding], n_results=top_k
+                )
             # Se for Client (como fallback), tenta obter a colecao "sra_memories"
             elif hasattr(self.chroma, "get_collection"):
                 col = self.chroma.get_collection("sra_memories")
@@ -86,7 +98,11 @@ class HybridSearcher:
             else:
                 return []
 
-            if not results or not results.get("documents") or not results["documents"][0]:
+            if (
+                not results
+                or not results.get("documents")
+                or not results["documents"][0]
+            ):
                 return []
 
             docs = []
@@ -97,7 +113,9 @@ class HybridSearcher:
             logger.warning(f"Busca ChromaDB falhou: {e}")
             return []
 
-    def _reciprocal_rank_fusion(self, *result_lists: list[dict[str, Any]], k: int = 60) -> list[dict[str, Any]]:
+    def _reciprocal_rank_fusion(
+        self, *result_lists: list[dict[str, Any]], k: int = 60
+    ) -> list[dict[str, Any]]:
         scores: dict[str, float] = {}
         doc_map: dict[str, dict[str, Any]] = {}
 
@@ -116,16 +134,16 @@ class HybridSearcher:
         sorted_keys = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
         return [doc_map[key] for key in sorted_keys]
 
-    async def _cohere_rerank(self, query: str, docs: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
+    async def _cohere_rerank(
+        self, query: str, docs: list[dict[str, Any]], top_k: int
+    ) -> list[dict[str, Any]]:
         try:
             import cohere
+
             co = cohere.AsyncClient(api_key=self.cohere_key)
             texts = [d.get("text", "")[:2000] for d in docs]
             response = await co.rerank(
-                query=query,
-                documents=texts,
-                top_n=top_k,
-                model="rerank-v3.5"
+                query=query, documents=texts, top_n=top_k, model="rerank-v3.5"
             )
             return [docs[r.index] for r in response.results]
         except Exception as e:

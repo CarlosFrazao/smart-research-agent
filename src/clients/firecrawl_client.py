@@ -8,22 +8,41 @@ _RETRY_DELAYS = [1.0, 2.0, 4.0]
 
 
 class FirecrawlClient:
-    def __init__(self, api_key: str, base_url: str | None = None, config: Any | None = None):
+    def __init__(
+        self, api_key: str, base_url: str | None = None, config: Any | None = None
+    ):
         self.api_key = api_key
         self.base_url = base_url
         self.config = config
-        self.firecrawl_redact_pii = getattr(config, "firecrawl_redact_pii", False) if config else False
-        self.firecrawl_lockdown_mode = getattr(config, "firecrawl_lockdown_mode", False) if config else False
-        self.firecrawl_deterministic_json = getattr(config, "firecrawl_deterministic_json", False) if config else False
-        self.firecrawl_research_index_enabled = getattr(config, "firecrawl_research_index_enabled", True) if config else True
+        self.firecrawl_redact_pii = (
+            getattr(config, "firecrawl_redact_pii", False) if config else False
+        )
+        self.firecrawl_lockdown_mode = (
+            getattr(config, "firecrawl_lockdown_mode", False) if config else False
+        )
+        self.firecrawl_deterministic_json = (
+            getattr(config, "firecrawl_deterministic_json", False) if config else False
+        )
+        self.firecrawl_research_index_enabled = (
+            getattr(config, "firecrawl_research_index_enabled", True)
+            if config
+            else True
+        )
         self.app = None
         try:
             from firecrawl import V1FirecrawlApp
-            self.app = V1FirecrawlApp(api_key=api_key, api_url=base_url) if base_url else V1FirecrawlApp(api_key=api_key)
+
+            self.app = (
+                V1FirecrawlApp(api_key=api_key, api_url=base_url)
+                if base_url
+                else V1FirecrawlApp(api_key=api_key)
+            )
             logger.info("Firecrawl SDK v4 (V1FirecrawlApp) inicializado com sucesso.")
         except Exception as e:
-            logger.warning(f"Erro ao inicializar Firecrawl SDK: {e}. Usando fallback HTTP.")
-        
+            logger.warning(
+                f"Erro ao inicializar Firecrawl SDK: {e}. Usando fallback HTTP."
+            )
+
         # Inicializa o ScrapingRaceClient de forma preguiçosa
         self._race_client = None
 
@@ -31,13 +50,16 @@ class FirecrawlClient:
     def race_client(self):
         if self._race_client is None:
             from src.clients.scraping_race_client import ScrapingRaceClient
+
             self._race_client = ScrapingRaceClient(self)
         return self._race_client
 
-
     def _is_retryable(self, exc: Exception) -> bool:
         msg = str(exc).lower()
-        return any(k in msg for k in ("429", "rate limit", "timeout", "503", "502", "connection"))
+        return any(
+            k in msg
+            for k in ("429", "rate limit", "timeout", "503", "502", "connection")
+        )
 
     async def _with_retry(self, coro_fn, *args, **kwargs):
         last_exc: Exception | None = None
@@ -48,7 +70,9 @@ class FirecrawlClient:
                 last_exc = exc
                 if not self._is_retryable(exc) or attempt == len(_RETRY_DELAYS):
                     raise
-                logger.warning(f"Firecrawl tentativa {attempt} falhou ({exc}), aguardando {delay}s...")
+                logger.warning(
+                    f"Firecrawl tentativa {attempt} falhou ({exc}), aguardando {delay}s..."
+                )
                 await asyncio.sleep(delay)
         raise last_exc  # type: ignore[misc]
 
@@ -63,7 +87,9 @@ class FirecrawlClient:
                 {
                     "title": getattr(item, "title", "") or "",
                     "url": getattr(item, "url", "") or "",
-                    "markdown": getattr(item, "markdown", "") or getattr(item, "description", "") or "",
+                    "markdown": getattr(item, "markdown", "")
+                    or getattr(item, "description", "")
+                    or "",
                     "description": getattr(item, "description", "") or "",
                 }
                 for item in items
@@ -84,11 +110,14 @@ class FirecrawlClient:
             return result.get("data", result)
         return {}
 
-    async def search(self, query: str, limit: int = 10, stealth: bool = True) -> list[dict[str, Any]]:
+    async def search(
+        self, query: str, limit: int = 10, stealth: bool = True
+    ) -> list[dict[str, Any]]:
         if not self.app:
             return []
         try:
             from firecrawl.v1.client import V1ScrapeOptions
+
             scrape_options = V1ScrapeOptions(
                 formats=["markdown"],
                 skipTlsVerification=True,
@@ -110,7 +139,9 @@ class FirecrawlClient:
             )
             return self._normalize_search_results(results)
         except Exception as e:
-            logger.warning(f"Busca Firecrawl com parâmetros estendidos falhou ({e}). Tentando busca simples...")
+            logger.warning(
+                f"Busca Firecrawl com parâmetros estendidos falhou ({e}). Tentando busca simples..."
+            )
             try:
                 results = await self._with_retry(
                     asyncio.to_thread,
@@ -120,10 +151,14 @@ class FirecrawlClient:
                 )
                 return self._normalize_search_results(results)
             except Exception as e2:
-                logger.error(f"Firecrawl search erro (todos os retries esgotados): {e2}")
+                logger.error(
+                    f"Firecrawl search erro (todos os retries esgotados): {e2}"
+                )
                 return []
 
-    async def search_simplified(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def search_simplified(
+        self, query: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Tenta busca com query simplificada (primeiras 3 palavras) como bypass de bloqueio."""
         simplified = " ".join(query.split()[:3])
         if simplified == query:
@@ -131,11 +166,15 @@ class FirecrawlClient:
         logger.info(f"Tentando query simplificada: '{simplified}'")
         return await self.search(simplified, limit=limit)
 
-    async def scrape(self, url: str, formats: list[str] | None = None, stealth: bool = True) -> dict[str, Any]:
+    async def scrape(
+        self, url: str, formats: list[str] | None = None, stealth: bool = True
+    ) -> dict[str, Any]:
         """Realiza a raspagem concorrente (Scraping Race) para máxima velocidade e taxa de sucesso."""
         return await self.race_client.scrape(url, formats=formats)
 
-    async def _direct_scrape_call(self, url: str, formats: list[str] | None = None) -> dict[str, Any]:
+    async def _direct_scrape_call(
+        self, url: str, formats: list[str] | None = None
+    ) -> dict[str, Any]:
         """Chamada de scraping direta à API local/remota do Firecrawl sem concorrência da corrida."""
         if not self.app:
             return {}
@@ -160,7 +199,9 @@ class FirecrawlClient:
             )
             return self._normalize_scrape_result(result)
         except Exception as e:
-            logger.warning(f"Firecrawl scrape avançado falhou para {url} ({e}). Tentando scrape simples...")
+            logger.warning(
+                f"Firecrawl scrape avançado falhou para {url} ({e}). Tentando scrape simples..."
+            )
             try:
                 result = await self._with_retry(
                     asyncio.to_thread,
@@ -170,10 +211,14 @@ class FirecrawlClient:
                 )
                 return self._normalize_scrape_result(result)
             except Exception as e2:
-                logger.error(f"Firecrawl scrape erro em {url} (todos os retries esgotados): {e2}")
+                logger.error(
+                    f"Firecrawl scrape erro em {url} (todos os retries esgotados): {e2}"
+                )
                 return {}
 
-    async def search_research_index(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def search_research_index(
+        self, query: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Busca no Firecrawl Research Index (3M+ papers arXiv + GitHub code)."""
         if not self.app:
             return []
@@ -231,15 +276,26 @@ class FirecrawlClient:
         if not self.api_key:
             return {}
         import aiohttp
+
         base = self.base_url or "https://api.firecrawl.dev"
         url = f"{base}{endpoint}"
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                async with session.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as resp:
                     if resp.status >= 400:
                         text = await resp.text()
-                        logger.warning(f"Firecrawl POST {endpoint} → {resp.status}: {text[:200]}")
+                        logger.warning(
+                            f"Firecrawl POST {endpoint} → {resp.status}: {text[:200]}"
+                        )
                         return {}
                     return await resp.json()
         except Exception as exc:
@@ -271,7 +327,9 @@ class FirecrawlClient:
                     return result.model_dump()
                 return result if isinstance(result, dict) else {}
             except Exception as exc:
-                logger.warning(f"FirecrawlClient.agent_search SDK falhou ({exc}). Tentando REST...")
+                logger.warning(
+                    f"FirecrawlClient.agent_search SDK falhou ({exc}). Tentando REST..."
+                )
         # Fallback REST
         payload = {"prompt": task, "maxSteps": max_steps, "timeout": timeout * 1000}
         return await self._post("/v1/agent", payload)
@@ -300,7 +358,9 @@ class FirecrawlClient:
                     return result.model_dump()
                 return result if isinstance(result, dict) else {}
             except Exception as exc:
-                logger.warning(f"FirecrawlClient.interact SDK falhou ({exc}). Tentando REST...")
+                logger.warning(
+                    f"FirecrawlClient.interact SDK falhou ({exc}). Tentando REST..."
+                )
         payload = {"url": url, "instructions": instructions, "wait": wait_ms}
         return await self._post("/v1/interact", payload)
 
@@ -327,7 +387,9 @@ class FirecrawlClient:
                     return result.get("links", [])
                 return []
             except Exception as exc:
-                logger.warning(f"FirecrawlClient.map_domain falhou ({exc}). Tentando REST...")
+                logger.warning(
+                    f"FirecrawlClient.map_domain falhou ({exc}). Tentando REST..."
+                )
         data = await self._post("/v1/map", {"url": url, "limit": limit})
         return data.get("links", [])
 
@@ -353,6 +415,7 @@ class FirecrawlClient:
                 return items
         # Fallback: scrape individual com semáforo
         import asyncio as _aio
+
         sem = _aio.Semaphore(concurrency)
 
         async def _one(url: str) -> dict[str, Any]:

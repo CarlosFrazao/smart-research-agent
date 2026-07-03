@@ -16,12 +16,19 @@ _RETRY_CONFIG = RetryConfig(
     max_delay=10.0,
     exponential_base=2.0,
     jitter=True,
-    retryable_exceptions=(Exception,)
+    retryable_exceptions=(Exception,),
 )
 
 
 class ArxivSearcher(BaseSearcher):
+    """Buscador especializado para coletar e estruturar resultados vindos do Arxiv."""
+
     def __init__(self, config: dict[str, Any], firecrawl_client=None):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.base_url = "http://export.arxiv.org/api/query"
         self.http = HTTPClient(timeout=self.timeout)
@@ -31,6 +38,15 @@ class ArxivSearcher(BaseSearcher):
         )
 
     async def search(self, query: str, **kwargs) -> list[SearchResult]:
+        """Realiza busca assíncrona por termos no arXiv.
+
+        Args:
+            query (str): Termo ou query de busca a ser pesquisada.
+            **kwargs: Parâmetros de pesquisa adicionais específicos do buscador.
+
+        Returns:
+            list[SearchResult]: Lista contendo os resultados padronizados encontrados.
+        """
         if not hasattr(self, "circuit"):
             self.circuit = CircuitBreakerRegistry.get(
                 "arxiv_api", failure_threshold=3, recovery_timeout=300
@@ -44,6 +60,14 @@ class ArxivSearcher(BaseSearcher):
 
     @with_retry(_RETRY_CONFIG)
     async def _do_search(self, query: str) -> list[SearchResult]:
+        """Executa a chamada HTTP/API interna para pesquisar no arXiv sem tratamento de falhas.
+
+        Args:
+            query (str): Termo de busca a ser pesquisado.
+
+        Returns:
+            list[SearchResult]: Resultados brutos ou pré-processados da busca.
+        """
         params = {
             "search_query": f"all:{query}",
             "start": 0,
@@ -64,7 +88,9 @@ class ArxivSearcher(BaseSearcher):
                     f"Acionando Firecrawl Research Index para '{query}'..."
                 )
                 try:
-                    ri_results = await self.firecrawl_client.search_research_index(query, limit=10)
+                    ri_results = await self.firecrawl_client.search_research_index(
+                        query, limit=10
+                    )
                     seen_urls = {r.url for r in results}
                     for item in ri_results:
                         normalized = self._normalize_research_index_result(item)
@@ -105,10 +131,14 @@ class ArxivSearcher(BaseSearcher):
                                 else ""
                             ),
                             metrics={
-                                "published": published.text if published is not None else "",
+                                "published": published.text
+                                if published is not None
+                                else "",
                                 "authors": [a.text for a in authors if a.text],
                                 "primary_category": (
-                                    category.get("term", "") if category is not None else ""
+                                    category.get("term", "")
+                                    if category is not None
+                                    else ""
                                 ),
                             },
                             raw={},
@@ -119,6 +149,14 @@ class ArxivSearcher(BaseSearcher):
         return results
 
     def normalize(self, raw_result: Any) -> SearchResult:
+        """Normaliza um resultado bruto vindo do arXiv para a entidade padrão `SearchResult`.
+
+        Args:
+            raw_result (Any): O resultado bruto retornado pela API ou scraper.
+
+        Returns:
+            SearchResult: Objeto padronizado contendo os dados normalizados.
+        """
         return SearchResult(
             source="arxiv",
             title=raw_result.get("title", ""),

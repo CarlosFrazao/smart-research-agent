@@ -5,8 +5,10 @@ from src.types import SearchResult
 
 # ─── LLM Client ───────────────────────────────────────────────────────────────
 
+
 def test_llm_client_import():
-    from src.clients.llm_client import LLMClient, LLMProvider
+    from src.clients.llm_client import LLMProvider
+
     assert LLMProvider.ANTHROPIC == "anthropic"
     assert LLMProvider.OPENAI == "openai"
 
@@ -14,7 +16,10 @@ def test_llm_client_import():
 def test_llm_client_init_anthropic():
     with patch("anthropic.AsyncAnthropic"):
         from src.clients.llm_client import LLMClient, LLMProvider
-        client = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+
+        client = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         assert client.model == "claude-test"
         assert client.provider == LLMProvider.ANTHROPIC
 
@@ -22,6 +27,7 @@ def test_llm_client_init_anthropic():
 def test_llm_client_init_openai():
     with patch("openai.AsyncOpenAI"):
         from src.clients.llm_client import LLMClient, LLMProvider
+
         client = LLMClient(LLMProvider.OPENAI, {"api_key": "test", "model": "gpt-4"})
         assert client.model == "gpt-4"
 
@@ -29,37 +35,45 @@ def test_llm_client_init_openai():
 def test_llm_client_init_ollama():
     with patch("openai.AsyncOpenAI"):
         from src.clients.llm_client import LLMClient, LLMProvider
-        client = LLMClient(LLMProvider.OLLAMA, {"base_url": "http://localhost:11434", "model": "llama3"})
+
+        client = LLMClient(
+            LLMProvider.OLLAMA,
+            {"base_url": "http://localhost:11434", "model": "llama3"},
+        )
         assert client.model == "llama3"
 
 
 def test_llm_client_init_ollama_api_key():
     from src.clients.llm_client import LLMClient, LLMProvider
+
     with patch("openai.AsyncOpenAI") as MockOpenAI:
         # Testa com api_key configurada
         LLMClient(
-            LLMProvider.OLLAMA, 
-            {"base_url": "http://localhost:11434", "model": "llama3", "api_key": "my-ollama-key"}
+            LLMProvider.OLLAMA,
+            {
+                "base_url": "http://localhost:11434",
+                "model": "llama3",
+                "api_key": "my-ollama-key",
+            },
         )
         MockOpenAI.assert_called_with(
-            base_url="http://localhost:11434/v1",
-            api_key="my-ollama-key"
+            base_url="http://localhost:11434/v1", api_key="my-ollama-key"
         )
-        
+
     with patch("openai.AsyncOpenAI") as MockOpenAI:
         # Testa sem api_key (deve usar fallback ollama-local)
         LLMClient(
-            LLMProvider.OLLAMA, 
-            {"base_url": "http://localhost:11434", "model": "llama3"}
+            LLMProvider.OLLAMA,
+            {"base_url": "http://localhost:11434", "model": "llama3"},
         )
         MockOpenAI.assert_called_with(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama-local"
+            base_url="http://localhost:11434/v1", api_key="ollama-local"
         )
 
 
 def test_llm_client_invalid_provider():
-    from src.clients.llm_client import LLMClient, LLMProvider
+    from src.clients.llm_client import LLMClient
+
     with pytest.raises(ValueError):
         # Usando um valor de enum inválido diretamente
         client = LLMClient.__new__(LLMClient)
@@ -80,7 +94,10 @@ async def test_llm_client_generate_anthropic():
         MockAnthropic.return_value = mock_instance
 
         from src.clients.llm_client import LLMClient, LLMProvider
-        client = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+
+        client = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         result = await client.generate("test prompt")
         assert result == "test response"
 
@@ -95,7 +112,10 @@ async def test_llm_client_generate_structured():
         MockAnthropic.return_value = mock_instance
 
         from src.clients.llm_client import LLMClient, LLMProvider
-        client = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+
+        client = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         result = await client.generate_structured("test prompt", {"type": "object"})
         assert result == {"key": "value"}
 
@@ -112,15 +132,20 @@ async def test_llm_client_generate_structured_strips_markdown():
         MockAnthropic.return_value = mock_instance
 
         from src.clients.llm_client import LLMClient, LLMProvider
-        client = LLMClient(LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"})
+
+        client = LLMClient(
+            LLMProvider.ANTHROPIC, {"api_key": "test", "model": "claude-test"}
+        )
         result = await client.generate_structured("test prompt", {"type": "object"})
         assert result == {"key": "value"}
 
 
 # ─── Firecrawl Client ─────────────────────────────────────────────────────────
 
+
 def test_firecrawl_client_init_no_app():
     from src.clients.firecrawl_client import FirecrawlClient
+
     # Instanciar com chave inválida deve não lançar exceção (tem fallback)
     client = FirecrawlClient(api_key="invalid-key")
     # Pode não ter .app se falhar na inicialização — mas o objeto deve existir
@@ -130,6 +155,7 @@ def test_firecrawl_client_init_no_app():
 @pytest.mark.asyncio
 async def test_firecrawl_client_search_no_app():
     from src.clients.firecrawl_client import FirecrawlClient
+
     client = FirecrawlClient(api_key="test")
     client.app = None
     results = await client.search("test query")
@@ -139,6 +165,7 @@ async def test_firecrawl_client_search_no_app():
 @pytest.mark.asyncio
 async def test_firecrawl_client_scrape_no_app():
     from src.clients.firecrawl_client import FirecrawlClient
+
     client = FirecrawlClient(api_key="test")
     client.app = None
     result = await client.scrape("https://example.com")
@@ -148,13 +175,14 @@ async def test_firecrawl_client_scrape_no_app():
 
 # ─── Base Searcher ─────────────────────────────────────────────────────────────
 
+
 def test_base_searcher_fallback():
     from src.search.base_searcher import BaseSearcher
-    from src.types import SearchResult
 
     class DummySearcher(BaseSearcher):
         async def search(self, query, **kwargs):
             return []
+
         def normalize(self, raw):
             return SearchResult(source="dummy", title="", url="", description="")
 
@@ -165,6 +193,7 @@ def test_base_searcher_fallback():
 
 
 # ─── GitHub Searcher ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_github_searcher_search_success():
@@ -212,6 +241,7 @@ async def test_github_searcher_fallback_on_error():
 
 def test_github_searcher_normalize():
     from src.search.github_searcher import GitHubSearcher
+
     searcher = GitHubSearcher({"timeout": 10, "max_results": 10})
     raw = {
         "full_name": "test/repo",
@@ -233,6 +263,7 @@ def test_github_searcher_normalize():
 
 
 # ─── Reddit Searcher ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_reddit_searcher_search_success():
@@ -261,8 +292,10 @@ async def test_reddit_searcher_search_success():
     class AsyncContextManagerMock:
         def __init__(self, value):
             self.value = value
+
         async def __aenter__(self):
             return self.value
+
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             pass
 
@@ -275,13 +308,17 @@ async def test_reddit_searcher_search_success():
     mock_resp.status = 200
     mock_resp.json = AsyncMock(return_value=mock_data)
 
-    with patch("aiohttp.ClientSession.get", return_value=AsyncContextManagerMock(mock_resp)):
+    with patch(
+        "aiohttp.ClientSession.get", return_value=AsyncContextManagerMock(mock_resp)
+    ):
         results = await searcher.search("crm open source", domain="saas_b2b")
 
     assert len(results) == 1
     assert results[0].source == "reddit"
     assert results[0].metrics["upvotes"] == 500
-    assert results[0].metrics["subreddit_relevance"] == 25  # selfhosted é relevante para saas_b2b
+    assert (
+        results[0].metrics["subreddit_relevance"] == 25
+    )  # selfhosted é relevante para saas_b2b
 
 
 @pytest.mark.asyncio
@@ -289,23 +326,24 @@ async def test_reddit_searcher_fallback_on_error():
     from src.search.reddit_searcher import RedditSearcher
     from src.search.searxng_searcher import SearXNGSearcher
     from unittest.mock import patch, AsyncMock
-    
+
     searcher = RedditSearcher({"timeout": 10, "max_results": 10})
-    
+
     # Mocka todas as estratégias internas do RedditSearcher para retornar []
     # (que é o que elas fazem internamente quando falham)
     searcher._search_via_firecrawl = AsyncMock(return_value=[])
     searcher._search_direct_api = AsyncMock(return_value=[])
     searcher._search_pushshift = AsyncMock(return_value=[])
-    
+
     # Mocka também o SearXNGSearcher para retornar []
     with patch.object(SearXNGSearcher, "search", AsyncMock(return_value=[])):
         results = await searcher.search("test")
-        
+
     assert results == []
 
 
 # ─── HN Searcher ──────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_hn_searcher_search_success():
@@ -363,9 +401,11 @@ async def test_hn_searcher_fallback_url():
 
 # ─── ProductHunt Searcher ─────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_producthunt_searcher_no_token():
     from src.search.producthunt_searcher import ProductHuntSearcher
+
     searcher = ProductHuntSearcher({"timeout": 10, "max_results": 10})
     results = await searcher.search("crm")
     assert results == []
@@ -373,13 +413,23 @@ async def test_producthunt_searcher_no_token():
 
 # ─── Web Searcher ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_web_searcher_uses_firecrawl():
     from src.search.web_searcher import WebSearcher
-    searcher = WebSearcher({"timeout": 10, "max_results": 5, "firecrawl_api_key": "test"})
-    searcher.firecrawl.search = AsyncMock(return_value=[
-        {"title": "Test Result", "url": "https://example.com", "description": "Test"}
-    ])
+
+    searcher = WebSearcher(
+        {"timeout": 10, "max_results": 5, "firecrawl_api_key": "test"}
+    )
+    searcher.firecrawl.search = AsyncMock(
+        return_value=[
+            {
+                "title": "Test Result",
+                "url": "https://example.com",
+                "description": "Test",
+            }
+        ]
+    )
     results = await searcher.search("test query")
     assert len(results) == 1
     assert results[0].source == "web"
@@ -388,7 +438,10 @@ async def test_web_searcher_uses_firecrawl():
 @pytest.mark.asyncio
 async def test_web_searcher_fallback():
     from src.search.web_searcher import WebSearcher
-    searcher = WebSearcher({"timeout": 10, "max_results": 5, "firecrawl_api_key": "test"})
+
+    searcher = WebSearcher(
+        {"timeout": 10, "max_results": 5, "firecrawl_api_key": "test"}
+    )
     searcher.firecrawl.search = AsyncMock(side_effect=Exception("Firecrawl down"))
     results = await searcher.search("test query")
     assert results == []
@@ -396,10 +449,14 @@ async def test_web_searcher_fallback():
 
 # ─── Firecrawl Searcher ───────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_firecrawl_searcher_normalize():
     from src.search.firecrawl_searcher import FirecrawlSearcher
-    searcher = FirecrawlSearcher({"timeout": 10, "max_results": 5, "firecrawl_api_key": "test"})
+
+    searcher = FirecrawlSearcher(
+        {"timeout": 10, "max_results": 5, "firecrawl_api_key": "test"}
+    )
     raw = {"title": "Test", "url": "https://test.com", "markdown": "Content here"}
     result = searcher.normalize(raw)
     assert result.source == "firecrawl"

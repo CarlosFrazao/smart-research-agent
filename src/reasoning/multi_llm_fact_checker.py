@@ -1,3 +1,5 @@
+"""Verificador de fatos multi-LLM usando multiplos modelos para validar afirmacoes de forma cruzada."""
+
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +38,9 @@ class MultiLLMFactChecker:
         self.timeout = timeout
 
     def _build_prompt(self, claim: str, evidence: list[str]) -> str:
-        ev_block = "\n".join(f"- {e}" for e in evidence[:10]) if evidence else "No evidence."
+        ev_block = (
+            "\n".join(f"- {e}" for e in evidence[:10]) if evidence else "No evidence."
+        )
         return self._VERDICT_PROMPT.format(claim=claim, evidence=ev_block)
 
     def _parse_response(self, text: str, name: str) -> dict[str, Any]:
@@ -49,17 +53,26 @@ class MultiLLMFactChecker:
                     verdict = v
             elif line.startswith("CONFIDENCE:"):
                 try:
-                    confidence = max(0.0, min(1.0, float(line.split(":", 1)[1].strip())))
+                    confidence = max(
+                        0.0, min(1.0, float(line.split(":", 1)[1].strip()))
+                    )
                 except ValueError:
                     pass
             elif line.startswith("REASONING:"):
                 reasoning = line.split(":", 1)[1].strip()
-        return {"llm": name, "verdict": verdict, "confidence": confidence, "reasoning": reasoning}
+        return {
+            "llm": name,
+            "verdict": verdict,
+            "confidence": confidence,
+            "reasoning": reasoning,
+        }
 
     async def _call_llm(self, llm: Any, prompt: str) -> dict[str, Any] | None:
         name = getattr(llm, "model", getattr(llm, "name", "unknown"))
         try:
-            text: str = await asyncio.wait_for(llm.complete(prompt), timeout=self.timeout)
+            text: str = await asyncio.wait_for(
+                llm.complete(prompt), timeout=self.timeout
+            )
             return self._parse_response(text, name)
         except (TimeoutError, Exception) as exc:
             logger.warning(f"FactChecker LLM {name!r} falhou: {exc}")
@@ -78,23 +91,40 @@ class MultiLLMFactChecker:
         n = counts[dominant]
         return dominant, total_conf[dominant] / n, n > len(verdicts) / 2
 
-    async def verify_claim(self, claim: str, evidence: list[str] | None = None) -> FactCheckResult:
+    async def verify_claim(
+        self, claim: str, evidence: list[str] | None = None
+    ) -> FactCheckResult:
         prompt = self._build_prompt(claim, evidence or [])
         raw = await asyncio.gather(*[self._call_llm(llm, prompt) for llm in self.llms])
         verdicts = [r for r in raw if r is not None]
         if not verdicts:
-            return FactCheckResult(claim=claim, verdict="uncertain", confidence=0.0,
-                consensus=False, evidence_snippets=evidence or [], reasoning="All LLMs failed.")
+            return FactCheckResult(
+                claim=claim,
+                verdict="uncertain",
+                confidence=0.0,
+                consensus=False,
+                evidence_snippets=evidence or [],
+                reasoning="All LLMs failed.",
+            )
         dominant, confidence, consensus = self._calculate_consensus(verdicts)
         top = next((v["reasoning"] for v in verdicts if v["verdict"] == dominant), "")
-        return FactCheckResult(claim=claim, verdict=dominant, confidence=round(confidence, 3),
-            consensus=consensus, evidence_snippets=(evidence or [])[:5],
-            llm_verdicts=verdicts, reasoning=top)
+        return FactCheckResult(
+            claim=claim,
+            verdict=dominant,
+            confidence=round(confidence, 3),
+            consensus=consensus,
+            evidence_snippets=(evidence or [])[:5],
+            llm_verdicts=verdicts,
+            reasoning=top,
+        )
 
-    async def verify_batch(self, claims: list[str], evidence: list[str] | None = None,
-            concurrency: int = 3) -> list[FactCheckResult]:
+    async def verify_batch(
+        self, claims: list[str], evidence: list[str] | None = None, concurrency: int = 3
+    ) -> list[FactCheckResult]:
         sem = asyncio.Semaphore(concurrency)
+
         async def _one(c: str) -> FactCheckResult:
             async with sem:
                 return await self.verify_claim(c, evidence)
+
         return list(await asyncio.gather(*[_one(c) for c in claims]))

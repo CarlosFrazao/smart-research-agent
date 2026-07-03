@@ -1,3 +1,5 @@
+"""Servico de raciocinio que encapsula analise de intencao, expansao de queries, ranqueamento e debate entre LLMs."""
+
 import logging
 from datetime import datetime
 from statistics import mean
@@ -17,52 +19,65 @@ class ReasoningService:
 
     @property
     def intent_analyzer(self):
+        """Delega ao `IntentAnalyzer` do orquestrador."""
         return self.orch.intent_analyzer
 
     @property
     def query_expander(self):
+        """Delega ao `QueryExpander` do orquestrador."""
         return self.orch.query_expander
 
     @property
     def ranker(self):
+        """Delega ao `QualityRanker` do orquestrador."""
         return self.orch.ranker
 
     @property
     def confidence_scorer(self):
+        """Delega ao `ConfidenceScorerV2` do orquestrador."""
         return self.orch.confidence_scorer
 
     @property
     def gap_detector(self):
+        """Delega ao `GapDetector` do orquestrador."""
         return self.orch.gap_detector
 
     @property
     def sanitizer(self):
+        """Delega ao `LLMSanitizer` do orquestrador."""
         return self.orch.sanitizer
 
     @property
     def conflict_detector(self):
+        """Delega ao `ConflictDetector` do orquestrador."""
         return self.orch.conflict_detector
 
     @property
     def peer_reviewer(self):
+        """Delega ao `PeerReviewAgent` do orquestrador."""
         return self.orch.peer_reviewer
 
     @property
     def llm(self):
+        """Delega ao `LLMClient` do orquestrador."""
         return self.orch.llm
 
     @property
     def searchers(self):
+        """Delega ao mapa de searchers do orquestrador."""
         return self.orch.searchers
 
     @property
     def operation_mode(self):
+        """Delega ao modo de operacao ativo do orquestrador."""
         return self.orch.operation_mode
 
     async def analyze_intent(self, query: str) -> Any:
+        """Analisa a intencao da query delegando ao `IntentAnalyzer`."""
         return await self.intent_analyzer.analyze(query)
 
     async def expand_queries(self, query: str, intent) -> list[Any]:
+        """Expande a query delegando ao `QueryExpander`."""
         return await self.query_expander.expand(query, intent)
 
     async def rank(self, results: list[Any], query: str | None = None) -> list[Any]:
@@ -74,8 +89,12 @@ class ReasoningService:
         if query and hasattr(self.orch, "semantic_reranker"):
             try:
                 # Converte objetos SearchResult para dict para o reranker
-                as_dicts = [r.__dict__ if hasattr(r, "__dict__") else dict(r) for r in ranked]
-                reranked_dicts = await self.orch.semantic_reranker.rerank(query, as_dicts)
+                as_dicts = [
+                    r.__dict__ if hasattr(r, "__dict__") else dict(r) for r in ranked
+                ]
+                reranked_dicts = await self.orch.semantic_reranker.rerank(
+                    query, as_dicts
+                )
                 # Recria a ordem na lista original (preserva objetos originais, apenas reordena)
                 url_to_obj = {
                     (r.url if hasattr(r, "url") else r.get("url", "")): r
@@ -86,9 +105,10 @@ class ReasoningService:
                     for i, d in enumerate(reranked_dicts)
                 ]
             except Exception as e:
-                logger.warning(f"ReasoningService.rank: SemanticReranker falhou ({e}), mantendo ranking original")
+                logger.warning(
+                    f"ReasoningService.rank: SemanticReranker falhou ({e}), mantendo ranking original"
+                )
         return ranked
-
 
     async def calculate_overall_confidence(self, results: list[Any]) -> float:
         """
@@ -109,14 +129,19 @@ class ReasoningService:
         high_quality = sum(1 for s in individual_scores if s > 0.7)
         quality_ratio = high_quality / len(individual_scores)
         base_confidence = mean(individual_scores)
-        return round(min(base_confidence * diversity_bonus * (0.5 + 0.5 * quality_ratio), 1.0), 4)
+        return round(
+            min(base_confidence * diversity_bonus * (0.5 + 0.5 * quality_ratio), 1.0), 4
+        )
 
-    async def run_debate_mode(self, query: str, start_time: datetime, formats: list[Any] | None = None) -> str:
+    async def run_debate_mode(
+        self, query: str, start_time: datetime, formats: list[Any] | None = None
+    ) -> str:
         """
         Executa o debate científico entre duas hipóteses concorrentes e gera o relatório veredito.
         """
         logger.info("Modo DEBATE ativo. Iniciando DebateOrchestrator...")
         from src.debate_orchestrator import DebateOrchestrator
+
         debate = DebateOrchestrator(llm_client=self.llm, searchers=self.searchers)
         debate_round = await debate.run(query)
         report = debate.format_debate_markdown(debate_round)
@@ -140,6 +165,8 @@ class ReasoningService:
                     duration_seconds=duration,
                 )
             except Exception as e:
-                logger.warning(f"OrvixMemory.store_research_result falhou para o debate: {e}")
+                logger.warning(
+                    f"OrvixMemory.store_research_result falhou para o debate: {e}"
+                )
 
         return report

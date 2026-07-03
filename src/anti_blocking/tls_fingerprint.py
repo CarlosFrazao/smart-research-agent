@@ -2,6 +2,7 @@
 Randomiza TLS fingerprint para evitar detecção por Cloudflare/Akamai.
 Usa curl_cffi para impersonar browsers reais ao nível do TLS handshake.
 """
+
 import asyncio
 import logging
 import random
@@ -9,9 +10,15 @@ import random
 logger = logging.getLogger(__name__)
 
 BROWSER_IMPERSONATIONS: list[str] = [
-    "chrome124", "chrome120", "chrome116", "chrome110",
-    "safari17_2", "safari17_0", "safari15_5",
-    "firefox120", "edge99",
+    "chrome124",
+    "chrome120",
+    "chrome116",
+    "chrome110",
+    "safari17_2",
+    "safari17_0",
+    "safari15_5",
+    "firefox120",
+    "edge99",
 ]
 
 
@@ -21,6 +28,7 @@ class TLSFingerprintClient:
     def __init__(self):
         try:
             from curl_cffi import requests as cffi_requests
+
             self._session = cffi_requests.Session()
             self._available = True
         except ImportError:
@@ -42,7 +50,7 @@ class TLSFingerprintClient:
         loop = asyncio.get_running_loop()
         try:
             impersonate = random.choice(BROWSER_IMPERSONATIONS)
-            
+
             def _sync_get():
                 return self._session.get(
                     url,

@@ -1,8 +1,19 @@
+"""Utilitario de limpeza e sanitizacao de queries de pesquisa."""
+
 import re
 
 TECH_STOPWORDS = {
-    "the", "a", "an", "is", "are", "what", "which", "best",
-    "top", "vs", "versus",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "what",
+    "which",
+    "best",
+    "top",
+    "vs",
+    "versus",
 }
 
 TECH_DISAMBIGUATION = {

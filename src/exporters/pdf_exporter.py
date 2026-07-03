@@ -4,6 +4,7 @@ pdf_exporter.py — Exportador de relatórios para PDF via reportlab.
 Dependência opcional: pip install reportlab
 Se reportlab não estiver instalado, o exporter emite um aviso e retorna None.
 """
+
 import logging
 from pathlib import Path
 
@@ -22,6 +23,7 @@ try:
         Table,
         TableStyle,
     )
+
     _REPORTLAB_AVAILABLE = True
 except ImportError:
     _REPORTLAB_AVAILABLE = False
@@ -48,7 +50,9 @@ class PDFExporter:
             Caminho do arquivo gerado, ou None se reportlab não disponível.
         """
         if not self.available:
-            logger.warning("PDFExporter: exportação ignorada — reportlab não disponível.")
+            logger.warning(
+                "PDFExporter: exportação ignorada — reportlab não disponível."
+            )
             return None
 
         pdf_path = str(filepath).replace(".md", ".pdf")
@@ -64,13 +68,25 @@ class PDFExporter:
         )
 
         styles = getSampleStyleSheet()
-        h1_style = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=18, spaceAfter=12)
-        h2_style = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=14, spaceAfter=8)
-        h3_style = ParagraphStyle("H3", parent=styles["Heading3"], fontSize=12, spaceAfter=6)
-        body_style = ParagraphStyle("Body", parent=styles["Normal"], fontSize=10, leading=14)
+        h1_style = ParagraphStyle(
+            "H1", parent=styles["Heading1"], fontSize=18, spaceAfter=12
+        )
+        h2_style = ParagraphStyle(
+            "H2", parent=styles["Heading2"], fontSize=14, spaceAfter=8
+        )
+        h3_style = ParagraphStyle(
+            "H3", parent=styles["Heading3"], fontSize=12, spaceAfter=6
+        )
+        body_style = ParagraphStyle(
+            "Body", parent=styles["Normal"], fontSize=10, leading=14
+        )
         blockquote_style = ParagraphStyle(
-            "Blockquote", parent=styles["Normal"], fontSize=10,
-            leftIndent=20, textColor=colors.HexColor("#555555"), leading=14
+            "Blockquote",
+            parent=styles["Normal"],
+            fontSize=10,
+            leftIndent=20,
+            textColor=colors.HexColor("#555555"),
+            leading=14,
         )
 
         story = []
@@ -87,7 +103,11 @@ class PDFExporter:
             elif stripped.startswith("### "):
                 story.append(Paragraph(self._clean_md(stripped[4:]), h3_style))
             elif stripped.startswith("---"):
-                story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CCCCCC")))
+                story.append(
+                    HRFlowable(
+                        width="100%", thickness=0.5, color=colors.HexColor("#CCCCCC")
+                    )
+                )
                 story.append(Spacer(1, 6))
             elif stripped.startswith("> "):
                 story.append(Paragraph(self._clean_md(stripped[2:]), blockquote_style))
@@ -108,6 +128,7 @@ class PDFExporter:
         Converte marcação Markdown básica em HTML simples compatível com reportlab Paragraph.
         """
         import re
+
         # Bold **text**
         text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
         # Italic *text*
@@ -117,5 +138,9 @@ class PDFExporter:
         # Links [text](url)
         text = re.sub(r"\[([^\]]+)\]\(([^\)]+)\)", r"\1 (\2)", text)
         # Emojis e caracteres especiais que podem quebrar o reportlab — remove
-        text = re.sub(r"[^\x00-\x7F]+", lambda m: m.group().encode("ascii", "ignore").decode(), text)
+        text = re.sub(
+            r"[^\x00-\x7F]+",
+            lambda m: m.group().encode("ascii", "ignore").decode(),
+            text,
+        )
         return text

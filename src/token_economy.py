@@ -14,6 +14,7 @@ Uso:
 
 Skill: first-principles-thinking (Gestão de orçamentos e tokens)
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,22 +26,22 @@ logger = logging.getLogger(__name__)
 # Valores de referência; atualize conforme pricing oficial.
 MODEL_PRICING: dict[str, dict[str, float]] = {
     # OpenAI
-    "gpt-4o":              {"input": 0.005,  "output": 0.015},
-    "gpt-4o-mini":         {"input": 0.00015,"output": 0.0006},
-    "gpt-4-turbo":         {"input": 0.01,   "output": 0.03},
-    "gpt-3.5-turbo":       {"input": 0.0005, "output": 0.0015},
+    "gpt-4o": {"input": 0.005, "output": 0.015},
+    "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+    "gpt-4-turbo": {"input": 0.01, "output": 0.03},
+    "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
     # Google
-    "gemini-2.5-pro":      {"input": 0.0035, "output": 0.0105},
-    "gemini-2.5-flash":    {"input": 0.00015,"output": 0.0006},
-    "gemini-1.5-pro":      {"input": 0.0025, "output": 0.005},
-    "gemini-1.5-flash":    {"input": 0.000075,"output": 0.0003},
+    "gemini-2.5-pro": {"input": 0.0035, "output": 0.0105},
+    "gemini-2.5-flash": {"input": 0.00015, "output": 0.0006},
+    "gemini-1.5-pro": {"input": 0.0025, "output": 0.005},
+    "gemini-1.5-flash": {"input": 0.000075, "output": 0.0003},
     # Anthropic
-    "claude-opus-4":       {"input": 0.015,  "output": 0.075},
-    "claude-sonnet-3.5":   {"input": 0.003,  "output": 0.015},
-    "claude-haiku-3.5":    {"input": 0.0008, "output": 0.004},
+    "claude-opus-4": {"input": 0.015, "output": 0.075},
+    "claude-sonnet-3.5": {"input": 0.003, "output": 0.015},
+    "claude-haiku-3.5": {"input": 0.0008, "output": 0.004},
     # Ollama (local — grátis)
-    "ollama/llama3":       {"input": 0.0,    "output": 0.0},
-    "ollama/mistral":      {"input": 0.0,    "output": 0.0},
+    "ollama/llama3": {"input": 0.0, "output": 0.0},
+    "ollama/mistral": {"input": 0.0, "output": 0.0},
 }
 
 # Encoding padrão quando o modelo não for reconhecido pelo tiktoken
@@ -51,6 +52,7 @@ def _get_encoding(model: str):
     """Retorna encoding tiktoken para o modelo; fallback para cl100k_base."""
     try:
         import tiktoken
+
         try:
             return tiktoken.encoding_for_model(model)
         except KeyError:
@@ -65,6 +67,7 @@ def _count_chars_approx(text: str) -> int:
 
 
 # ── Dataclasses ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class UsageRecord:
@@ -100,6 +103,7 @@ class Budget:
 
 
 # ── Motor Principal ──────────────────────────────────────────────────────────
+
 
 class TokenEconomy:
     """

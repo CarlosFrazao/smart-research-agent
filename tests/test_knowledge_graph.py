@@ -22,8 +22,7 @@ def temp_memory():
 
     try:
         memory.chroma_collection = memory.chroma_client.get_or_create_collection(
-            name=test_collection,
-            metadata={"hnsw:space": "cosine"}
+            name=test_collection, metadata={"hnsw:space": "cosine"}
         )
     except Exception:
         pass
@@ -45,11 +44,16 @@ def temp_memory():
 
 def test_kg_regex_extraction():
     kg = SemanticKnowledgeGraph()
-    
+
     # Testa detecção founded_by
     t1 = kg.extract_triples("Google was founded by Larry Page and Sergey Brin.")
     assert len(t1) >= 1
-    assert any(t.relation == "founded_by" and t.subject == "Google" and "Larry Page" in t.object for t in t1)
+    assert any(
+        t.relation == "founded_by"
+        and t.subject == "Google"
+        and "Larry Page" in t.object
+        for t in t1
+    )
 
     # Testa detecção produces
     t2 = kg.extract_triples("Apple produces iPhone.")
@@ -69,7 +73,8 @@ def test_kg_regex_extraction():
 @pytest.mark.asyncio
 async def test_kg_llm_extraction():
     llm_mock = MagicMock(spec=LLMClient)
-    llm_mock.generate = AsyncMock(return_value="""
+    llm_mock.generate = AsyncMock(
+        return_value="""
 [
   {
     "subject": "React",
@@ -84,10 +89,13 @@ async def test_kg_llm_extraction():
     "confidence": 0.85
   }
 ]
-""")
+"""
+    )
     kg = SemanticKnowledgeGraph(llm_client=llm_mock)
-    triples = await kg.extract_triples_with_llm("React is created by Meta. Svelte competes with React.")
-    
+    triples = await kg.extract_triples_with_llm(
+        "React is created by Meta. Svelte competes with React."
+    )
+
     assert len(triples) == 2
     assert triples[0].subject == "React"
     assert triples[0].relation == "created_by"
@@ -106,7 +114,7 @@ def test_kg_kuzu_integration(temp_memory):
         relation="created_by",
         object="Guido",
         confidence=0.9,
-        source="test"
+        source="test",
     )
     kg.add_triple(triple)
 
@@ -144,13 +152,15 @@ def test_kg_add_via_memory(temp_memory):
 def test_kg_export_ttl_and_json(temp_memory):
     kg = temp_memory.kg
 
-    kg.add_triple(Triple(
-        subject="Tesla",
-        relation="competes_with",
-        object="BYD",
-        confidence=0.8,
-        source="test"
-    ))
+    kg.add_triple(
+        Triple(
+            subject="Tesla",
+            relation="competes_with",
+            object="BYD",
+            confidence=0.8,
+            source="test",
+        )
+    )
 
     # Export RDF/Turtle
     ttl = kg.export_ttl()

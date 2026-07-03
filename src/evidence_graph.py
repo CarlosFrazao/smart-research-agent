@@ -5,6 +5,7 @@ Constrói um grafo semântico de claims extraídas dos resultados de pesquisa,
 detecta relações CONFIRMS/CONTRADICTS via similaridade Jaccard e exporta
 nos formatos Graphviz, D3.js e Cytoscape.js.
 """
+
 import hashlib
 import logging
 import re
@@ -37,8 +38,8 @@ _AFFIRMATION_WORDS = re.compile(
 class Claim:
     id: str
     text: str
-    source: str                      # URL da fonte
-    source_name: str                 # Nome curto da fonte (ex: "arxiv")
+    source: str  # URL da fonte
+    source_name: str  # Nome curto da fonte (ex: "arxiv")
     confidence: float = 0.0
     tokens: list[str] = field(default_factory=list)
 
@@ -47,8 +48,8 @@ class Claim:
 class ClaimRelation:
     from_id: str
     to_id: str
-    relation_type: str               # "CONFIRMS" | "CONTRADICTS"
-    weight: float                    # Força da relação (0.0 - 1.0)
+    relation_type: str  # "CONFIRMS" | "CONTRADICTS"
+    weight: float  # Força da relação (0.0 - 1.0)
 
 
 class EvidenceGraph:
@@ -56,8 +57,11 @@ class EvidenceGraph:
     Constrói e exporta grafos de evidências com suporte a múltiplos formatos.
     """
 
-    def __init__(self, confirm_threshold: float = _CONFIRM_THRESHOLD,
-                 contradict_threshold: float = _CONTRADICT_THRESHOLD):
+    def __init__(
+        self,
+        confirm_threshold: float = _CONFIRM_THRESHOLD,
+        contradict_threshold: float = _CONTRADICT_THRESHOLD,
+    ):
         self.confirm_threshold = confirm_threshold
         self.contradict_threshold = contradict_threshold
         self.claims: list[Claim] = []
@@ -79,11 +83,13 @@ class EvidenceGraph:
                     text=f"{result.title or ''} {result.description or ''}",
                     source=result.url or "",
                     source_name=result.source or "unknown",
-                    confidence=getattr(result, "confidence_score", 0.0)
+                    confidence=getattr(result, "confidence_score", 0.0),
                 )
                 self.claims.extend(claims)
             except Exception as e:
-                logger.warning(f"EvidenceGraph: falha ao extrair de {getattr(result, 'url', '')[:40]}: {e}")
+                logger.warning(
+                    f"EvidenceGraph: falha ao extrair de {getattr(result, 'url', '')[:40]}: {e}"
+                )
 
         self.relations = self.detect_relations(self.claims)
         logger.info(
@@ -117,14 +123,16 @@ class EvidenceGraph:
             raw_id = hashlib.md5(f"{source}:{sentence}".encode()).hexdigest()[:12]
             tokens = self._tokenize(sentence)
 
-            claims.append(Claim(
-                id=raw_id,
-                text=sentence,
-                source=source,
-                source_name=source_name,
-                confidence=confidence,
-                tokens=tokens,
-            ))
+            claims.append(
+                Claim(
+                    id=raw_id,
+                    text=sentence,
+                    source=source,
+                    source_name=source_name,
+                    confidence=confidence,
+                    tokens=tokens,
+                )
+            )
 
         return claims
 
@@ -159,22 +167,26 @@ class EvidenceGraph:
                 aff_a = bool(_AFFIRMATION_WORDS.search(a.text))
                 aff_b = bool(_AFFIRMATION_WORDS.search(b.text))
 
-                same_polarity = (neg_a == neg_b)
+                same_polarity = neg_a == neg_b
 
                 if similarity >= self.confirm_threshold and same_polarity:
-                    relations.append(ClaimRelation(
-                        from_id=a.id,
-                        to_id=b.id,
-                        relation_type="CONFIRMS",
-                        weight=round(similarity, 3),
-                    ))
+                    relations.append(
+                        ClaimRelation(
+                            from_id=a.id,
+                            to_id=b.id,
+                            relation_type="CONFIRMS",
+                            weight=round(similarity, 3),
+                        )
+                    )
                 elif not same_polarity:
-                    relations.append(ClaimRelation(
-                        from_id=a.id,
-                        to_id=b.id,
-                        relation_type="CONTRADICTS",
-                        weight=round(similarity, 3),
-                    ))
+                    relations.append(
+                        ClaimRelation(
+                            from_id=a.id,
+                            to_id=b.id,
+                            relation_type="CONTRADICTS",
+                            weight=round(similarity, 3),
+                        )
+                    )
 
         return relations
 
@@ -195,12 +207,59 @@ class EvidenceGraph:
         Tokeniza o texto removendo stopwords e pontuação.
         """
         stopwords = {
-            "a", "an", "the", "and", "or", "but", "in", "on", "at", "to",
-            "for", "of", "with", "by", "from", "is", "are", "was", "were",
-            "be", "been", "being", "have", "has", "had", "do", "does", "did",
-            "will", "would", "could", "should", "may", "might",
-            "o", "a", "os", "as", "e", "de", "da", "do", "em", "no", "na",
-            "um", "uma", "com", "para", "por", "que", "se", "ao",
+            "a",
+            "an",
+            "the",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "o",
+            "a",
+            "os",
+            "as",
+            "e",
+            "de",
+            "da",
+            "do",
+            "em",
+            "no",
+            "na",
+            "um",
+            "uma",
+            "com",
+            "para",
+            "por",
+            "que",
+            "se",
+            "ao",
         }
         tokens = re.findall(r"\b[a-zA-ZÀ-ú]{3,}\b", text.lower())
         return [t for t in tokens if t not in stopwords]
@@ -216,7 +275,8 @@ class EvidenceGraph:
             (claim_map[r.from_id], claim_map[r.to_id], r.weight)
             for r in self.relations
             if r.relation_type == "CONTRADICTS"
-            and r.from_id in claim_map and r.to_id in claim_map
+            and r.from_id in claim_map
+            and r.to_id in claim_map
         ]
         return sorted(conflicts, key=lambda x: x[2], reverse=True)
 
@@ -226,11 +286,21 @@ class EvidenceGraph:
         """
         Exporta o grafo no formato DOT (Graphviz).
         """
-        lines = ["digraph EvidenceGraph {", '  rankdir="LR";', '  node [shape=box, style=filled];']
+        lines = [
+            "digraph EvidenceGraph {",
+            '  rankdir="LR";',
+            "  node [shape=box, style=filled];",
+        ]
 
         for c in self.claims:
             label = c.text[:60].replace('"', "'")
-            color = "#a8d5a2" if c.confidence >= 0.7 else "#f4d06f" if c.confidence >= 0.5 else "#f4a261"
+            color = (
+                "#a8d5a2"
+                if c.confidence >= 0.7
+                else "#f4d06f"
+                if c.confidence >= 0.5
+                else "#f4a261"
+            )
             lines.append(f'  "{c.id}" [label="{label}...", fillcolor="{color}"];')
 
         for r in self.relations:
@@ -276,27 +346,31 @@ class EvidenceGraph:
         elements: list[dict] = []
 
         for c in self.claims:
-            elements.append({
-                "group": "nodes",
-                "data": {
-                    "id": c.id,
-                    "label": c.text[:60],
-                    "source": c.source_name,
-                    "confidence": c.confidence,
+            elements.append(
+                {
+                    "group": "nodes",
+                    "data": {
+                        "id": c.id,
+                        "label": c.text[:60],
+                        "source": c.source_name,
+                        "confidence": c.confidence,
+                    },
                 }
-            })
+            )
 
         for r in self.relations:
-            elements.append({
-                "group": "edges",
-                "data": {
-                    "id": f"{r.from_id}-{r.to_id}",
-                    "source": r.from_id,
-                    "target": r.to_id,
-                    "type": r.relation_type,
-                    "weight": r.weight,
+            elements.append(
+                {
+                    "group": "edges",
+                    "data": {
+                        "id": f"{r.from_id}-{r.to_id}",
+                        "source": r.from_id,
+                        "target": r.to_id,
+                        "type": r.relation_type,
+                        "weight": r.weight,
+                    },
                 }
-            })
+            )
 
         return {"elements": elements}
 

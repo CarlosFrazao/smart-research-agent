@@ -1,8 +1,9 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from src.orchestrator import Orchestrator
 from src.config import Config
 from src.types import SearchResult
+
 
 @pytest.mark.asyncio
 async def test_research_e2e_pipeline():
@@ -10,32 +11,46 @@ async def test_research_e2e_pipeline():
     orch = Orchestrator(config)
 
     # Mock LLM calls to avoid calling API
-    orch.llm.generate = AsyncMock(return_value="Resumo executivo gerado com sucesso pelo E2E.")
-    orch.llm.generate_structured = AsyncMock(side_effect=[
-        # 1. Intent analyzer
-        {
-            "domain": "saas_b2b",
-            "entities": ["AFFiNE", "Notion"],
-            "intention": "discover",
-            "urgency": "nao",
-            "confidence": "alta"
-        },
-        # 2. Query expander
-        {
-            "queries": [
-                {"query": "AFFiNE open source Notion alternative", "type": "qualificador", "priority": "alta", "rationale": "test"},
-                {"query": "AFFiNE alternative", "type": "qualificador", "priority": "media", "rationale": "test"}
-            ]
-        },
-        # 3. Gap detector (iter 1)
-        {
-            "is_complete": True,
-            "missing_aspects": [],
-            "new_queries": [],
-            "confidence": "alta",
-            "rationale": "Pesquisa E2E completa"
-        }
-    ])
+    orch.llm.generate = AsyncMock(
+        return_value="Resumo executivo gerado com sucesso pelo E2E."
+    )
+    orch.llm.generate_structured = AsyncMock(
+        side_effect=[
+            # 1. Intent analyzer
+            {
+                "domain": "saas_b2b",
+                "entities": ["AFFiNE", "Notion"],
+                "intention": "discover",
+                "urgency": "nao",
+                "confidence": "alta",
+            },
+            # 2. Query expander
+            {
+                "queries": [
+                    {
+                        "query": "AFFiNE open source Notion alternative",
+                        "type": "qualificador",
+                        "priority": "alta",
+                        "rationale": "test",
+                    },
+                    {
+                        "query": "AFFiNE alternative",
+                        "type": "qualificador",
+                        "priority": "media",
+                        "rationale": "test",
+                    },
+                ]
+            },
+            # 3. Gap detector (iter 1)
+            {
+                "is_complete": True,
+                "missing_aspects": [],
+                "new_queries": [],
+                "confidence": "alta",
+                "rationale": "Pesquisa E2E completa",
+            },
+        ]
+    )
 
     # Mock actual search results returned by parallel_search
     mock_results = [
@@ -52,7 +67,7 @@ async def test_research_e2e_pipeline():
             url="https://news.ycombinator.com/item?id=32000",
             description="Discussion about AFFiNE on Hacker News.",
             metrics={"points": 350, "comments": 80},
-        )
+        ),
     ]
     orch._parallel_search = AsyncMock(return_value=mock_results)
 

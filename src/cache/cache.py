@@ -1,7 +1,8 @@
+"""Cache assincrono com backend Redis ou memoria local para resultados de busca."""
+
 import hashlib
 import json
 import logging
-import os
 import gzip
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
@@ -12,15 +13,15 @@ logger = logging.getLogger(__name__)
 
 class Cache:
     TTL_STRATEGIES = {
-        "github": 3600,        # 1 hora
-        "news": 900,           # 15 minutos
-        "papers": 86400,       # 24 horas
-        "reddit": 1800,        # 30 minutos
-        "hackernews": 1800,    # 30 minutos
-        "arxiv": 86400,        # 24 horas
-        "stackoverflow": 3600, # 1 hora
-        "rss": 1800,           # 30 minutos
-        "default": 3600,       # 1 hora
+        "github": 3600,  # 1 hora
+        "news": 900,  # 15 minutos
+        "papers": 86400,  # 24 horas
+        "reddit": 1800,  # 30 minutos
+        "hackernews": 1800,  # 30 minutos
+        "arxiv": 86400,  # 24 horas
+        "stackoverflow": 3600,  # 1 hora
+        "rss": 1800,  # 30 minutos
+        "default": 3600,  # 1 hora
     }
 
     def __init__(self, cache_dir: str = "./.cache", redis_url: str | None = None):
@@ -28,10 +29,11 @@ class Cache:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.redis = None
         self.memory: dict[str, dict] = {}
-        
+
         if redis_url:
             try:
                 import redis.asyncio as redis_lib
+
                 self.redis = redis_lib.from_url(redis_url, decode_responses=True)
                 logger.info(f"Cache: Redis conectado em {redis_url}")
             except Exception as e:
@@ -49,7 +51,7 @@ class Cache:
         prefix_or_key: str,
         query: str | None = None,
         check_etag: bool = False,
-        etag_url: str | None = None
+        etag_url: str | None = None,
     ) -> Any | None:
         if query is None:
             # SmartCache (key única)
@@ -80,8 +82,12 @@ class Cache:
         if cached:
             expires = datetime.fromisoformat(cached["expires"])
             # Suporta tanto isoformat aware (UTC) quanto naive (UTC nos testes antigos)
-            expires_val = expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
-            now_val = datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            expires_val = (
+                expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
+            )
+            now_val = (
+                datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            )
             if expires_val > now_val:
                 return cached["value"]
             else:
@@ -92,21 +98,26 @@ class Cache:
         path = self.cache_dir / filename
         if not path.exists():
             return None
-            
+
         try:
             import asyncio
+
             data_bytes = await asyncio.to_thread(path.read_bytes)
             decompressed = gzip.decompress(data_bytes).decode("utf-8")
             data = json.loads(decompressed)
-            
+
             # Valida expiração
             expires = datetime.fromisoformat(data["expires"])
-            expires_val = expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
-            now_val = datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            expires_val = (
+                expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
+            )
+            now_val = (
+                datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            )
             if expires_val < now_val:
                 await asyncio.to_thread(path.unlink, missing_ok=True)
                 return None
-                
+
             # Atualiza cache em memória
             self.memory[key] = data
             return data["value"]
@@ -136,13 +147,15 @@ class Cache:
             prefix = prefix_or_key
             filename = self._filename(prefix_or_key, query_or_value)
 
-        ttl = ttl_seconds or self.TTL_STRATEGIES.get(prefix, self.TTL_STRATEGIES["default"])
+        ttl = ttl_seconds or self.TTL_STRATEGIES.get(
+            prefix, self.TTL_STRATEGIES["default"]
+        )
         expires = datetime.now(UTC) + timedelta(seconds=ttl)
-        
+
         data = {
             "value": value_to_cache,
             "expires": expires.isoformat(),
-            "cached_at": datetime.now(UTC).isoformat()
+            "cached_at": datetime.now(UTC).isoformat(),
         }
 
         # 1. Salvar no Redis
@@ -159,6 +172,7 @@ class Cache:
         path = self.cache_dir / filename
         try:
             import asyncio
+
             serialized = json.dumps(data, default=str, indent=2)
             compressed = gzip.compress(serialized.encode("utf-8"))
             await asyncio.to_thread(path.write_bytes, compressed)
@@ -179,10 +193,11 @@ class Cache:
             except Exception:
                 pass
         self.memory.pop(key, None)
-        
+
         path = self.cache_dir / filename
         if path.exists():
             import asyncio
+
             try:
                 await asyncio.to_thread(path.unlink, missing_ok=True)
             except Exception:
@@ -190,10 +205,12 @@ class Cache:
 
     async def invalidate(self, prefix: str) -> None:
         # Invalida memória
-        keys_to_del = [k for k in self.memory if k.startswith(f"{prefix}:") or k == prefix]
+        keys_to_del = [
+            k for k in self.memory if k.startswith(f"{prefix}:") or k == prefix
+        ]
         for k in keys_to_del:
             self.memory.pop(k, None)
-            
+
         # Invalida Redis se disponível
         if self.redis:
             try:
@@ -206,6 +223,7 @@ class Cache:
 
         # Invalida arquivos no disco local
         import asyncio
+
         def _unlink_glob():
             # Remove arquivos com padrão prefix_*.json.gz ou smart_prefix.json.gz
             for f in self.cache_dir.glob(f"{prefix}_*.json.gz"):
@@ -219,6 +237,7 @@ class Cache:
                     smart_f.unlink()
                 except Exception:
                     pass
+
         await asyncio.to_thread(_unlink_glob)
 
     def make_key(self, prefix: str, query: str) -> str:

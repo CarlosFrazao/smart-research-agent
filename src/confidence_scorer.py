@@ -1,27 +1,48 @@
+"""Scorer de confianca de resultados de pesquisa usando heuristicas multi-dimensionais e LLM."""
+
 from __future__ import annotations
 
 import logging
 import re
 from datetime import datetime, UTC
-from typing import Any
 
 from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
 # --- Padrões do V1 ---
-_TRUSTED_DOMAINS = frozenset({
-    "github.com", "arxiv.org", "reddit.com", "news.ycombinator.com",
-    "stackoverflow.com", "docs.python.org", "developer.mozilla.org",
-    "pypi.org", "npmjs.com", "pkg.go.dev", "crates.io",
-    "microsoft.com", "google.com", "openai.com", "anthropic.com",
-    "huggingface.co", "pytorch.org", "tensorflow.org",
-})
+_TRUSTED_DOMAINS = frozenset(
+    {
+        "github.com",
+        "arxiv.org",
+        "reddit.com",
+        "news.ycombinator.com",
+        "stackoverflow.com",
+        "docs.python.org",
+        "developer.mozilla.org",
+        "pypi.org",
+        "npmjs.com",
+        "pkg.go.dev",
+        "crates.io",
+        "microsoft.com",
+        "google.com",
+        "openai.com",
+        "anthropic.com",
+        "huggingface.co",
+        "pytorch.org",
+        "tensorflow.org",
+    }
+)
 
-_UNTRUSTED_DOMAINS = frozenset({
-    "medium.com", "buzzfeed.com", "quora.com",
-    "pinterest.com", "slideshare.net",
-})
+_UNTRUSTED_DOMAINS = frozenset(
+    {
+        "medium.com",
+        "buzzfeed.com",
+        "quora.com",
+        "pinterest.com",
+        "slideshare.net",
+    }
+)
 
 _CLICKBAIT_PATTERNS = re.compile(
     r"\b(you won\'t believe|shocking|secret|hack|trick|amazing|"
@@ -163,8 +184,13 @@ class ConfidenceScorer:
             for result in scored:
                 if result.url in contradictions_map:
                     result.contradictions = contradictions_map[result.url]
-                    if "contradicted_by_other_sources" not in result.hallucination_flags:
-                        result.hallucination_flags.append("contradicted_by_other_sources")
+                    if (
+                        "contradicted_by_other_sources"
+                        not in result.hallucination_flags
+                    ):
+                        result.hallucination_flags.append(
+                            "contradicted_by_other_sources"
+                        )
                     result.confidence_score = round(
                         max(0.0, result.confidence_score - 0.10), 3
                     )
@@ -278,7 +304,9 @@ class ConfidenceScorerV2(ConfidenceScorer):
                 result.hallucination_flags.append("stale_content")
 
         result.confidence_score = round(max(0.0, min(1.0, result.confidence_score)), 3)
-        result.evidence_quality = self._classify_evidence_quality(result.confidence_score)
+        result.evidence_quality = self._classify_evidence_quality(
+            result.confidence_score
+        )
 
         return result
 
@@ -295,8 +323,13 @@ class ConfidenceScorerV2(ConfidenceScorer):
             for result in scored:
                 if result.url in contradictions_map:
                     result.contradictions = contradictions_map[result.url]
-                    if "contradicted_by_other_sources" not in result.hallucination_flags:
-                        result.hallucination_flags.append("contradicted_by_other_sources")
+                    if (
+                        "contradicted_by_other_sources"
+                        not in result.hallucination_flags
+                    ):
+                        result.hallucination_flags.append(
+                            "contradicted_by_other_sources"
+                        )
                     result.confidence_score = round(
                         max(0.0, result.confidence_score - 0.10), 3
                     )
@@ -376,12 +409,12 @@ class ConfidenceScorerV2(ConfidenceScorer):
                 continue
             content = result.description or ""
             raw_cited = _url_re.findall(content)
-            
+
             cited = set()
             for url in raw_cited:
                 cleaned_url = url.rstrip(".,;:!?()[]{}")
                 cited.add(cleaned_url)
-                
+
             cited_internal = cited & all_result_urls - {result.url}
             citation_graph[result.url] = cited_internal
 
@@ -389,7 +422,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
 
         urls = list(citation_graph.keys())
         for i, url_a in enumerate(urls):
-            for url_b in urls[i + 1:]:
+            for url_b in urls[i + 1 :]:
                 a_cites_b = url_b in citation_graph.get(url_a, set())
                 b_cites_a = url_a in citation_graph.get(url_b, set())
                 if a_cites_b and b_cites_a:

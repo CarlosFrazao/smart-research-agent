@@ -5,6 +5,7 @@ Uso em qualquer searcher / http_client:
     from src.utils.rate_limiter import DomainRateLimiter
     await DomainRateLimiter.wait(url)
 """
+
 import asyncio
 import logging
 import time
@@ -25,13 +26,15 @@ class TokenBucket:
     """Algoritmo Token Bucket com controle assíncrono e adaptação automática de taxa."""
 
     def __init__(self, rate: float, capacity: int):
-        self.rate = rate            # Tokens adicionados por segundo (adaptável)
-        self.initial_rate = rate    # Taxa original — usada como teto de recuperação
-        self.capacity = capacity    # Capacidade máxima (burst)
+        self.rate = rate  # Tokens adicionados por segundo (adaptável)
+        self.initial_rate = rate  # Taxa original — usada como teto de recuperação
+        self.capacity = capacity  # Capacidade máxima (burst)
         self.tokens = float(capacity)
         self.last_update = time.monotonic()
         self._lock = asyncio.Lock()
-        self._success_streak: int = 0   # Contagem de respostas bem-sucedidas consecutivas
+        self._success_streak: int = (
+            0  # Contagem de respostas bem-sucedidas consecutivas
+        )
 
     async def acquire(self) -> None:
         """Aguarda até que um token esteja disponível."""
@@ -60,30 +63,34 @@ class TokenBucket:
             old = self.rate
             self.rate = max(0.1, self.rate / 2)
             self._success_streak = 0
-            logger.info(f"AdaptiveRateLimiter: {status_code} → taxa reduzida {old:.2f} → {self.rate:.2f} req/s")
+            logger.info(
+                f"AdaptiveRateLimiter: {status_code} → taxa reduzida {old:.2f} → {self.rate:.2f} req/s"
+            )
         elif 200 <= status_code < 300:
             self._success_streak += 1
             if self._success_streak >= 10:
                 old = self.rate
                 self.rate = min(self.initial_rate, self.rate * 1.1)
                 self._success_streak = 0
-                logger.debug(f"AdaptiveRateLimiter: 10 sucessos → taxa aumentada {old:.2f} → {self.rate:.2f} req/s")
+                logger.debug(
+                    f"AdaptiveRateLimiter: 10 sucessos → taxa aumentada {old:.2f} → {self.rate:.2f} req/s"
+                )
 
 
 # ---------------------------------------------------------------------------
 # Configurações por domínio (req/s, burst)
 # ---------------------------------------------------------------------------
 DOMAIN_LIMITS: dict[str, RateLimit] = {
-    "api.github.com":         RateLimit(requests_per_second=1.5, burst_size=5),
-    "www.reddit.com":         RateLimit(requests_per_second=1.0, burst_size=3),
-    "reddit.com":             RateLimit(requests_per_second=1.0, burst_size=3),
-    "hn.algolia.com":         RateLimit(requests_per_second=2.0, burst_size=5),
-    "news.ycombinator.com":   RateLimit(requests_per_second=2.0, burst_size=5),
-    "arxiv.org":              RateLimit(requests_per_second=3.0, burst_size=10),
-    "export.arxiv.org":       RateLimit(requests_per_second=3.0, burst_size=10),
-    "api.stackexchange.com":  RateLimit(requests_per_second=2.0, burst_size=5),
-    "producthunt.com":        RateLimit(requests_per_second=1.5, burst_size=4),
-    "default":                RateLimit(requests_per_second=2.0, burst_size=5),
+    "api.github.com": RateLimit(requests_per_second=1.5, burst_size=5),
+    "www.reddit.com": RateLimit(requests_per_second=1.0, burst_size=3),
+    "reddit.com": RateLimit(requests_per_second=1.0, burst_size=3),
+    "hn.algolia.com": RateLimit(requests_per_second=2.0, burst_size=5),
+    "news.ycombinator.com": RateLimit(requests_per_second=2.0, burst_size=5),
+    "arxiv.org": RateLimit(requests_per_second=3.0, burst_size=10),
+    "export.arxiv.org": RateLimit(requests_per_second=3.0, burst_size=10),
+    "api.stackexchange.com": RateLimit(requests_per_second=2.0, burst_size=5),
+    "producthunt.com": RateLimit(requests_per_second=1.5, burst_size=4),
+    "default": RateLimit(requests_per_second=2.0, burst_size=5),
 }
 
 
@@ -96,7 +103,9 @@ class DomainRateLimiter:
     def _get_bucket(cls, domain: str) -> TokenBucket:
         if cls._buckets.get(domain) is None:
             limit = DOMAIN_LIMITS.get(domain, DOMAIN_LIMITS["default"])
-            cls._buckets[domain] = TokenBucket(limit.requests_per_second, limit.burst_size)
+            cls._buckets[domain] = TokenBucket(
+                limit.requests_per_second, limit.burst_size
+            )
         return cls._buckets[domain]
 
     @classmethod

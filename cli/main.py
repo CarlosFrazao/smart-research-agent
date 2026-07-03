@@ -1,4 +1,5 @@
 """Módulo de Interface de Terminal (CLI) via Typer e Rich."""
+
 import asyncio
 from typing import Optional
 import typer
@@ -13,12 +14,19 @@ app = typer.Typer(
 )
 console = Console()
 
+
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Termo principal a pesquisar"),
-    mode: str = typer.Option("cirurgia", "--mode", "-m", help="Preset de modo de operacao"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Caminho do arquivo Markdown para escrita"),
-    json_output: bool = typer.Option(False, "--json", help="Imprime output formatado em JSON puro")
+    mode: str = typer.Option(
+        "cirurgia", "--mode", "-m", help="Preset de modo de operacao"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Caminho do arquivo Markdown para escrita"
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Imprime output formatado em JSON puro"
+    ),
 ):
     """Executa o pipeline completo de pesquisa a partir do terminal."""
     from src.config import Config
@@ -29,13 +37,15 @@ def search(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task(f"[cyan]Executando pesquisa: {query[:50]}...", total=None)
+        task = progress.add_task(
+            f"[cyan]Executando pesquisa: {query[:50]}...", total=None
+        )
 
         try:
             config = Config()
             config.operation_mode = mode
             orchestrator = Orchestrator(config)
-            
+
             # Executa com asyncio local
             result = asyncio.run(orchestrator.research(query))
             progress.remove_task(task)
@@ -50,15 +60,17 @@ def search(
         console.print(f"[bold green]Resultado salvo em: {output}[/bold green]")
     elif json_output:
         import json
+
         console.print_json(json.dumps({"query": query, "result": result}))
     else:
         console.print(Markdown(result if isinstance(result, str) else str(result)))
+
 
 @app.command()
 def status():
     """Consulta o status atual de todos os disjuntores da aplicação."""
     from src.utils.circuit_breaker import CircuitBreakerRegistry
-    
+
     console.print("[bold cyan]Status dos Circuit Breakers:[/bold cyan]")
     statuses = CircuitBreakerRegistry.status_all()
     if not statuses:
@@ -68,6 +80,7 @@ def status():
     for name, state in statuses.items():
         color = "green" if state == "closed" else "red" if state == "open" else "yellow"
         console.print(f"  * {name}: [{color}]{state.upper()}[/{color}]")
+
 
 if __name__ == "__main__":
     app()

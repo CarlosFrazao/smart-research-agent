@@ -7,6 +7,7 @@ Processo de Busca:
 Rate-limits: Cota diária padrão do YouTube v3 (10.000 unidades).
 Fallback: Conecta ao WebSearcher se retornar < 2 resultados ou se a API key estiver ausente.
 """
+
 import logging
 from typing import Any
 
@@ -27,14 +28,30 @@ class YouTubeSearcher(BaseSearcher):
     """
 
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.http = HTTPClient(timeout=self.timeout)
         self.api_key: str | None = config.get("youtube_api_key")
         self.web_fallback = None  # Injetado pelo Orchestrator se disponível
 
     async def search(self, query: str, **kwargs) -> list[SearchResult]:
+        """Realiza busca assíncrona por termos no Youtube.
+
+        Args:
+            query (str): Termo ou query de busca a ser pesquisada.
+            **kwargs: Parâmetros de pesquisa adicionais específicos do buscador.
+
+        Returns:
+            list[SearchResult]: Lista contendo os resultados padronizados encontrados.
+        """
         if not self.api_key:
-            logger.info("YouTubeSearcher: API Key não configurada. Acionando web fallback diretamente.")
+            logger.info(
+                "YouTubeSearcher: API Key não configurada. Acionando web fallback diretamente."
+            )
             return await self._run_web_fallback(query)
 
         # 1. Busca vídeos
@@ -52,7 +69,9 @@ class YouTubeSearcher(BaseSearcher):
             items = search_data.get("items", [])
 
             if not items:
-                logger.info(f"YouTubeSearcher: nenhum vídeo encontrado para a query '{query[:40]}'")
+                logger.info(
+                    f"YouTubeSearcher: nenhum vídeo encontrado para a query '{query[:40]}'"
+                )
                 return await self._run_web_fallback(query)
 
             # Mapeia vídeo ID para informações do snippet
@@ -88,20 +107,26 @@ class YouTubeSearcher(BaseSearcher):
                 if parsed:
                     results.append(parsed)
 
-            logger.info(f"YouTubeSearcher: {len(results)} vídeos processados para '{query[:40]}'")
+            logger.info(
+                f"YouTubeSearcher: {len(results)} vídeos processados para '{query[:40]}'"
+            )
 
             if len(results) < 2:
-                logger.info("YouTubeSearcher: resultados insuficientes. Acionando fallback...")
+                logger.info(
+                    "YouTubeSearcher: resultados insuficientes. Acionando fallback..."
+                )
                 fallback_res = await self._run_web_fallback(query)
                 results.extend(fallback_res)
 
-            return results[:self.max_results]
+            return results[: self.max_results]
 
         except Exception as e:
             logger.error(f"YouTube search error: {e}")
             return self.fallback(query)
 
-    def _parse_video(self, video_id: str, snippet: dict[str, Any], stats: dict[str, Any]) -> SearchResult | None:
+    def _parse_video(
+        self, video_id: str, snippet: dict[str, Any], stats: dict[str, Any]
+    ) -> SearchResult | None:
         """
         Converte as informações brutas do YouTube v3 em SearchResult.
         """
@@ -137,7 +162,7 @@ class YouTubeSearcher(BaseSearcher):
                 f"Canal: {channel}.",
                 f"Visualizações: {views:,}.",
                 f"Likes: {likes:,}.",
-                f"Publicado em: {pub_date[:10]}."
+                f"Publicado em: {pub_date[:10]}.",
             ]
 
             res = SearchResult(
@@ -149,8 +174,8 @@ class YouTubeSearcher(BaseSearcher):
                     "views": views,
                     "likes": likes,
                     "channel": channel,
-                    "published_at": pub_date
-                }
+                    "published_at": pub_date,
+                },
             )
             res.confidence_score = confidence
             return res

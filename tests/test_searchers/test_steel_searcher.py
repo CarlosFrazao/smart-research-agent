@@ -21,6 +21,7 @@ def steel_searcher(steel_config):
 
 # ─── Initialization ──────────────────────────────────────────────────────────
 
+
 def test_steel_searcher_init(steel_searcher):
     assert steel_searcher.api_key == "test-steel-key"
     assert steel_searcher.enabled is True
@@ -32,16 +33,19 @@ def test_steel_searcher_init_no_key():
 
 
 def test_steel_searcher_custom_base_url():
-    searcher = SteelSearcher({
-        "timeout": 10,
-        "max_results": 5,
-        "steel_api_key": "key",
-        "steel_base_url": "https://custom.steel.example",
-    })
+    searcher = SteelSearcher(
+        {
+            "timeout": 10,
+            "max_results": 5,
+            "steel_api_key": "key",
+            "steel_base_url": "https://custom.steel.example",
+        }
+    )
     assert searcher.base_url == "https://custom.steel.example"
 
 
 # ─── search() ────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_steel_searcher_search_success(steel_searcher):
@@ -105,7 +109,9 @@ async def test_steel_searcher_fallback_on_error(steel_searcher):
 @pytest.mark.asyncio
 async def test_steel_searcher_uses_scrape_endpoint(steel_searcher):
     """POST is sent to the /scrape Quick Action endpoint."""
-    steel_searcher.http.post = AsyncMock(return_value={"content": "", "url": "", "metadata": {}})
+    steel_searcher.http.post = AsyncMock(
+        return_value={"content": "", "url": "", "metadata": {}}
+    )
 
     await steel_searcher.search("https://target.com")
 
@@ -117,7 +123,9 @@ async def test_steel_searcher_uses_scrape_endpoint(steel_searcher):
 @pytest.mark.asyncio
 async def test_steel_searcher_sends_proxy_and_captcha(steel_searcher):
     """Payload includes use_proxy=True and solve_captcha=True."""
-    steel_searcher.http.post = AsyncMock(return_value={"content": "", "url": "", "metadata": {}})
+    steel_searcher.http.post = AsyncMock(
+        return_value={"content": "", "url": "", "metadata": {}}
+    )
 
     await steel_searcher.search("https://target.com")
 
@@ -130,7 +138,9 @@ async def test_steel_searcher_sends_proxy_and_captcha(steel_searcher):
 @pytest.mark.asyncio
 async def test_steel_searcher_sends_auth_header(steel_searcher):
     """Authorization header contains the API key."""
-    steel_searcher.http.post = AsyncMock(return_value={"content": "", "url": "", "metadata": {}})
+    steel_searcher.http.post = AsyncMock(
+        return_value={"content": "", "url": "", "metadata": {}}
+    )
 
     await steel_searcher.search("https://target.com")
 
@@ -141,6 +151,7 @@ async def test_steel_searcher_sends_auth_header(steel_searcher):
 
 
 # ─── normalize() ─────────────────────────────────────────────────────────────
+
 
 def test_steel_searcher_normalize_full_response(steel_searcher):
     raw = {
@@ -187,6 +198,7 @@ def test_steel_searcher_normalize_empty_dict(steel_searcher):
 
 
 # ─── fallback() ──────────────────────────────────────────────────────────────
+
 
 def test_steel_searcher_fallback_returns_empty(steel_searcher):
     """fallback() always returns empty list."""

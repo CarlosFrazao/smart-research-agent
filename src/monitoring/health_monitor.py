@@ -13,6 +13,7 @@ Fallback automático:
 
 Skill: root-cause-analysis (Tratamento de exceções e resiliência operacional)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -32,27 +33,30 @@ logger = logging.getLogger(__name__)
 
 # ─── Enumerações e Contratos ─────────────────────────────────────────────────
 
+
 class ServiceStatus(StrEnum):
-    HEALTHY   = "healthy"
-    DEGRADED  = "degraded"
-    OFFLINE   = "offline"
-    UNKNOWN   = "unknown"
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"
 
 
 @dataclass
 class ServiceCheck:
     """Configuração de verificação de um serviço."""
+
     name: str
     url: str
     timeout_seconds: float = 3.0
     expected_status_codes: list[int] = field(default_factory=lambda: [200])
-    fallback_action: str | None = None   # Nome da ação de fallback registrada
-    critical: bool = False                   # Se True, dispara alerta imediato
+    fallback_action: str | None = None  # Nome da ação de fallback registrada
+    critical: bool = False  # Se True, dispara alerta imediato
 
 
 @dataclass
 class ServiceHealthResult:
     """Resultado de uma verificação de saúde."""
+
     name: str
     status: ServiceStatus
     latency_ms: float
@@ -64,6 +68,7 @@ class ServiceHealthResult:
 @dataclass
 class HealthSnapshot:
     """Snapshot completo do estado de saúde de todos os serviços."""
+
     timestamp: str
     services: dict[str, ServiceHealthResult]
     overall_status: ServiceStatus
@@ -85,11 +90,15 @@ class HealthSnapshot:
         for name, r in self.services.items():
             icon = icon_map.get(r.status, "⚪")
             fallback = " *(fallback ativo)*" if r.fallback_triggered else ""
-            rows.append(f"| {name} | {icon} {r.status.value}{fallback} | {r.latency_ms:.0f}ms | {r.detail[:60]} |")
+            rows.append(
+                f"| {name} | {icon} {r.status.value}{fallback} | {r.latency_ms:.0f}ms | {r.detail[:60]} |"
+            )
 
         alerts_section = ""
         if self.alerts:
-            alerts_section = "\n\n**⚠️ Alertas:**\n" + "\n".join(f"- {a}" for a in self.alerts)
+            alerts_section = "\n\n**⚠️ Alertas:**\n" + "\n".join(
+                f"- {a}" for a in self.alerts
+            )
 
         overall_icon = icon_map.get(self.overall_status, "⚪")
         return (
@@ -101,6 +110,7 @@ class HealthSnapshot:
 
 
 # ─── HealthMonitor ───────────────────────────────────────────────────────────
+
 
 class HealthMonitor:
     """
@@ -119,15 +129,15 @@ class HealthMonitor:
     _DEFAULT_SERVICES: list[ServiceCheck] = [
         ServiceCheck(
             name="firecrawl",
-            url=os.environ.get("FIRECRAWL_HEALTH_URL", "http://localhost:3022/v1/scrape"),
+            url=os.environ.get("FIRECRAWL_HEALTH_URL", "http://localhost:3022/"),
             timeout_seconds=5.0,
-            expected_status_codes=[200, 401, 422],  # 401/422 = up mas sem auth
+            expected_status_codes=[200],
             fallback_action="disable_firecrawl",
             critical=True,
         ),
         ServiceCheck(
             name="redis",
-            url=os.environ.get("REDIS_HEALTH_URL", "http://localhost:6379"),
+            url=os.environ.get("REDIS_HEALTH_URL", "redis://localhost:6379"),
             timeout_seconds=2.0,
             expected_status_codes=[200],
             fallback_action="disable_cache",
@@ -143,7 +153,10 @@ class HealthMonitor:
         ),
         ServiceCheck(
             name="chromadb",
-            url=os.environ.get("CHROMADB_HEALTH_URL", "http://127.0.0.1:3024/api/v1/heartbeat"),
+            url=os.environ.get(
+                "CHROMADB_HEALTH_URL",
+                "http://127.0.0.1:3024/api/v2/tenants/default_tenant",
+            ),
             timeout_seconds=3.0,
             expected_status_codes=[200],
             fallback_action="use_ephemeral_chroma",
@@ -162,7 +175,8 @@ class HealthMonitor:
     def __init__(
         self,
         extra_services: list[ServiceCheck] | None = None,
-        on_status_change: Callable[[str, ServiceStatus, ServiceStatus], None] | None = None,
+        on_status_change: Callable[[str, ServiceStatus, ServiceStatus], None]
+        | None = None,
     ) -> None:
         self.services: list[ServiceCheck] = list(self._DEFAULT_SERVICES)
         if extra_services:
@@ -207,7 +221,11 @@ class HealthMonitor:
         # Dispara fallbacks para serviços offline
         for svc_check in self.services:
             result = results.get(svc_check.name)
-            if result and result.status == ServiceStatus.OFFLINE and svc_check.fallback_action:
+            if (
+                result
+                and result.status == ServiceStatus.OFFLINE
+                and svc_check.fallback_action
+            ):
                 await self._trigger_fallback(svc_check, result)
                 result.fallback_triggered = True
 
@@ -229,9 +247,47 @@ class HealthMonitor:
         return snapshot
 
     async def _check_service(self, svc: ServiceCheck) -> ServiceHealthResult:
-        """Verifica um único serviço via HTTP GET."""
+        """Verifica um único serviço via HTTP GET ou conexão TCP (para Redis)."""
         start = time.monotonic()
         checked_at = datetime.now(UTC).isoformat()
+
+        # Check de conexão TCP puro para o Redis (não responde HTTP GET)
+        if svc.name == "redis" or "6379" in svc.url or svc.url.startswith("redis://"):
+            try:
+                # Limpa URL para extrair host e porta
+                url_clean = svc.url.replace("redis://", "").replace("http://", "")
+                if "/" in url_clean:
+                    url_clean = url_clean.split("/")[0]
+                host = "localhost"
+                port = 6379
+                if ":" in url_clean:
+                    parts = url_clean.split(":")
+                    host = parts[0]
+                    port = int(parts[1])
+
+                # Abre conexão TCP
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port), timeout=svc.timeout_seconds
+                )
+                writer.close()
+                await writer.wait_closed()
+                latency_ms = (time.monotonic() - start) * 1000
+                return ServiceHealthResult(
+                    name=svc.name,
+                    status=ServiceStatus.HEALTHY,
+                    latency_ms=latency_ms,
+                    checked_at=checked_at,
+                    detail="TCP Connection Success",
+                )
+            except Exception as e:
+                latency_ms = (time.monotonic() - start) * 1000
+                return ServiceHealthResult(
+                    name=svc.name,
+                    status=ServiceStatus.OFFLINE,
+                    latency_ms=latency_ms,
+                    checked_at=checked_at,
+                    detail=f"TCP Fail: {str(e)[:80]}",
+                )
 
         try:
             async with httpx.AsyncClient(timeout=svc.timeout_seconds) as client:
@@ -280,7 +336,9 @@ class HealthMonitor:
         """Registra uma ação de fallback nomeada."""
         self._fallback_actions[action_name] = fn
 
-    async def _trigger_fallback(self, svc: ServiceCheck, result: ServiceHealthResult) -> None:
+    async def _trigger_fallback(
+        self, svc: ServiceCheck, result: ServiceHealthResult
+    ) -> None:
         """Executa a ação de fallback associada ao serviço offline."""
         action_name = svc.fallback_action
         if not action_name:
@@ -293,7 +351,9 @@ class HealthMonitor:
                     await fn(svc, result)
                 else:
                     fn(svc, result)
-                logger.info(f"HealthMonitor: fallback '{action_name}' executado para '{svc.name}'.")
+                logger.info(
+                    f"HealthMonitor: fallback '{action_name}' executado para '{svc.name}'."
+                )
             except Exception as e:
                 logger.error(f"HealthMonitor: fallback '{action_name}' falhou: {e}")
         else:
@@ -323,7 +383,9 @@ class HealthMonitor:
 
     # ── Utilitários ───────────────────────────────────────────────────────────
 
-    def _compute_overall(self, results: dict[str, ServiceHealthResult]) -> ServiceStatus:
+    def _compute_overall(
+        self, results: dict[str, ServiceHealthResult]
+    ) -> ServiceStatus:
         """Calcula o status geral com base nos serviços críticos."""
         critical_names = {svc.name for svc in self.services if svc.critical}
 
@@ -332,7 +394,7 @@ class HealthMonitor:
                 return ServiceStatus.DEGRADED
 
         has_degraded = any(r.status == ServiceStatus.DEGRADED for r in results.values())
-        has_offline  = any(r.status == ServiceStatus.OFFLINE for r in results.values())
+        has_offline = any(r.status == ServiceStatus.OFFLINE for r in results.values())
 
         if has_offline and not has_degraded:
             return ServiceStatus.DEGRADED
@@ -364,13 +426,12 @@ class HealthMonitor:
             f"HealthMonitor: falha relatada na fonte '{source}'. "
             f"Contador: {self.failure_counts[source]}/3. Erro: {error}"
         )
-        
+
         if self.failure_counts[source] >= 3:
             logger.error(
                 f"🚨 HealthMonitor: DESABILITANDO FONTE '{source.upper()}' temporariamente devido a falhas consecutivas!"
             )
-            
-            
+
             if self.orchestrator and hasattr(self.orchestrator, "searchers"):
                 searcher = self.orchestrator.searchers.get(source)
                 if searcher:
@@ -380,10 +441,20 @@ class HealthMonitor:
         """Retorna os nomes de fontes de busca que estão ativas e não desabilitadas."""
         if self.orchestrator and hasattr(self.orchestrator, "searchers"):
             return [
-                name for name, searcher in self.orchestrator.searchers.items()
+                name
+                for name, searcher in self.orchestrator.searchers.items()
                 if searcher.enabled
             ]
-        
+
         # Fallback se orchestrator não estiver disponível
-        all_sources = ["hackernews", "github", "reddit", "arxiv", "producthunt", "awesome", "web", "firecrawl"]
+        all_sources = [
+            "hackernews",
+            "github",
+            "reddit",
+            "arxiv",
+            "producthunt",
+            "awesome",
+            "web",
+            "firecrawl",
+        ]
         return [s for s in all_sources if self.failure_counts.get(s, 0) < 3]

@@ -10,8 +10,14 @@ def router() -> ModelRouter:
 
 # ─── _classify_task ──────────────────────────────────────────────────────────
 
+
 def test_classify_simple_tasks(router):
-    for task in ("intent_analysis", "deduplication", "query_cleaning", "relevance_check"):
+    for task in (
+        "intent_analysis",
+        "deduplication",
+        "query_cleaning",
+        "relevance_check",
+    ):
         c = router._classify_task(task)
         assert c.level == "simple", f"{task} should be simple, got {c.level}"
         assert c.estimated_tokens == 1_000
@@ -45,6 +51,7 @@ def test_classify_returns_task_complexity_dataclass(router):
 
 # ─── route() — Anthropic ─────────────────────────────────────────────────────
 
+
 def test_route_simple_anthropic(router):
     assert router.route("intent_analysis", "anthropic") == "claude-haiku-4-5"
 
@@ -67,6 +74,7 @@ def test_route_confidence_scoring_anthropic(router):
 
 # ─── route() — OpenAI ────────────────────────────────────────────────────────
 
+
 def test_route_simple_openai(router):
     assert router.route("intent_analysis", "openai") == "gpt-4o-mini"
 
@@ -80,6 +88,7 @@ def test_route_complex_openai(router):
 
 
 # ─── route() — Google ────────────────────────────────────────────────────────
+
 
 def test_route_simple_google(router):
     assert router.route("deduplication", "google") == "gemini-2.0-flash"
@@ -95,6 +104,7 @@ def test_route_complex_google(router):
 
 # ─── route() — OpenRouter ────────────────────────────────────────────────────
 
+
 def test_route_simple_openrouter(router):
     assert router.route("query_cleaning", "openrouter") == "anthropic/claude-haiku-4-5"
 
@@ -109,6 +119,7 @@ def test_route_complex_openrouter(router):
 
 # ─── route() — Ollama ────────────────────────────────────────────────────────
 
+
 def test_route_ollama_all_tiers_return_model(router):
     for task in ("intent_analysis", "query_expansion", "deep_research"):
         model = router.route(task, "ollama")
@@ -117,6 +128,7 @@ def test_route_ollama_all_tiers_return_model(router):
 
 
 # ─── route() — unknown provider ──────────────────────────────────────────────
+
 
 def test_route_unknown_provider_falls_back_to_anthropic(router):
     model = router.route("intent_analysis", "unknown_provider_xyz")
@@ -131,6 +143,7 @@ def test_route_unknown_task_unknown_provider_returns_string(router):
 
 # ─── get_complexity() ────────────────────────────────────────────────────────
 
+
 def test_get_complexity_returns_level_string(router):
     assert router.get_complexity("intent_analysis") == "simple"
     assert router.get_complexity("query_expansion") == "medium"
@@ -138,6 +151,7 @@ def test_get_complexity_returns_level_string(router):
 
 
 # ─── log_cost() ──────────────────────────────────────────────────────────────
+
 
 def test_log_cost_known_model(router, caplog):
     with caplog.at_level(logging.INFO, logger="src.model_router"):
@@ -167,6 +181,7 @@ def test_log_cost_zero_tokens(router, caplog):
 
 
 # ─── acceptance criteria (spec-level) ────────────────────────────────────────
+
 
 def test_acceptance_intent_analysis_anthropic(router):
     """From UPGRADE_INSTRUCTIONS spec: intent_analysis/anthropic → claude-haiku-4-5"""

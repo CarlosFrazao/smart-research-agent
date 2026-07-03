@@ -15,7 +15,7 @@ _RETRY_CONFIG = RetryConfig(
     max_delay=10.0,
     exponential_base=2.0,
     jitter=True,
-    retryable_exceptions=(Exception,)
+    retryable_exceptions=(Exception,),
 )
 
 DOMAIN_QUALIFIERS = {
@@ -30,7 +30,14 @@ DOMAIN_QUALIFIERS = {
 
 
 class GitHubSearcher(BaseSearcher):
+    """Buscador especializado para coletar e estruturar resultados vindos do GitHub."""
+
     def __init__(self, config: dict[str, Any]):
+        """Inicializa o buscador com configurações e clientes necessários.
+
+        Args:
+            config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
+        """
         super().__init__(config)
         self.token = config.get("github_token")
         self.base_url = "https://api.github.com/search/repositories"
@@ -39,21 +46,126 @@ class GitHubSearcher(BaseSearcher):
             "github_api", failure_threshold=3, recovery_timeout=600
         )
 
-    async def search(self, query: str, domain: str = "general", **kwargs) -> list[SearchResult]:
+    def _extract_semantic_filters(self, query: str) -> dict[str, str]:
+        """Extrai filtros estruturados de linguagem, data, estrelas e tópicos da query natural."""
+        filters = {}
+        query_lower = query.lower()
+        import re
+        from datetime import datetime, timedelta
+
+        # 1. Extração de Linguagem
+        lang_match = re.search(
+            r"\b(rust|python|go|golang|typescript|javascript|java|kotlin|swift|c\+\+|cpp)\b",
+            query_lower,
+        )
+        if lang_match:
+            lang = lang_match.group(1)
+            if lang == "golang":
+                lang = "go"
+            filters["language"] = lang
+
+        # 2. Extração de Data/Recência (last N days/weeks/months)
+        date_match = re.search(r"last\s+(\d+)\s+(day|week|month)s?", query_lower)
+        if date_match:
+            amount = int(date_match.group(1))
+            unit = date_match.group(2)
+            now = datetime.now()
+            if unit == "day":
+                delta = timedelta(days=amount)
+            elif unit == "week":
+                delta = timedelta(weeks=amount)
+            elif unit == "month":
+                delta = timedelta(days=amount * 30)
+            else:
+                delta = timedelta(days=30)
+            cutoff_date = (now - delta).strftime("%Y-%m-%d")
+            filters["created"] = f">{cutoff_date}"
+
+        # 3. Extração de Estrelas (more than N stars ou >N stars ou at least N stars)
+        stars_match = re.search(
+            r"(?:more than|>\s*|at least\s*|above\s*)\s*(\d+)\s*stars?", query_lower
+        )
+        if stars_match:
+            filters["stars"] = f">{stars_match.group(1)}"
+
+        # 4. Extração de Tópicos comuns
+        topics = ["mcp", "llm", "ai", "fastapi", "docker", "cli"]
+        for topic in topics:
+            if topic in query_lower:
+                filters["topic"] = topic
+                break
+
+        return filters
+
+    async def search(
+        self, query: str, domain: str = "general", **kwargs
+    ) -> list[SearchResult]:
+        """Realiza busca assíncrona por termos no Github.
+
+        Args:
+            query (str): Termo ou query de busca a ser pesquisada.
+            **kwargs: Parâmetros de pesquisa adicionais específicos do buscador.
+
+        Returns:
+            list[SearchResult]: Lista contendo os resultados padronizados encontrados.
+        """
+        query_lower = query.lower()
         # 1. Clean query: remove stop words and keep it concise for GitHub search
-        stop_words = {"for", "with", "and", "or", "in", "to", "best", "alternatives", "alternative", "solutions", "solution", "of", "the", "a", "an", "on", "using", "by", "from", "how"}
-        words = [w for w in query.replace("-", " ").split() if w.lower() not in stop_words]
-        
-        # If still too long, keep only the most significant terms
-        if len(words) > 4:
-            words = words[:4]
-        
+        stop_words = {
+            "for",
+            "with",
+            "and",
+            "or",
+            "in",
+            "to",
+            "best",
+            "alternatives",
+            "alternative",
+            "solutions",
+            "solution",
+            "of",
+            "the",
+            "a",
+            "an",
+            "on",
+            "using",
+            "by",
+            "from",
+            "how",
+            "which",
+            "repositories",
+            "repository",
+            "implementing",
+            "implemented",
+        }
+        words = [
+            w for w in query.replace("-", " ").split() if w.lower() not in stop_words
+        ]
+
+        # If still too long, keep only the most significant terms (aumentado para 8)
+        if len(words) > 8:
+            words = words[:8]
+
         cleaned_query = " ".join(words)
         if not cleaned_query:
             cleaned_query = query
-            
+
+        # Extração de filtros semânticos
+        filters = self._extract_semantic_filters(query)
+        filter_str = " ".join(f"{k}:{v}" for k, v in filters.items())
+
         qualifiers = DOMAIN_QUALIFIERS.get(domain, "sort:stars")
-        full_query = f"{cleaned_query} {qualifiers}"
+
+        # Composição final da query semântica
+        if filter_str:
+            full_query = f"{cleaned_query} {filter_str} {qualifiers}"
+        else:
+            full_query = f"{cleaned_query} {qualifiers}"
+
+        # Limpar múltiplos espaços
+        import re
+
+        full_query = re.sub(r"\s+", " ", full_query).strip()
 
         headers = {
             "Accept": "application/vnd.github.v3+json",
@@ -62,9 +174,14 @@ class GitHubSearcher(BaseSearcher):
         if self.token:
             headers["Authorization"] = f"token {self.token}"
 
+        # Determinar sort dinâmico
+        sort_by = "stars"
+        if "created" in filters or "recent" in query_lower or "last" in query_lower:
+            sort_by = "updated"
+
         params = {
             "q": full_query,
-            "sort": "stars",
+            "sort": sort_by,
             "order": "desc",
             "per_page": min(self.max_results, 100),
         }
@@ -76,7 +193,15 @@ class GitHubSearcher(BaseSearcher):
 
         try:
             logger.info(f"GitHub buscando: '{full_query}'")
-            return await self.circuit.call(self._do_search, full_query, cleaned_query, qualifiers, query, headers, params)
+            return await self.circuit.call(
+                self._do_search,
+                full_query,
+                cleaned_query,
+                qualifiers,
+                query,
+                headers,
+                params,
+            )
         except CircuitBreakerOpen as e:
             logger.warning(f"GitHubSearcher: {e}")
             return self.fallback(query)
@@ -85,7 +210,15 @@ class GitHubSearcher(BaseSearcher):
             return self.fallback(query)
 
     @with_retry(_RETRY_CONFIG)
-    async def _do_search(self, full_query: str, cleaned_query: str, qualifiers: str, original_query: str, headers: dict, params: dict) -> list[SearchResult]:
+    async def _do_search(
+        self,
+        full_query: str,
+        cleaned_query: str,
+        qualifiers: str,
+        original_query: str,
+        headers: dict,
+        params: dict,
+    ) -> list[SearchResult]:
         """Lógica real de busca no GitHub API, protegida pelo circuit breaker."""
         data = await self.http.get(self.base_url, headers=headers, params=params)
         items = data.get("items", [])
@@ -93,7 +226,9 @@ class GitHubSearcher(BaseSearcher):
         # 2. Resilient Fallback: se qualificadores rígidos retornaram 0 resultados
         if not items and qualifiers != "sort:stars":
             fallback_query = f"{cleaned_query} sort:stars"
-            logger.info(f"GitHub 0 resultados. Tentando fallback mais brando: '{fallback_query}'")
+            logger.info(
+                f"GitHub 0 resultados. Tentando fallback mais brando: '{fallback_query}'"
+            )
             params["q"] = fallback_query
             data = await self.http.get(self.base_url, headers=headers, params=params)
             items = data.get("items", [])
@@ -102,7 +237,9 @@ class GitHubSearcher(BaseSearcher):
 
         # 3. Code Search fallback: se repos < 2
         if len(results) < 2:
-            logger.info(f"GitHub repos < 2 para '{original_query}'. Ativando Code Search...")
+            logger.info(
+                f"GitHub repos < 2 para '{original_query}'. Ativando Code Search..."
+            )
             code_results = await self.search_code(original_query)
             seen_urls = {r.url for r in results}
             for r in code_results:
@@ -112,8 +249,9 @@ class GitHubSearcher(BaseSearcher):
 
         return results
 
-    async def search_code(self, query: str, language: str | None = None) -> list[SearchResult]:
-
+    async def search_code(
+        self, query: str, language: str | None = None
+    ) -> list[SearchResult]:
         """Code Search via GitHub API — busca conteúdo dentro de arquivos."""
         code_search_url = "https://api.github.com/search/code"
         q = f"{query} language:{language}" if language else query
@@ -156,6 +294,14 @@ class GitHubSearcher(BaseSearcher):
             return []
 
     def normalize(self, raw_result: Any) -> SearchResult:
+        """Normaliza um resultado bruto vindo do Github para a entidade padrão `SearchResult`.
+
+        Args:
+            raw_result (Any): O resultado bruto retornado pela API ou scraper.
+
+        Returns:
+            SearchResult: Objeto padronizado contendo os dados normalizados.
+        """
         updated_at = raw_result.get("pushed_at", raw_result.get("updated_at", ""))
         license_info = raw_result.get("license") or {}
 

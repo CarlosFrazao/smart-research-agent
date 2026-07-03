@@ -27,7 +27,14 @@ class MemoryService:
             logger.warning(f"MemoryService: get_context falhou: {e}")
             return ""
 
-    def store(self, query: str, executive_summary: str, top_entities: list[str], domain: str, duration_seconds: float) -> None:
+    def store(
+        self,
+        query: str,
+        executive_summary: str,
+        top_entities: list[str],
+        domain: str,
+        duration_seconds: float,
+    ) -> None:
         """
         Salva o resultado de pesquisa atual na memória de longo prazo de forma assíncrona/segura.
         """

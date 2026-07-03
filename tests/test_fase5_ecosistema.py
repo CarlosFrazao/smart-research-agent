@@ -7,6 +7,7 @@ Cobertura:
   - TokenEconomy: contagem, custo, truncamento, budget enforcement
   - TokenEconomy: record_usage + session_summary + top_calls
 """
+
 import time
 import pytest
 
@@ -17,6 +18,7 @@ from src.token_economy import TokenEconomy, Budget, UsageRecord
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def cache() -> SharedCache:
@@ -41,8 +43,8 @@ def te() -> TokenEconomy:
 # SharedCache — Testes de Backend In-Memory
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestInMemoryCache:
 
+class TestInMemoryCache:
     def test_set_and_get_basic(self):
         c = _InMemoryCache()
         c.set("key1", {"data": "value"}, ttl=60)
@@ -92,8 +94,8 @@ class TestInMemoryCache:
 # SharedCache — Testes com Fallback In-Memory
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestSharedCacheInMemory:
 
+class TestSharedCacheInMemory:
     def test_backend_is_in_memory_when_redis_unavailable(self, cache: SharedCache):
         assert cache.backend_name == "in_memory"
         assert not cache._is_redis
@@ -137,8 +139,8 @@ class TestSharedCacheInMemory:
 # SharedCache — API Semântica
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestSharedCacheSemanticAPI:
 
+class TestSharedCacheSemanticAPI:
     def test_scraping_cache_hit(self, cache: SharedCache):
         url = "https://docs.example.com/api"
         cache.set_scraped_content(url, "# API Docs\nContent here")
@@ -190,8 +192,8 @@ class TestSharedCacheSemanticAPI:
 # TokenEconomy — Contagem de Tokens
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestTokenEconomyCount:
 
+class TestTokenEconomyCount:
     def test_count_tokens_returns_positive_int(self, te: TokenEconomy):
         count = te.count_tokens("Hello, World!")
         assert isinstance(count, int)
@@ -220,8 +222,8 @@ class TestTokenEconomyCount:
 # TokenEconomy — Estimativa de Custo
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestTokenEconomyCost:
 
+class TestTokenEconomyCost:
     def test_estimate_cost_returns_tuple(self, te: TokenEconomy):
         tokens, cost = te.estimate_cost("Hello world")
         assert isinstance(tokens, int)
@@ -256,8 +258,8 @@ class TestTokenEconomyCost:
 # TokenEconomy — Truncamento Inteligente
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestTokenEconomyTruncate:
 
+class TestTokenEconomyTruncate:
     def test_short_text_not_truncated(self, te: TokenEconomy):
         text = "Short text."
         result = te.smart_truncate(text, max_tokens=1000)
@@ -297,8 +299,8 @@ class TestTokenEconomyTruncate:
 # TokenEconomy — Budget Enforcement
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestTokenEconomyBudget:
 
+class TestTokenEconomyBudget:
     def test_within_budget_returns_true(self, te: TokenEconomy):
         text = "Short text within budget."
         assert te.check_budget(text) is True
@@ -346,7 +348,7 @@ class TestTokenEconomyBudget:
             input_tokens=500,
             output_tokens=200,
             model="gemini-2.5-flash",
-            query_hint="test query hint"
+            query_hint="test query hint",
         )
         assert isinstance(rec, UsageRecord)
         assert rec.input_tokens == 500

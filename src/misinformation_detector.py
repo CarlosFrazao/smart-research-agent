@@ -43,7 +43,7 @@ class MisinformationDetector:
         try:
             with open(self.config_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
-                
+
             entries = data.get("misinformation_domains", [])
             for entry in entries:
                 domain = entry.get("domain", "").lower().strip()
@@ -81,7 +81,7 @@ class MisinformationDetector:
             if not netloc:
                 # Fallback simple split if parsing failed to extract netloc
                 netloc = url.split("/")[0].lower()
-            
+
             # Clean port numbers if present
             if ":" in netloc:
                 netloc = netloc.split(":")[0]

@@ -16,16 +16,15 @@ def _make_result(source: str, description: str = "x" * 300) -> SearchResult:
 
 def _make_orchestrator(spider_enabled: bool = False, steel_enabled: bool = False):
     """Builds a minimal Orchestrator with mocked dependencies."""
-    with patch("src.orchestrator.LLMClient"), \
-         patch("src.orchestrator.IntentAnalyzer"), \
-         patch("src.orchestrator.QueryExpander"), \
-         patch("src.orchestrator.SourcePlanner"), \
-         patch("src.orchestrator.QualityRanker"), \
-         patch("src.orchestrator.GapDetector"), \
-         patch("src.orchestrator.Synthesizer"), \
-         patch("src.orchestrator.ReportGenerator"), \
-         patch("src.orchestrator.Cache"):
-
+    with patch("src.orchestrator.LLMClient"), patch(
+        "src.orchestrator.IntentAnalyzer"
+    ), patch("src.orchestrator.QueryExpander"), patch(
+        "src.orchestrator.SourcePlanner"
+    ), patch("src.orchestrator.QualityRanker"), patch(
+        "src.orchestrator.GapDetector"
+    ), patch("src.orchestrator.Synthesizer"), patch(
+        "src.orchestrator.ReportGenerator"
+    ), patch("src.orchestrator.Cache"):
         from src.config import Config
         from src.orchestrator import Orchestrator
 
@@ -61,6 +60,7 @@ def _make_orchestrator(spider_enabled: bool = False, steel_enabled: bool = False
 
 # ─── Cascade disabled (original behavior) ────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_cascade_disabled_uses_firecrawl_only():
     """When both Spider and Steel are disabled, uses Firecrawl directly."""
@@ -90,6 +90,7 @@ async def test_cascade_disabled_no_spider_or_steel_call():
 
 # ─── Cascade enabled: Firecrawl succeeds ─────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_cascade_firecrawl_success_stops_cascade():
     """When Firecrawl returns rich content (>200 chars), cascade stops there."""
@@ -104,6 +105,7 @@ async def test_cascade_firecrawl_success_stops_cascade():
 
 
 # ─── Cascade enabled: Firecrawl fails → Spider succeeds ─────────────────────
+
 
 @pytest.mark.asyncio
 async def test_cascade_firecrawl_error_falls_to_spider():
@@ -134,6 +136,7 @@ async def test_cascade_firecrawl_short_content_falls_to_spider():
 
 # ─── Cascade enabled: Firecrawl + Spider fail → Steel succeeds ──────────────
 
+
 @pytest.mark.asyncio
 async def test_cascade_spider_fails_falls_to_steel():
     """Spider failure falls through to Steel.dev."""
@@ -152,6 +155,7 @@ async def test_cascade_spider_fails_falls_to_steel():
 
 
 # ─── Cascade enabled: all scrapers fail → Jina Reader ───────────────────────
+
 
 @pytest.mark.asyncio
 async def test_cascade_all_fail_uses_jina():

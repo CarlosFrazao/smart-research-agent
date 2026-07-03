@@ -1,3 +1,5 @@
+"""Servico de busca paralela que orquestra a execucao de queries em multiplos searchers simultaneamente."""
+
 import asyncio
 import logging
 from datetime import datetime
@@ -49,7 +51,11 @@ class SearchService:
         if firecrawl:
             try:
                 result = await asyncio.wait_for(firecrawl.search(url), timeout=10.0)
-                if result and result[0].description and len(result[0].description.strip()) > 200:
+                if (
+                    result
+                    and result[0].description
+                    and len(result[0].description.strip()) > 200
+                ):
                     return result
                 logger.warning(f"Firecrawl content too short/empty for '{url[:50]}'")
             except (TimeoutError, Exception) as e:
@@ -59,7 +65,11 @@ class SearchService:
         if spider and self.config.spider_enabled:
             try:
                 result = await spider.search(url)
-                if result and result[0].description and len(result[0].description.strip()) > 200:
+                if (
+                    result
+                    and result[0].description
+                    and len(result[0].description.strip()) > 200
+                ):
                     return result
             except Exception as e:
                 logger.warning(f"Spider failed for '{url[:50]}': {e}")
@@ -68,7 +78,11 @@ class SearchService:
         if steel and self.config.steel_enabled:
             try:
                 result = await steel.search(url)
-                if result and result[0].description and len(result[0].description.strip()) > 200:
+                if (
+                    result
+                    and result[0].description
+                    and len(result[0].description.strip()) > 200
+                ):
                     return result
             except Exception as e:
                 logger.warning(f"Steel failed for '{url[:50]}': {e}")
@@ -79,9 +93,15 @@ class SearchService:
             try:
                 logger.info(f"Tentando Playwright Stealth para '{url[:50]}'")
                 result = await asyncio.wait_for(playwright.search(url), timeout=35.0)
-                if result and result[0].description and len(result[0].description.strip()) > 200:
+                if (
+                    result
+                    and result[0].description
+                    and len(result[0].description.strip()) > 200
+                ):
                     return result
-                logger.warning(f"Playwright retornou conteúdo curto/vazio para '{url[:50]}'")
+                logger.warning(
+                    f"Playwright retornou conteúdo curto/vazio para '{url[:50]}'"
+                )
             except (TimeoutError, Exception) as e:
                 logger.warning(f"Playwright falhou para '{url[:50]}': {e}")
 
@@ -91,14 +111,16 @@ class SearchService:
             logger.info(f"Using Jina Reader fallback for '{url[:50]}'")
             raw = await self.searchers["firecrawl"].client.scrape(jina_url)
             if raw and raw.get("markdown"):
-                return [SearchResult(
-                    source="jina_reader",
-                    title=f"Jina: {url}",
-                    url=url,
-                    description=str(raw.get("markdown", "")),
-                    metrics={},
-                    raw=raw,
-                )]
+                return [
+                    SearchResult(
+                        source="jina_reader",
+                        title=f"Jina: {url}",
+                        url=url,
+                        description=str(raw.get("markdown", "")),
+                        metrics={},
+                        raw=raw,
+                    )
+                ]
         except Exception as e:
             logger.warning(f"Jina Reader failed for '{url[:50]}': {e}")
 
@@ -113,7 +135,9 @@ class SearchService:
 
         return []
 
-    async def execute(self, queries: list[ExpandedQuery], plan, intent) -> list[SearchResult]:
+    async def execute(
+        self, queries: list[ExpandedQuery], plan, intent
+    ) -> list[SearchResult]:
         """
         Executa as pesquisas planejadas em paralelo, respeitando cache e modo de operação.
         """
@@ -121,7 +145,11 @@ class SearchService:
         results = []
 
         # Injeta RSSSearcher se for query urgente/recente de tecnologia e o RSS estiver habilitado
-        if intent.urgency == "sim" and intent.domain.value in ("ai_ml", "dev_tools", "saas_b2b") and queries:
+        if (
+            intent.urgency == "sim"
+            and intent.domain.value in ("ai_ml", "dev_tools", "saas_b2b")
+            and queries
+        ):
             rss = self.searchers.get("rss")
             if rss and rss.enabled:
                 primary_query = queries[0].query
@@ -133,21 +161,27 @@ class SearchService:
                     for r in cached:
                         if "fetched_at" in r and isinstance(r["fetched_at"], str):
                             try:
-                                r["fetched_at"] = datetime.fromisoformat(r["fetched_at"])
+                                r["fetched_at"] = datetime.fromisoformat(
+                                    r["fetched_at"]
+                                )
                             except Exception:
                                 r["fetched_at"] = datetime.now()
                         deserialized.append(SearchResult(**r))
                     results.extend(deserialized)
                 else:
                     task = asyncio.create_task(
-                        self._search_task(rss, "rss", primary_query, intent.domain.value),
+                        self._search_task(
+                            rss, "rss", primary_query, intent.domain.value
+                        ),
                         name=f"rss:{primary_query[:30]}",
                     )
                     tasks.append(task)
 
         for source_name, source_queries in plan.sources.items():
             if source_name not in self.operation_mode.searchers:
-                logger.debug(f"Searcher '{source_name}' filtrado (desabilitado no modo '{self.operation_mode.name}')")
+                logger.debug(
+                    f"Searcher '{source_name}' filtrado (desabilitado no modo '{self.operation_mode.name}')"
+                )
                 continue
             searcher = self.searchers.get(source_name)
             if not searcher or not searcher.enabled:
@@ -155,7 +189,9 @@ class SearchService:
             for eq in source_queries:
                 sanitized = QueryValidator.sanitize(eq.query)
                 if not QueryValidator.is_valid(sanitized):
-                    logger.warning(f"Query desconsiderada por ser inválida ou malformada: '{eq.query[:50]}'")
+                    logger.warning(
+                        f"Query desconsiderada por ser inválida ou malformada: '{eq.query[:50]}'"
+                    )
                     continue
                 eq.query = sanitized
                 cache_key = f"{source_name}:{eq.query}"
@@ -166,7 +202,9 @@ class SearchService:
                     for r in cached:
                         if "fetched_at" in r and isinstance(r["fetched_at"], str):
                             try:
-                                r["fetched_at"] = datetime.fromisoformat(r["fetched_at"])
+                                r["fetched_at"] = datetime.fromisoformat(
+                                    r["fetched_at"]
+                                )
                             except Exception:
                                 r["fetched_at"] = datetime.now()
                         deserialized.append(SearchResult(**r))
@@ -174,7 +212,9 @@ class SearchService:
                     continue
 
                 task = asyncio.create_task(
-                    self._search_task(searcher, source_name, eq.query, intent.domain.value),
+                    self._search_task(
+                        searcher, source_name, eq.query, intent.domain.value
+                    ),
                     name=f"{source_name}:{eq.query[:30]}",
                 )
                 tasks.append(task)
@@ -184,8 +224,14 @@ class SearchService:
             for idx, res_val in enumerate(gathered_results):
                 if isinstance(res_val, Exception):
                     task_obj = tasks[idx]
-                    task_name = task_obj.get_name() if hasattr(task_obj, "get_name") else f"task_{idx}"
-                    logger.error(f"Exceção não tratada na busca concorrente {task_name}: {res_val}")
+                    task_name = (
+                        task_obj.get_name()
+                        if hasattr(task_obj, "get_name")
+                        else f"task_{idx}"
+                    )
+                    logger.error(
+                        f"Exceção não tratada na busca concorrente {task_name}: {res_val}"
+                    )
                     continue
                 try:
                     assert isinstance(res_val, tuple)
@@ -204,23 +250,37 @@ class SearchService:
         if not results and "serpapi" in self.searchers:
             serpapi = self.searchers["serpapi"]
             if serpapi.is_available:
-                logger.info("Executando fallback de último recurso via SerpAPISearcher...")
+                logger.info(
+                    "Executando fallback de último recurso via SerpAPISearcher..."
+                )
                 from urllib.parse import urlparse
-                fallback_queries = [q.query for q in queries if q.priority == "alta"] or [queries[0].query] if queries else []
+
+                fallback_queries = (
+                    [q.query for q in queries if q.priority == "alta"]
+                    or [queries[0].query]
+                    if queries
+                    else []
+                )
                 for q_str in fallback_queries:
                     try:
                         res = await serpapi.search(q_str)
                         if res:
                             normalized_res = []
                             for r in res:
-                                normalized_res.append(SearchResult(
-                                    source="serpapi",
-                                    title=r.get("title", ""),
-                                    url=r.get("url", ""),
-                                    description=r.get("snippet", ""),
-                                    metrics={"source_domain": urlparse(r.get("url", "")).netloc},
-                                    raw=r
-                                ))
+                                normalized_res.append(
+                                    SearchResult(
+                                        source="serpapi",
+                                        title=r.get("title", ""),
+                                        url=r.get("url", ""),
+                                        description=r.get("snippet", ""),
+                                        metrics={
+                                            "source_domain": urlparse(
+                                                r.get("url", "")
+                                            ).netloc
+                                        },
+                                        raw=r,
+                                    )
+                                )
                             results.extend(normalized_res)
                             await self.cache.set(
                                 "search",
@@ -235,6 +295,7 @@ class SearchService:
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
         from src.observability.metrics import track_search
         from src.utils.logging import structured_logger
+
         error_msg = ""
         res = []
         try:
@@ -258,4 +319,3 @@ class SearchService:
 
         structured_logger.log_search(source_name, query, len(res), error_msg)
         return source_name, query, res
-

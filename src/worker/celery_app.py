@@ -25,10 +25,10 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=3600,          # 1 hora maximo
-    task_soft_time_limit=3000,     # Alerta aos 50min
+    task_time_limit=3600,  # 1 hora maximo
+    task_soft_time_limit=3000,  # Alerta aos 50min
     worker_prefetch_multiplier=1,  # Um task por vez
-    result_expires=86400,          # 24 horas
+    result_expires=86400,  # 24 horas
 )
 
 
@@ -38,7 +38,9 @@ celery_app.conf.update(
     default_retry_delay=60,
     name="sra.research",
 )
-def research_task(self, query: str, mode: str = "standard", options: dict | None = None) -> dict:
+def research_task(
+    self, query: str, mode: str = "standard", options: dict | None = None
+) -> dict:
     """Task de pesquisa processada em background via Celery."""
     from src.config import Config as SRAConfig
     from src.orchestrator import Orchestrator
@@ -47,7 +49,7 @@ def research_task(self, query: str, mode: str = "standard", options: dict | None
         config = SRAConfig()
         if mode and mode != "standard":
             config.operation_mode = mode
-        
+
         # Copia opcoes customizadas se fornecidas
         if options:
             for k, v in options.items():
@@ -55,16 +57,14 @@ def research_task(self, query: str, mode: str = "standard", options: dict | None
                     setattr(config, k, v)
 
         orchestrator = Orchestrator(config)
-        
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        result = loop.run_until_complete(
-            orchestrator.research(query)
-        )
+        result = loop.run_until_complete(orchestrator.research(query))
         return {"status": "success", "result": result, "query": query, "mode": mode}
     except Exception as exc:
         logger.error(f"research_task falhou: {exc}")

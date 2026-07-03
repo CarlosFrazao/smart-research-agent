@@ -1,3 +1,9 @@
+"""Módulo de síntese e agrupamento de resultados de pesquisa ranqueados.
+
+Agrupa resultados por entidade-chave, mescla clústeres e gera `SynthesizedResult`
+com score combinado, veredicto, TL;DR e estimativa de leitura.
+"""
+
 import logging
 from collections import defaultdict
 
@@ -11,11 +17,28 @@ _STOPWORDS = {"the", "a", "an", "is", "are", "best", "top", "new", "open"}
 
 
 class Synthesizer:
+    """Sintetiza e agrupa resultados ranqueados em entidades consolidadas.
+
+    Realiza deduplicacao, agrupa por entidade extraida do título,
+    mescla métricas e gera veredictos contextuais para cada grupo.
+    """
+
     def __init__(self, llm_client: LLMClient = None):
         self.llm = llm_client
         self.deduplicator = Deduplicator()
 
     async def synthesize(self, results: list[RankedResult]) -> list[SynthesizedResult]:
+        """Sintetiza resultados ranqueados em entidades consolidadas e ordenadas.
+
+        Fases: deduplicacao -> clusterizacao por entidade -> mesclagem -> ordenacao.
+
+        Args:
+            results: Lista de `RankedResult` ranqueados pelo `QualityRanker`.
+
+        Returns:
+            list[SynthesizedResult]: Entidades sintetizadas, ordenadas por
+                ``combined_score`` descendente, limitadas por fonte.
+        """
         deduped = self.deduplicator.deduplicate(results)
         logger.info(f"Deduplicacao: {len(results)} -> {len(deduped)}")
 
@@ -29,6 +52,14 @@ class Synthesizer:
     def _cluster_by_entity(
         self, results: list[RankedResult]
     ) -> list[list[RankedResult]]:
+        """Agrupa resultados por entidade extraida do título.
+
+        Args:
+            results: Lista de resultados deduplicados.
+
+        Returns:
+            list[list[RankedResult]]: Clusters, um por entidade identificada.
+        """
         clusters: dict[str, list[RankedResult]] = defaultdict(list)
         for r in results:
             entity = self._extract_entity(r.title)
@@ -36,8 +67,17 @@ class Synthesizer:
         return list(clusters.values())
 
     def _extract_entity(self, title: str) -> str:
+        """Extrai a entidade principal de um titulo para uso como chave de cluster.
+
+        Args:
+            title: Título do resultado de busca.
+
+        Returns:
+            str: Palavra-chave ou slug da entidade, ou ``"unknown"`` se vazio.
+        """
         title = (title or "").lower().strip()
         import re
+
         title = re.sub(r"^(show hn:|ask hn:|tell hn:)\s*", "", title)
         words = title.split()
         if not words:
@@ -51,7 +91,9 @@ class Synthesizer:
         return words[0]
 
     @staticmethod
-    def _compute_verdict(score: float, description: str, highlights: list[str]) -> tuple[str, str, str, int]:
+    def _compute_verdict(
+        score: float, description: str, highlights: list[str]
+    ) -> tuple[str, str, str, int]:
         """Retorna (verdict, tldr, next_step, read_min) a partir do score e conteúdo."""
         if score >= 75:
             verdict = Verdict.FOCA.value
@@ -67,7 +109,9 @@ class Synthesizer:
             next_step = "Dispensar por ora — fora do escopo da pesquisa atual."
 
         # tldr: combina description truncada com o highlight mais forte
-        desc_short = (description[:120] + "…") if len(description) > 120 else description
+        desc_short = (
+            (description[:120] + "…") if len(description) > 120 else description
+        )
         if highlights:
             tldr = f"{desc_short} [{highlights[0]}]"
         else:
@@ -80,6 +124,17 @@ class Synthesizer:
         return verdict, tldr, next_step, read_min
 
     def _merge_cluster(self, cluster: list[RankedResult]) -> SynthesizedResult:
+        """Mescla um cluster de resultados da mesma entidade em um unico `SynthesizedResult`.
+
+        Consolida titulos, descricoes, metricas, scores e gera highlights,
+        veredicto, TL;DR e estimativa de leitura.
+
+        Args:
+            cluster: Lista de `RankedResult` da mesma entidade.
+
+        Returns:
+            SynthesizedResult: Resultado consolidado com todos os metadados.
+        """
         entity = self._extract_entity(cluster[0].title)
         best_title = max(cluster, key=lambda x: len(x.title)).title
 
@@ -97,7 +152,9 @@ class Synthesizer:
             for key, value in r.metrics.items():
                 if key not in merged_metrics:
                     merged_metrics[key] = value
-                elif isinstance(value, (int, float)) and isinstance(merged_metrics[key], (int, float)):
+                elif isinstance(value, (int, float)) and isinstance(
+                    merged_metrics[key], (int, float)
+                ):
                     merged_metrics[key] = max(merged_metrics[key], value)
 
         highlights = []

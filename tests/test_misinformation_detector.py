@@ -16,12 +16,14 @@ def temp_yaml_config():
             {"domain": "unreliable.org", "reason": "SEO farm", "penalty": 0.6},
         ]
     }
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+    ) as f:
         yaml.dump(data, f)
         temp_path = f.name
-    
+
     yield temp_path
-    
+
     if os.path.exists(temp_path):
         os.remove(temp_path)
 
@@ -51,7 +53,9 @@ def test_detector_check_flagged_url(temp_yaml_config):
 
 def test_detector_check_subdomain(temp_yaml_config):
     detector = MisinformationDetector(config_path=temp_yaml_config)
-    flagged, penalty, reason = detector.check_url("https://subdomain.unreliable.org/blog/index.html")
+    flagged, penalty, reason = detector.check_url(
+        "https://subdomain.unreliable.org/blog/index.html"
+    )
     assert flagged is True
     assert penalty == 0.6
     assert reason == "SEO farm"
@@ -88,15 +92,27 @@ async def test_ranker_integration_with_misinformation(temp_yaml_config):
         title="Valid Project",
         url="https://github.com/valid/project",
         description="A great open source library",
-        metrics={"stars": 1000, "forks": 100, "language": "Python", "license": "MIT", "updated_at": "2026-01-01T00:00:00Z"},
+        metrics={
+            "stars": 1000,
+            "forks": 100,
+            "language": "Python",
+            "license": "MIT",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
     )
-    
+
     bad_result = SearchResult(
         source="github",
         title="Spam Project",
         url="https://badtech.com/news/123",
         description="A great open source library",
-        metrics={"stars": 1000, "forks": 100, "language": "Python", "license": "MIT", "updated_at": "2026-01-01T00:00:00Z"},
+        metrics={
+            "stars": 1000,
+            "forks": 100,
+            "language": "Python",
+            "license": "MIT",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
     )
 
     ranked = await ranker.rank([clean_result, bad_result])
@@ -112,9 +128,8 @@ async def test_ranker_integration_with_misinformation(temp_yaml_config):
 
     # bad_score deve ser exatamente clean_score * 0.2
     assert abs(bad_score - round(clean_score * 0.2, 2)) < 0.01
-    
+
     # Verifica o score breakdown
     assert ranked[1].score_breakdown["misinformation_penalty"] == 0.2
     assert ranked[1].score_breakdown["misinformation_reason"] == "Fake Tech"
     assert ranked[0].score_breakdown["misinformation_penalty"] == 1.0
-

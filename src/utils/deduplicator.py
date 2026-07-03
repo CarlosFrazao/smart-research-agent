@@ -1,3 +1,5 @@
+"""Utilitario de deduplicacao de resultados de busca por URL e similaridade de titulo."""
+
 import re
 from difflib import SequenceMatcher
 from typing import Any

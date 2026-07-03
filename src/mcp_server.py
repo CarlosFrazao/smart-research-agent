@@ -1,3 +1,5 @@
+"""Servidor MCP (Model Context Protocol) que expoe o Smart Research Agent como ferramenta via FastAPI."""
+
 import asyncio
 import glob as glob_module
 import json
@@ -21,6 +23,7 @@ from contextvars import ContextVar
 
 app = FastAPI(title="Smart Research Agent MCP Server")
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
     global _orchestrator
@@ -28,14 +31,18 @@ async def shutdown_event():
     if _orchestrator is not None:
         await _orchestrator.close()
 
+
 _orchestrator: Orchestrator | None = None
 _deep_researcher: DeepResearcher | None = None
 _confidence_scorer: ConfidenceScorer | None = None
 
 # Thread-safety context and lock for concurrent research requests
-_current_research: ContextVar[dict | None] = ContextVar("current_research", default=None)
+_current_research: ContextVar[dict | None] = ContextVar(
+    "current_research", default=None
+)
 _research_lock = asyncio.Lock()
 _research_store: dict[str, dict] = {}  # Keyed by session_id
+
 
 async def get_or_create_research(session_id: str) -> dict:
     async with _research_lock:
@@ -43,8 +50,11 @@ async def get_or_create_research(session_id: str) -> dict:
             _research_store[session_id] = {}
         return _research_store[session_id]
 
+
 _STATIC_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static"))
-_REPORTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "reports"))
+_REPORTS_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "reports")
+)
 
 if os.path.isdir(_STATIC_DIR):
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
@@ -61,7 +71,9 @@ def get_deep_researcher() -> DeepResearcher:
     global _deep_researcher
     if _deep_researcher is None:
         orch = get_orchestrator()
-        _deep_researcher = DeepResearcher(llm_client=orch.llm, orchestrator=orch, memory=orch.memory)
+        _deep_researcher = DeepResearcher(
+            llm_client=orch.llm, orchestrator=orch, memory=orch.memory
+        )
     return _deep_researcher
 
 
@@ -90,7 +102,9 @@ async def serve_dashboard():
     """Serve o dashboard SPA principal."""
     index_path = os.path.join(_STATIC_DIR, "index.html")
     if not os.path.isfile(index_path):
-        return PlainTextResponse("Dashboard não encontrado. Crie static/index.html.", status_code=404)
+        return PlainTextResponse(
+            "Dashboard não encontrado. Crie static/index.html.", status_code=404
+        )
     return FileResponse(index_path)
 
 
@@ -108,11 +122,13 @@ async def list_reports():
         if os.path.basename(f).startswith("_"):
             continue
         stat = os.stat(f)
-        result.append({
-            "filename": os.path.basename(f),
-            "size_bytes": stat.st_size,
-            "modified_at": stat.st_mtime,
-        })
+        result.append(
+            {
+                "filename": os.path.basename(f),
+                "size_bytes": stat.st_size,
+                "modified_at": stat.st_mtime,
+            }
+        )
     return {"reports": result}
 
 
@@ -120,9 +136,12 @@ async def list_reports():
 async def get_report(filename: str):
     """Retorna o conteúdo de um relatório (Markdown, PDF, DOCX, PPTX)."""
     from pathlib import Path
+
     safe_name = os.path.basename(filename)
     allowed_extensions = (".md", ".pdf", ".docx", ".pptx")
-    if not any(safe_name.endswith(ext) for ext in allowed_extensions) or safe_name.startswith("_"):
+    if not any(
+        safe_name.endswith(ext) for ext in allowed_extensions
+    ) or safe_name.startswith("_"):
         return PlainTextResponse("Arquivo inválido.", status_code=400)
     # Path Traversal Guard: resolve() garante que o arquivo está estritamente dentro de _REPORTS_DIR
     reports_root = Path(_REPORTS_DIR).resolve()
@@ -131,16 +150,16 @@ async def get_report(filename: str):
         return PlainTextResponse("Acesso negado.", status_code=403)
     if not file_path.is_file():
         return PlainTextResponse("Relatório não encontrado.", status_code=404)
-    
+
     if safe_name.endswith(".md"):
         with open(file_path, encoding="utf-8") as f:
             content = f.read()
         return PlainTextResponse(content, media_type="text/markdown")
-        
+
     mime_types = {
         ".pdf": "application/pdf",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     }
     ext = os.path.splitext(safe_name)[1].lower()
     media_type = mime_types.get(ext, "application/octet-stream")
@@ -160,7 +179,9 @@ async def chat_direct(body: dict):
     from src.config import Config
 
     messages = body.get("messages", [])
-    system_prompt = body.get("system_prompt", "Você é um assistente de pesquisa especializado e útil.")
+    system_prompt = body.get(
+        "system_prompt", "Você é um assistente de pesquisa especializado e útil."
+    )
     user_api_key = body.get("api_key") or None
     user_provider = body.get("provider") or None
 
@@ -175,7 +196,11 @@ async def chat_direct(body: dict):
         llm_config["api_key"] = user_api_key
 
     try:
-        provider_type = ClientLLMProvider(user_provider) if user_provider else ClientLLMProvider(config.llm_provider)
+        provider_type = (
+            ClientLLMProvider(user_provider)
+            if user_provider
+            else ClientLLMProvider(config.llm_provider)
+        )
     except ValueError:
         provider_type = ClientLLMProvider(config.llm_provider)
 
@@ -215,6 +240,7 @@ async def feedback_endpoint(body: dict):
     try:
         store = FeedbackStore()
         import hashlib
+
         result_id = hashlib.sha1(query.lower().encode()).hexdigest()[:12]
         entry = store.record(result_id=result_id, signal=signal, query=query)
         return {"recorded": True, "entry": entry}
@@ -238,7 +264,9 @@ async def obsidian_sync_endpoint(body: dict):
     config = Config()
     vault_path = getattr(config, "obsidian_vault_path", None)
     if not vault_path:
-        return PlainTextResponse("OBSIDIAN_VAULT_PATH não configurado no .env", status_code=400)
+        return PlainTextResponse(
+            "OBSIDIAN_VAULT_PATH não configurado no .env", status_code=400
+        )
 
     query_or_file = body.get("filename", "")
     if not query_or_file:
@@ -278,12 +306,12 @@ async def research_endpoint(body: dict):
     try:
         session_data = await get_or_create_research(session_id)
         _current_research.set(session_data)
-        
+
         report = await get_orchestrator().research(query)
-        
+
         session_data["last_query"] = query
         session_data["last_report"] = report
-        
+
         return {"report": report, "query": query, "session_id": session_id}
     except Exception as e:
         logger.error(f"Erro na pesquisa: {e}")
@@ -317,6 +345,7 @@ try:
             logger.info(f"[research_technology] query='{query}' op_mode={op_mode}")
             orc = get_orchestrator()
             from src.operation_modes import OperationModes
+
             selected_op = op_mode or OperationModes.auto_select(query)
             orc.operation_mode = OperationModes.get_mode(selected_op)
             return await orc.research(query)
@@ -328,7 +357,9 @@ try:
     # TOOL 2 — Busca no GitHub
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def search_github(query: str, domain: str = "general", max_results: int = 10) -> str:
+    async def search_github(
+        query: str, domain: str = "general", max_results: int = 10
+    ) -> str:
         """
         Busca repositorios, projetos e codigo diretamente no GitHub.
         Retorna lista JSON com titulo, URL, descricao, stars, forks e linguagem.
@@ -369,7 +400,9 @@ try:
     # TOOL 3 — Busca no Reddit
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def search_reddit(query: str, domain: str = "general", max_results: int = 10) -> str:
+    async def search_reddit(
+        query: str, domain: str = "general", max_results: int = 10
+    ) -> str:
         """
         Busca discussoes, recomendacoes e opinioes reais de usuarios no Reddit.
         Retorna lista JSON com titulo, URL, subreddit, descricao e upvotes.
@@ -410,7 +443,9 @@ try:
     # TOOL 4 — Busca no Hacker News
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def search_hackernews(query: str, domain: str = "general", max_results: int = 10) -> str:
+    async def search_hackernews(
+        query: str, domain: str = "general", max_results: int = 10
+    ) -> str:
         """
         Busca stories, Ask HN e discussoes tecnicas no Hacker News (YCombinator).
         Retorna lista JSON com titulo, URL, descricao, pontuacao e comentarios.
@@ -450,7 +485,9 @@ try:
     # TOOL 5 — Busca em Awesome Lists
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def search_awesome_lists(query: str, domain: str = "general", max_results: int = 15) -> str:
+    async def search_awesome_lists(
+        query: str, domain: str = "general", max_results: int = 15
+    ) -> str:
         """
         Busca ferramentas e recursos curados em Awesome Lists do GitHub.
         Retorna lista JSON com titulo, URL e descricao dos itens encontrados.
@@ -490,7 +527,9 @@ try:
     # TOOL 6 — Busca no ArXiv (papers academicos)
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def search_arxiv(query: str, domain: str = "ai_ml", max_results: int = 10) -> str:
+    async def search_arxiv(
+        query: str, domain: str = "ai_ml", max_results: int = 10
+    ) -> str:
         """
         Busca artigos e papers academicos no ArXiv (pre-prints de ciencia da computacao,
         IA, ML, matematica e areas correlatas). Retorna lista JSON com titulo, URL,
@@ -532,7 +571,9 @@ try:
     # TOOL 7 — Busca no Product Hunt
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def search_producthunt(query: str, domain: str = "saas_b2b", max_results: int = 10) -> str:
+    async def search_producthunt(
+        query: str, domain: str = "saas_b2b", max_results: int = 10
+    ) -> str:
         """
         Busca produtos e launches no Product Hunt. Retorna lista JSON com titulo,
         URL, descricao, tagline, votos e data de lancamento.
@@ -572,7 +613,9 @@ try:
     # TOOL 8 — Busca web geral
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def search_web(query: str, domain: str = "general", max_results: int = 10) -> str:
+    async def search_web(
+        query: str, domain: str = "general", max_results: int = 10
+    ) -> str:
         """
         Realiza busca web geral usando o WebSearcher interno (DuckDuckGo/SerpAPI).
         Retorna lista JSON com titulo, URL e snippet de cada resultado.
@@ -612,7 +655,9 @@ try:
     # TOOL 9 — Scraping via Firecrawl (extrai conteudo de URL especifica)
     # ─────────────────────────────────────────────────────────────────────────
     @mcp.tool()
-    async def scrape_with_firecrawl(query: str, domain: str = "general", max_results: int = 5) -> str:
+    async def scrape_with_firecrawl(
+        query: str, domain: str = "general", max_results: int = 5
+    ) -> str:
         """
         Usa o Firecrawl (instancia local Docker na porta 3002) para extrair
         conteudo de paginas web, incluindo sites com JavaScript, SPAs e paginas
@@ -647,7 +692,9 @@ try:
                 }
                 for r in results
             ]
-            logger.info(f"[scrape_with_firecrawl] {len(data)} resultados para '{query}'")
+            logger.info(
+                f"[scrape_with_firecrawl] {len(data)} resultados para '{query}'"
+            )
             return json.dumps(data, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"[scrape_with_firecrawl] erro: {e}")
@@ -686,7 +733,9 @@ try:
                 "urgency": intent.urgency,
                 "confidence": intent.confidence,
             }
-            logger.info(f"[analyze_query_intent] domain={intent.domain.value} intention={intent.intention.value}")
+            logger.info(
+                f"[analyze_query_intent] domain={intent.domain.value} intention={intent.intention.value}"
+            )
             return json.dumps(result, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"[analyze_query_intent] erro: {e}")
@@ -755,9 +804,12 @@ try:
         - "guerrilha", "cirurgia", "radar", "arqueologia", "concorrencia", "black_ops"
         """
         try:
-            logger.info(f"[research_technology_v2] query='{query}' mode={mode} op_mode={op_mode}")
+            logger.info(
+                f"[research_technology_v2] query='{query}' mode={mode} op_mode={op_mode}"
+            )
             orc = get_orchestrator()
             from src.operation_modes import OperationModes
+
             selected_op = op_mode or OperationModes.auto_select(query)
             orc.operation_mode = OperationModes.get_mode(selected_op)
 
@@ -780,7 +832,11 @@ try:
                     findings_lines.append(
                         f"### {i}. {title}\n- URL: {url}\n- Confiança: {conf:.0%}\n- {desc}"
                     )
-                report = "\n\n".join(findings_lines) if findings_lines else "(nenhum resultado encontrado)"
+                report = (
+                    "\n\n".join(findings_lines)
+                    if findings_lines
+                    else "(nenhum resultado encontrado)"
+                )
                 if include_confidence:
                     tree_md = result.reasoning_tree or ""
                     confidence_lines = [
@@ -835,7 +891,14 @@ try:
             orc = get_orchestrator()
             results = await orc._select_scraper_for_url(url)
             if not results:
-                return json.dumps({"url": url, "content": "", "scraper_used": "none", "error": "Nenhum conteúdo extraído"})
+                return json.dumps(
+                    {
+                        "url": url,
+                        "content": "",
+                        "scraper_used": "none",
+                        "error": "Nenhum conteúdo extraído",
+                    }
+                )
             r = results[0]
             scored = await get_confidence_scorer().score_result(r)
             return json.dumps(
@@ -857,7 +920,9 @@ try:
     # ─────────────────────────────────────────────────────────────────────────
     # TOOL 14 — Verificação de confiança de uma afirmação contra fontes reais
     # ─────────────────────────────────────────────────────────────────────────
-    async def _scrape_sources(claim: str, sources: list[str], scorer: Any, orc: Any) -> list[Any]:
+    async def _scrape_sources(
+        claim: str, sources: list[str], scorer: Any, orc: Any
+    ) -> list[Any]:
         scored_results = []
         for url in sources[:5]:
             try:
@@ -866,12 +931,15 @@ try:
                     scored = await scorer.score_result(raw[0])
                     scored_results.append(scored)
             except Exception as src_err:
-                logger.warning(f"[confidence_check] falha ao processar {url}: {src_err}")
+                logger.warning(
+                    f"[confidence_check] falha ao processar {url}: {src_err}"
+                )
         return scored_results
 
-
     async def _run_fallback_search(claim: str, scorer: Any, orc: Any) -> list[Any]:
-        logger.warning(f"[confidence_check] Scraping falhou para todas as fontes. Iniciando fallback de busca para '{claim[:50]}'...")
+        logger.warning(
+            f"[confidence_check] Scraping falhou para todas as fontes. Iniciando fallback de busca para '{claim[:50]}'..."
+        )
         fallback_searchers = ["github", "hackernews", "web"]
         fallback_results = []
         for s_name in fallback_searchers:
@@ -882,7 +950,9 @@ try:
                     if res:
                         fallback_results.extend(res[:2])
                 except Exception as e:
-                    logger.debug(f"[confidence_check] Fallback de busca em '{s_name}' falhou: {e}")
+                    logger.debug(
+                        f"[confidence_check] Fallback de busca em '{s_name}' falhou: {e}"
+                    )
 
         scored_results = []
         for r in fallback_results:
@@ -892,7 +962,6 @@ try:
             except Exception:
                 pass
         return scored_results
-
 
     def _build_confidence_check_response(claim: str, scored_results: list[Any]) -> str:
         scores = [r.confidence_score for r in scored_results]
@@ -933,7 +1002,6 @@ try:
             indent=2,
         )
 
-
     @mcp.tool()
     async def confidence_check(claim: str, sources: list[str]) -> str:
         """
@@ -956,7 +1024,9 @@ try:
             sources: Lista de URLs de fontes para checar (max 5)
         """
         try:
-            logger.info(f"[confidence_check] claim='{claim[:80]}' sources={len(sources)}")
+            logger.info(
+                f"[confidence_check] claim='{claim[:80]}' sources={len(sources)}"
+            )
             scorer = get_confidence_scorer()
             orc = get_orchestrator()
 
@@ -966,30 +1036,35 @@ try:
             # 2. Fallback chain se scraping direto falhou para todas as fontes
             if not scored_results:
                 from unittest.mock import MagicMock
+
                 if isinstance(orc, MagicMock):
-                    return json.dumps({
-                        "claim": claim,
-                        "overall_confidence": 0.0,
-                        "evidence_quality": "unknown",
-                        "supporting_sources": [],
-                        "contradicting_sources": [],
-                        "hallucination_flags": ["no_sources_accessible"],
-                        "recommendation": "do_not_use",
-                    })
+                    return json.dumps(
+                        {
+                            "claim": claim,
+                            "overall_confidence": 0.0,
+                            "evidence_quality": "unknown",
+                            "supporting_sources": [],
+                            "contradicting_sources": [],
+                            "hallucination_flags": ["no_sources_accessible"],
+                            "recommendation": "do_not_use",
+                        }
+                    )
 
                 scored_results = await _run_fallback_search(claim, scorer, orc)
 
             if not scored_results:
-                return json.dumps({
-                    "claim": claim,
-                    "overall_confidence": 0.45,
-                    "evidence_quality": "unverified",
-                    "supporting_sources": [],
-                    "contradicting_sources": [],
-                    "hallucination_flags": ["scraper_unavailable"],
-                    "recommendation": "verify_further",
-                    "note": "Scrapers indisponiveis e busca de fallback nao retornou resultados. Verificacao manual recomendada."
-                })
+                return json.dumps(
+                    {
+                        "claim": claim,
+                        "overall_confidence": 0.45,
+                        "evidence_quality": "unverified",
+                        "supporting_sources": [],
+                        "contradicting_sources": [],
+                        "hallucination_flags": ["scraper_unavailable"],
+                        "recommendation": "verify_further",
+                        "note": "Scrapers indisponiveis e busca de fallback nao retornou resultados. Verificacao manual recomendada.",
+                    }
+                )
 
             # 3. Montar e retornar resposta final
             return _build_confidence_check_response(claim, scored_results)
@@ -1040,13 +1115,21 @@ try:
                 indent=2,
             )
         except ValueError as e:
-            return json.dumps({"recorded": False, "error": str(e), "valid_signals": sorted(VALID_SIGNALS)})
+            return json.dumps(
+                {
+                    "recorded": False,
+                    "error": str(e),
+                    "valid_signals": sorted(VALID_SIGNALS),
+                }
+            )
         except Exception as e:
             logger.error(f"[record_feedback] erro: {e}")
             return json.dumps({"recorded": False, "error": str(e)})
 
     app.mount("/mcp", mcp.sse_app())
-    logger.info("MCP FastMCP montado com sucesso via sse_app() em /mcp — 15 tools registradas")
+    logger.info(
+        "MCP FastMCP montado com sucesso via sse_app() em /mcp — 15 tools registradas"
+    )
 
 except ImportError as err:
     logger.warning(

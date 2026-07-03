@@ -1,7 +1,13 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.types import SearchResult, RankedResult, IntentResult, ExpandedQuery, Domain, Intention
-from datetime import datetime
+from src.types import (
+    SearchResult,
+    RankedResult,
+    IntentResult,
+    ExpandedQuery,
+    Domain,
+    Intention,
+)
 
 
 @pytest.fixture
@@ -54,12 +60,16 @@ def sample_expanded_query():
 @pytest.fixture
 def mock_llm_client():
     client = MagicMock()
-    client.generate = AsyncMock(return_value='{"domain": "saas_b2b", "entities": [], "intention": "discover", "urgency": "nao", "confidence": "alta"}')
-    client.generate_structured = AsyncMock(return_value={
-        "domain": "saas_b2b",
-        "entities": ["HubSpot"],
-        "intention": "discover",
-        "urgency": "nao",
-        "confidence": "alta",
-    })
+    client.generate = AsyncMock(
+        return_value='{"domain": "saas_b2b", "entities": [], "intention": "discover", "urgency": "nao", "confidence": "alta"}'
+    )
+    client.generate_structured = AsyncMock(
+        return_value={
+            "domain": "saas_b2b",
+            "entities": ["HubSpot"],
+            "intention": "discover",
+            "urgency": "nao",
+            "confidence": "alta",
+        }
+    )
     return client

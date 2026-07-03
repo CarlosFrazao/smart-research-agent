@@ -12,9 +12,7 @@ Cobre:
 
 import os
 import sys
-import tempfile
 
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -74,7 +72,9 @@ def test_get_report_returns_content(tmp_path, monkeypatch):
 
     monkeypatch.setattr(srv, "_REPORTS_DIR", str(tmp_path))
     md_file = tmp_path / "2026-06-24-relatorio-teste.md"
-    md_file.write_text("# Relatório de Teste\n\nConteúdo do relatório.", encoding="utf-8")
+    md_file.write_text(
+        "# Relatório de Teste\n\nConteúdo do relatório.", encoding="utf-8"
+    )
 
     response = client.get("/api/reports/2026-06-24-relatorio-teste.md")
     assert response.status_code == 200
@@ -137,6 +137,7 @@ def test_dashboard_route_exists():
 
 # ─── BLOCO 5 — Dashboard v2.0: api_key/provider dinâmicos ────────────────────
 
+
 def test_chat_with_api_key_field_accepted():
     """POST /api/chat com api_key no body não deve falhar na estrutura do request."""
     response = client.post(
@@ -178,6 +179,7 @@ def test_chat_with_invalid_provider_falls_back():
 def test_research_accepts_api_key_in_body():
     """POST /research com api_key/provider no body deve ser aceito sem erro de schema."""
     from unittest.mock import patch, AsyncMock, MagicMock
+
     mock_orc = MagicMock()
     mock_orc.research = AsyncMock(return_value="# Mocked Report")
 

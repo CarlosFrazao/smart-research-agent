@@ -9,6 +9,7 @@ Evolução consolidada da OrvixMemory:
 
 Mantém 100% de compatibilidade de interface com OrvixMemory v1.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,6 +26,13 @@ from pathlib import Path
 from typing import Any
 from collections.abc import Generator
 
+# Configurar o cache local do HuggingFace para evitar downloads repetidos e warnings de autenticação (BUG-11)
+os.environ.setdefault(
+    "HF_HOME", str(Path(__file__).parent.parent.parent / ".cache" / "huggingface")
+)
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+
 import chromadb
 import kuzu
 
@@ -35,13 +43,16 @@ _RRF_K = 60
 _EMBED_MODEL = "all-MiniLM-L6-v2"
 _ENTITY_RE = re.compile(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b")
 
-_DEFAULT_DB_PATH = Path(os.environ.get("RESEARCH_MEMORY_DB", "reports/.research_memory.db"))
+_DEFAULT_DB_PATH = Path(
+    os.environ.get("RESEARCH_MEMORY_DB", "reports/.research_memory.db")
+)
 _CHROMA_HOST = os.environ.get("CHROMADB_HOST", "127.0.0.1")
 _CHROMA_PORT = int(os.environ.get("CHROMADB_PORT", 3024))
 _KUZU_PATH = os.environ.get("KUZU_DATA_PATH", "kuzu_data")
 
 
 # ── Contratos de Dados ────────────────────────────────────────────────────────
+
 
 @dataclass
 class MemoryEntry:
@@ -71,10 +82,15 @@ def _get_embedder() -> Any:
         if _embedder_cache is None:
             try:
                 from sentence_transformers import SentenceTransformer
+
                 _embedder_cache = SentenceTransformer(_EMBED_MODEL)
-                logger.info("OrvixMemory: sentence-transformers carregado (vector search ativo)")
+                logger.info(
+                    "OrvixMemory: sentence-transformers carregado (vector search ativo)"
+                )
             except ImportError:
-                logger.info("OrvixMemory: sentence-transformers não instalado — vector search desabilitado")
+                logger.info(
+                    "OrvixMemory: sentence-transformers não instalado — vector search desabilitado"
+                )
                 _embedder_cache = None
     return _embedder_cache
 
@@ -97,25 +113,29 @@ def _cosine(a: list, b: list) -> float:
 
 # ── OrvixMemory (Híbrido SQLite + ChromaDB + KuzuDB) ──────────────────────────
 
+
 class OrvixMemory:
     """Memória de RAG Híbrido avançado combinando SQLite, ChromaDB e KuzuDB."""
 
-    def __init__(self, db_path: str | None = None, kuzu_path: str | None = None) -> None:
+    def __init__(
+        self, db_path: str | None = None, kuzu_path: str | None = None
+    ) -> None:
         self._db_path = Path(db_path or str(_DEFAULT_DB_PATH))
         self._kuzu_path = kuzu_path or _KUZU_PATH
         self._local = threading.local()
-        
+
         # 1. Inicializa o SQLite (para busca BM25 FTS5 e metadados)
         self._init_sqlite_schema()
-        
+
         # 2. Inicializa o ChromaDB (vetorial)
         self._init_chroma()
-        
+
         # 3. Inicializa o KuzuDB (grafos)
         self._init_kuzu()
-        
+
         # 4. Inicializa o Grafo de Conhecimento Semântico
         from src.knowledge_graph import SemanticKnowledgeGraph
+
         self.kg = SemanticKnowledgeGraph(kuzu_conn=self.kuzu_conn)
 
     # ── Inicializadores de Infraestrutura ──────────────────────────────────────
@@ -145,15 +165,15 @@ class OrvixMemory:
                     metadata   TEXT    NOT NULL DEFAULT '{}',
                     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
                 );
- 
+
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
                 USING fts5(content, content='memories', content_rowid='id');
- 
+
                 CREATE TRIGGER IF NOT EXISTS memories_ai
                 AFTER INSERT ON memories BEGIN
                     INSERT INTO memories_fts(rowid, content) VALUES (NEW.id, NEW.content);
                 END;
- 
+
                 CREATE TRIGGER IF NOT EXISTS memories_ad
                 AFTER DELETE ON memories BEGIN
                     INSERT INTO memories_fts(memories_fts, rowid, content)
@@ -165,16 +185,23 @@ class OrvixMemory:
     def _init_chroma(self) -> None:
         """Conecta ao ChromaDB e inicializa a coleção de memórias."""
         try:
-            self.chroma_client = chromadb.HttpClient(host=_CHROMA_HOST, port=_CHROMA_PORT)
-            self.chroma_collection = self.chroma_client.get_or_create_collection(
-                name="sra_memories",
-                metadata={"hnsw:space": "cosine"}
+            self.chroma_client = chromadb.HttpClient(
+                host=_CHROMA_HOST, port=_CHROMA_PORT
             )
-            logger.info(f"OrvixMemory: Conectado ao ChromaDB em {_CHROMA_HOST}:{_CHROMA_PORT}")
+            self.chroma_collection = self.chroma_client.get_or_create_collection(
+                name="sra_memories", metadata={"hnsw:space": "cosine"}
+            )
+            logger.info(
+                f"OrvixMemory: Conectado ao ChromaDB em {_CHROMA_HOST}:{_CHROMA_PORT}"
+            )
         except Exception as e:
-            logger.warning(f"OrvixMemory: Falha ao conectar ao ChromaDB: {e}. Criando cliente efêmero local.")
+            logger.warning(
+                f"OrvixMemory: Falha ao conectar ao ChromaDB: {e}. Criando cliente efêmero local."
+            )
             self.chroma_client = chromadb.Client()
-            self.chroma_collection = self.chroma_client.get_or_create_collection("sra_memories")
+            self.chroma_collection = self.chroma_client.get_or_create_collection(
+                "sra_memories"
+            )
 
     def _init_kuzu(self) -> None:
         """Inicializa o banco de grafos KuzuDB local."""
@@ -182,27 +209,33 @@ class OrvixMemory:
             db_dir = Path(self._kuzu_path)
             db_dir.mkdir(parents=True, exist_ok=True)
             db_file_path = str(db_dir / "kuzu.db")
-            
+
             self.kuzu_db = kuzu.Database(db_file_path)
             self.kuzu_conn = kuzu.Connection(self.kuzu_db)
-            
+
             # Tabela Memory
             try:
-                self.kuzu_conn.execute("CREATE NODE TABLE Memory(id INT64, content STRING, PRIMARY KEY(id))")
+                self.kuzu_conn.execute(
+                    "CREATE NODE TABLE Memory(id INT64, content STRING, PRIMARY KEY(id))"
+                )
             except Exception as e:
                 if "already exists" not in str(e).lower():
                     logger.warning(f"KuzuDB: Aviso ao criar tabela Memory: {e}")
-                
+
             # Tabela Entity
             try:
-                self.kuzu_conn.execute("CREATE NODE TABLE Entity(name STRING, PRIMARY KEY(name))")
+                self.kuzu_conn.execute(
+                    "CREATE NODE TABLE Entity(name STRING, PRIMARY KEY(name))"
+                )
             except Exception as e:
                 if "already exists" not in str(e).lower():
                     logger.warning(f"KuzuDB: Aviso ao criar tabela Entity: {e}")
-                
+
             # Tabela MENTIONED_IN
             try:
-                self.kuzu_conn.execute("CREATE REL TABLE MENTIONED_IN(FROM Entity TO Memory)")
+                self.kuzu_conn.execute(
+                    "CREATE REL TABLE MENTIONED_IN(FROM Entity TO Memory)"
+                )
             except Exception as e:
                 if "already exists" not in str(e).lower():
                     logger.warning(f"KuzuDB: Aviso ao criar relação MENTIONED_IN: {e}")
@@ -219,13 +252,17 @@ class OrvixMemory:
                     logger.warning(f"KuzuDB: Aviso ao criar tabela Claim: {e}")
 
             try:
-                self.kuzu_conn.execute("CREATE REL TABLE CONFIRMS(FROM Claim TO Claim, weight DOUBLE)")
+                self.kuzu_conn.execute(
+                    "CREATE REL TABLE CONFIRMS(FROM Claim TO Claim, weight DOUBLE)"
+                )
             except Exception as e:
                 if "already exists" not in str(e).lower():
                     logger.warning(f"KuzuDB: Aviso ao criar relação CONFIRMS: {e}")
 
             try:
-                self.kuzu_conn.execute("CREATE REL TABLE CONTRADICTS(FROM Claim TO Claim, divergence DOUBLE)")
+                self.kuzu_conn.execute(
+                    "CREATE REL TABLE CONTRADICTS(FROM Claim TO Claim, divergence DOUBLE)"
+                )
             except Exception as e:
                 if "already exists" not in str(e).lower():
                     logger.warning(f"KuzuDB: Aviso ao criar relação CONTRADICTS: {e}")
@@ -247,7 +284,9 @@ class OrvixMemory:
                 if "already exists" not in str(e).lower():
                     logger.warning(f"KuzuDB: Aviso ao criar relação RELATION: {e}")
 
-            logger.info(f"OrvixMemory: KuzuDB inicializado com sucesso em {db_file_path}")
+            logger.info(
+                f"OrvixMemory: KuzuDB inicializado com sucesso em {db_file_path}"
+            )
         except Exception as e:
             logger.error(f"OrvixMemory: Erro crítico ao inicializar KuzuDB: {e}")
             self.kuzu_db = None
@@ -260,7 +299,7 @@ class OrvixMemory:
         meta = metadata or {}
         if not meta:
             meta = {"source": "user_memory"}
-        
+
         # 1. Salva no SQLite
         with self._conn() as conn:
             cur = conn.execute(
@@ -278,7 +317,7 @@ class OrvixMemory:
                     ids=[str(memory_id)],
                     embeddings=[embedding],
                     documents=[content],
-                    metadatas=[meta]
+                    metadatas=[meta],
                 )
         except Exception as e:
             logger.warning(f"OrvixMemory: Erro ao indexar no ChromaDB: {e}")
@@ -288,20 +327,19 @@ class OrvixMemory:
             try:
                 self.kuzu_conn.execute(
                     "CREATE (m:Memory {id: $id, content: $content})",
-                    {"id": memory_id, "content": content}
+                    {"id": memory_id, "content": content},
                 )
-                
+
                 entities = set(_ENTITY_RE.findall(content))
                 for entity_name in entities:
                     self.kuzu_conn.execute(
-                        "MERGE (e:Entity {name: $name})",
-                        {"name": entity_name}
+                        "MERGE (e:Entity {name: $name})", {"name": entity_name}
                     )
                     self.kuzu_conn.execute(
                         "MATCH (e:Entity), (m:Memory) "
                         "WHERE e.name = $name AND m.id = $id "
                         "CREATE (e)-[:MENTIONED_IN]->(m)",
-                        {"name": entity_name, "id": memory_id}
+                        {"name": entity_name, "id": memory_id},
                     )
 
                 triples = self.kg.extract_triples(content)
@@ -331,7 +369,7 @@ class OrvixMemory:
             try:
                 self.kuzu_conn.execute(
                     "MATCH (m:Memory) WHERE m.id = $id DETACH DELETE m",
-                    {"id": memory_id}
+                    {"id": memory_id},
                 )
             except Exception as e:
                 logger.warning(f"OrvixMemory: Erro ao deletar do KuzuDB: {e}")
@@ -371,7 +409,9 @@ class OrvixMemory:
             if graph_results:
                 modes_used.append("graph")
 
-        fused = sorted(ranked.items(), key=lambda kv: sum(kv[1].values()), reverse=True)[:top_k]
+        fused = sorted(
+            ranked.items(), key=lambda kv: sum(kv[1].values()), reverse=True
+        )[:top_k]
 
         entries: list[MemoryEntry] = []
         with self._conn() as conn:
@@ -380,18 +420,22 @@ class OrvixMemory:
                     "SELECT id, content, metadata FROM memories WHERE id = ?", (row_id,)
                 ).fetchone()
                 if row:
-                    entries.append(MemoryEntry(
-                        id=row["id"],
-                        content=row["content"],
-                        metadata=json.loads(row["metadata"]),
-                        score=sum(scores.values()),
-                    ))
+                    entries.append(
+                        MemoryEntry(
+                            id=row["id"],
+                            content=row["content"],
+                            metadata=json.loads(row["metadata"]),
+                            score=sum(scores.values()),
+                        )
+                    )
 
         return MemorySearchResult(entries=entries, modes_used=modes_used)
 
     # ── Motores de Busca Individuais ───────────────────────────────────────────
 
-    def _bm25(self, conn: sqlite3.Connection, query: str, limit: int) -> list[tuple[int, float]]:
+    def _bm25(
+        self, conn: sqlite3.Connection, query: str, limit: int
+    ) -> list[tuple[int, float]]:
         try:
             rows = conn.execute(
                 "SELECT rowid, rank FROM memories_fts WHERE memories_fts MATCH ? ORDER BY rank LIMIT ?",
@@ -407,12 +451,11 @@ class OrvixMemory:
             qvec = _embed(query)
             if qvec is None:
                 return []
-                
+
             results = self.chroma_collection.query(
-                query_embeddings=[qvec],
-                n_results=limit
+                query_embeddings=[qvec], n_results=limit
             )
-            
+
             scored = []
             if results and results.get("ids") and results["ids"][0]:
                 for doc_id, dist in zip(results["ids"][0], results["distances"][0]):
@@ -427,11 +470,11 @@ class OrvixMemory:
         """Busca semântica no banco de grafos KuzuDB usando Cypher."""
         if not self.kuzu_conn:
             return []
-            
+
         entities = set(_ENTITY_RE.findall(query))
         if not entities:
             return []
-            
+
         try:
             entity_list = list(entities)
             result = self.kuzu_conn.execute(
@@ -440,9 +483,9 @@ class OrvixMemory:
                 "RETURN m.id, count(e) AS shared "
                 "ORDER BY shared DESC "
                 "LIMIT $limit",
-                {"entities": entity_list, "limit": limit}
+                {"entities": entity_list, "limit": limit},
             )
-            
+
             scored = []
             while result.has_next():
                 row = result.get_next()
@@ -459,7 +502,10 @@ class OrvixMemory:
         result = self.search(query, top_k=top_k)
         if not result.entries:
             return ""
-        parts = [f"[Pesquisa anterior {i+1}] {e.content}" for i, e in enumerate(result.entries)]
+        parts = [
+            f"[Pesquisa anterior {i+1}] {e.content}"
+            for i, e in enumerate(result.entries)
+        ]
         header = f"## Contexto de pesquisas anteriores (modos: {', '.join(result.modes_used)})\n\n"
         return header + "\n\n".join(parts)
 
@@ -508,29 +554,34 @@ class OrvixMemory:
         """Retorna estatísticas acumuladas dos três bancos de dados."""
         with self._conn() as conn:
             sqlite_total = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-            
+
         chroma_total = 0
         try:
             chroma_total = self.chroma_collection.count()
         except Exception:
             pass
-            
+
         kuzu_memories = 0
         kuzu_entities = 0
         kuzu_rels = 0
         if self.kuzu_conn:
             try:
                 res = self.kuzu_conn.execute("MATCH (m:Memory) RETURN count(*)")
-                if res.has_next(): kuzu_memories = res.get_next()[0]
-                
+                if res.has_next():
+                    kuzu_memories = res.get_next()[0]
+
                 res = self.kuzu_conn.execute("MATCH (e:Entity) RETURN count(*)")
-                if res.has_next(): kuzu_entities = res.get_next()[0]
-                
-                res = self.kuzu_conn.execute("MATCH ()-[r:MENTIONED_IN]->() RETURN count(*)")
-                if res.has_next(): kuzu_rels = res.get_next()[0]
+                if res.has_next():
+                    kuzu_entities = res.get_next()[0]
+
+                res = self.kuzu_conn.execute(
+                    "MATCH ()-[r:MENTIONED_IN]->() RETURN count(*)"
+                )
+                if res.has_next():
+                    kuzu_rels = res.get_next()[0]
             except Exception:
                 pass
-                
+
         return {
             "sqlite_memories": sqlite_total,
             "chromadb_vectors": chroma_total,

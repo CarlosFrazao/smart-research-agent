@@ -1,3 +1,10 @@
+"""Módulo de geração de relatórios de pesquisa em Markdown.
+
+Orquestra a montagem de relatórios estruturados a partir de resultados sintetizados,
+combinando sumário executivo gerado por LLM, análise de fontes, tendências,
+sentimento, comparações e timeline cronológica.
+"""
+
 import logging
 import os
 from datetime import datetime
@@ -13,6 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 class ReportGenerator:
+    """Gerador de relatórios Markdown estruturados a partir de resultados de pesquisa.
+
+    Combina sumário executivo, análise comparativa, timeline, sentimento e
+    tendências (via LLM) em um único documento Markdown coeso e exportável.
+    """
+
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
         self.temporal_analyzer = TemporalAnalyzer()
@@ -25,14 +38,26 @@ class ReportGenerator:
         results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> str:
-        executive_summary = await self._generate_executive_summary(query, results, metadata)
+        """Gera o relatório completo de pesquisa como string Markdown.
+
+        Args:
+            query: Query original do usuário.
+            results: Lista de `SynthesizedResult` ordenada por score.
+            metadata: Metadados da sessão de pesquisa (duracao, fontes, etc).
+
+        Returns:
+            str: Relatório completo em formato Markdown.
+        """
+        executive_summary = await self._generate_executive_summary(
+            query, results, metadata
+        )
         recommendation = await self._generate_recommendation(query, results)
         trends = await self._generate_trends(results)
         timeline_section = self.temporal_analyzer.generate_timeline_section(results)
         sentiment_section = self.sentiment_analyzer.generate_sentiment_section(results)
         comparison_section = self.comparator.generate_comparison_section(query, results)
 
-        return self._assemble_report(
+        report_raw = self._assemble_report(
             query=query,
             metadata=metadata,
             results=results,
@@ -43,6 +68,76 @@ class ReportGenerator:
             sentiment_section=sentiment_section,
             comparison_section=comparison_section,
         )
+        return await self._validate_and_enrich_sections(report_raw, query, results)
+
+    async def _validate_and_enrich_sections(
+        self, report_md: str, query: str, results: list[SynthesizedResult]
+    ) -> str:
+        """Valida se as seções do relatório gerado são muito curtas ou vazias e enriquece se necessário (BUG-13)."""
+        sections = report_md.split("\n## ")
+        enriched_sections = []
+
+        # A primeira parte do split é o título e metadados
+        enriched_sections.append(sections[0])
+
+        for section in sections[1:]:
+            lines = section.split("\n")
+            header = lines[0]
+            content = "\n".join(lines[1:]).strip()
+
+            # Se a seção (excluindo links/linhas vazias) tiver menos de 200 caracteres úteis
+            clean_content = content.replace("---", "").strip()
+            if len(clean_content) < 200:
+                logger.info(
+                    f"ReportGenerator: Seção '{header}' curta demais ({len(clean_content)} chars). Enriquecendo via LLM..."
+                )
+
+                project_summaries = "\n".join(
+                    f"- {r.title}: {(r.description or '')[:200]}" for r in results[:8]
+                )
+                prompt = (
+                    "Você é um analista sênior de inteligência tecnológica. Escreva em Português do Brasil.\n"
+                    f"A seção '{header}' de um relatório técnico sobre '{query}' está vazia ou curta demais.\n"
+                    "Gere uma análise técnica detalhada, aprofundada e formal (mínimo de 3 parágrafos robustos) para esta seção.\n\n"
+                    f"Projetos encontrados como contexto:\n{project_summaries}\n\n"
+                    f"Diretrizes específicas para a seção '{header}':\n"
+                )
+
+                if "Tecnologias / Stacks" in header:
+                    prompt += (
+                        "- Identifique as linguagens prováveis (ex: Rust, Python, TypeScript) e por que são usadas.\n"
+                        "- Discorra sobre a arquitetura de transporte (HTTP, WebSockets, stdio) comumente empregada.\n"
+                        "- Detalhe as dependências e ecossistemas envolvidos (ex: tokio, async-trait no Rust, fastmcp no Python)."
+                    )
+                elif "Discussao da Comunidade" in header or "Discussão" in header:
+                    prompt += (
+                        "- Sintetize a recepção geral desse tipo de tecnologia pela comunidade de desenvolvedores.\n"
+                        "- Fale sobre os principais gargalos discutidos (curva de aprendizado, segurança de dados em LLMs).\n"
+                        "- Cite o interesse observado através das estrelas e discussões gerais de adoção do protocolo MCP."
+                    )
+                elif "Sentimento" in header:
+                    prompt += (
+                        "- Descreva o tom geral das menções (otimista, pragmático, cético).\n"
+                        "- Aponte os motivos do entusiasmo (automação flexível de agentes) e as fontes de ceticismo (segurança, latência)."
+                    )
+                else:
+                    prompt += (
+                        "- Elabore e aprofunde as conclusões técnicas baseadas nos dados fornecidos.\n"
+                        "- Discorra sobre implicações de mercado e adoção a médio prazo."
+                    )
+
+                try:
+                    enriched_content = await self.llm.generate(
+                        prompt, temperature=0.5, max_tokens=600
+                    )
+                    if enriched_content and len(enriched_content) > 100:
+                        section = f"{header}\n\n{enriched_content}\n"
+                except Exception as e:
+                    logger.warning(f"Falha ao enriquecer seção '{header}': {e}")
+
+            enriched_sections.append(section)
+
+        return "\n## ".join(enriched_sections)
 
     async def _generate_executive_summary(
         self,
@@ -50,10 +145,27 @@ class ReportGenerator:
         results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> str:
+        """Gera o resumo executivo da pesquisa usando o LLM.
+
+        Args:
+            query: Query original do usuario.
+            results: Resultados sintetizados para contexto do LLM.
+            metadata: Metadados da pesquisa incluindo fontes e duracao.
+
+        Returns:
+            str: Paragrafos de resumo executivo gerados pelo LLM,
+                 ou fallback textual em caso de erro.
+        """
         top_lines_list = []
         for i, r in enumerate(results[:5]):
             quality = getattr(r, "evidence_quality", "unknown")
-            confidence_tag = "[ALTA CONFIANÇA]" if quality == "verified" else "[MÉDIA]" if quality == "cited" else "[BAIXA — VERIFICAR]"
+            confidence_tag = (
+                "[ALTA CONFIANÇA]"
+                if quality == "verified"
+                else "[MÉDIA]"
+                if quality == "cited"
+                else "[BAIXA — VERIFICAR]"
+            )
             top_lines_list.append(
                 f"{i+1}. {confidence_tag} {r.title or '(sem título)'} ({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n   {(r.description or '')[:200]}..."
             )
@@ -95,14 +207,32 @@ class ReportGenerator:
             )
 
     async def _generate_recommendation(
-        self, query: str, results: list[SynthesizedResult]
+        self,
+        query: str,
+        results: list[SynthesizedResult],
     ) -> str:
+        """Gera uma recomendacao estrategica baseada nos resultados da pesquisa.
+
+        Args:
+            query: Query original do usuario.
+            results: Resultados sintetizados para contexto do LLM.
+
+        Returns:
+            str: Recomendacao acionavel gerada pelo LLM,
+                 ou recomendacao automatica baseada nos scores em caso de erro.
+        """
         if not results:
             return "Nenhum projeto encontrado para recomendacao."
         top_lines_list = []
         for i, r in enumerate(results[:5]):
             quality = getattr(r, "evidence_quality", "unknown")
-            confidence_tag = "[ALTA CONFIANÇA]" if quality == "verified" else "[MÉDIA]" if quality == "cited" else "[BAIXA — VERIFICAR]"
+            confidence_tag = (
+                "[ALTA CONFIANÇA]"
+                if quality == "verified"
+                else "[MÉDIA]"
+                if quality == "cited"
+                else "[BAIXA — VERIFICAR]"
+            )
             top_lines_list.append(
                 f"{i+1}. {confidence_tag} {r.title or '(sem título)'}\n   Pontos fortes: {', '.join(h for h in r.highlights if h)}\n   Metricas: {r.metrics}"
             )
@@ -128,10 +258,22 @@ class ReportGenerator:
             return f"Recomendamos **{top.title}** como principal opcao. {top.description[:200]}..."
 
     async def _generate_trends(self, results: list[SynthesizedResult]) -> str:
+        """Identifica tendencias tecnologicas a partir dos resultados de pesquisa.
+
+        Usa o LLM para extrair 2-3 tendencias com evidencias concretas dos projetos.
+
+        Args:
+            results: Resultados sintetizados com titulos e descricoes dos projetos.
+
+        Returns:
+            str: Bloco de tendencias em Markdown gerado pelo LLM,
+                 ou mensagem de fallback se dados forem insuficientes ou LLM falhar.
+        """
         if len(results) < 3:
             return "Poucos dados para analise de tendencias."
         project_lines = "\n".join(
-            f"- {r.title or '(sem título)'}: {(r.description or '')[:150]}..." for r in results[:8]
+            f"- {r.title or '(sem título)'}: {(r.description or '')[:150]}..."
+            for r in results[:8]
         )
         prompt = (
             "Analise os projetos encontrados e identifique 2-3 tendências tecnológicas.\n\n"
@@ -158,10 +300,42 @@ class ReportGenerator:
         sentiment_section: str = "",
         comparison_section: str = "",
     ) -> str:
+        """Monta o relatorio final unindo todas as secoes geradas.
+
+        Delega a construcao de cada bloco para os submétodos privados
+        `_build_summary`, `_build_sources` e `_build_analysis`.
+
+        Args:
+            query: Query original do usuario.
+            metadata: Metadados da pesquisa.
+            results: Resultados sintetizados.
+            executive_summary: Texto do resumo executivo gerado pelo LLM.
+            recommendation: Texto da recomendacao gerado pelo LLM.
+            trends: Texto das tendencias gerado pelo LLM.
+            timeline_section: Bloco Markdown de timeline cronologica.
+            sentiment_section: Bloco Markdown de analise de sentimento.
+            comparison_section: Bloco Markdown de comparacao de alternativas.
+
+        Returns:
+            str: Relatorio completo em formato Markdown.
+        """
         lines = []
-        lines.extend(self._build_summary(query, metadata, executive_summary, comparison_section, timeline_section, results))
+        lines.extend(
+            self._build_summary(
+                query,
+                metadata,
+                executive_summary,
+                comparison_section,
+                timeline_section,
+                results,
+            )
+        )
         lines.extend(self._build_sources(results))
-        lines.extend(self._build_analysis(results, trends, recommendation, sentiment_section, metadata))
+        lines.extend(
+            self._build_analysis(
+                results, trends, recommendation, sentiment_section, metadata
+            )
+        )
 
         cleaned_lines = [str(line) for line in lines if line is not None]
         return "\n".join(cleaned_lines)
@@ -175,6 +349,19 @@ class ReportGenerator:
         timeline_section: str,
         results: list[SynthesizedResult],
     ) -> list[str]:
+        """Constroi o bloco de cabecalho e resumo executivo do relatorio.
+
+        Args:
+            query: Query original do usuario.
+            metadata: Metadados da pesquisa (timestamp, fontes, etc).
+            executive_summary: Texto do resumo executivo.
+            comparison_section: Bloco Markdown de comparacao.
+            timeline_section: Bloco Markdown de timeline.
+            results: Resultados sintetizados para fallback de resumo.
+
+        Returns:
+            list[str]: Linhas Markdown do bloco de resumo.
+        """
         timestamp = metadata.timestamp.strftime("%Y-%m-%d %H:%M")
 
         exec_summary_clean = str(executive_summary or "").strip()
@@ -222,6 +409,17 @@ class ReportGenerator:
         return lines
 
     def _build_sources(self, results: list[SynthesizedResult]) -> list[str]:
+        """Constroi o bloco de listagem de projetos e ferramentas encontradas.
+
+        Formata cada resultado sintetizado com metricas, veredicto, TL;DR,
+        alertas de qualidade e proxima acao recomendada.
+
+        Args:
+            results: Lista de `SynthesizedResult` para exibir (max 15).
+
+        Returns:
+            list[str]: Linhas Markdown da secao de projetos e ferramentas.
+        """
         lines = [
             "## 2. Projetos / Ferramentas Encontradas",
             "",
@@ -241,8 +439,13 @@ class ReportGenerator:
                 metric_parts.append(f"Updated: {str(r.metrics['updated_at'])[:10]}")
 
             metrics_str = " | ".join(metric_parts)
-            highlights_str = "\n".join(f"- {h}" for h in r.highlights if h) or "- Nenhum destaque especifico"
-            desc_text = (r.description or "")[:300] + ("..." if len(r.description or "") > 300 else "")
+            highlights_str = (
+                "\n".join(f"- {h}" for h in r.highlights if h)
+                or "- Nenhum destaque especifico"
+            )
+            desc_text = (r.description or "")[:300] + (
+                "..." if len(r.description or "") > 300 else ""
+            )
 
             verdict = getattr(r, "verdict", "") or ""
             tldr = getattr(r, "tldr", "") or ""
@@ -262,12 +465,14 @@ class ReportGenerator:
                 "verified": "🌟 Verificado (Alta Confiança)",
                 "cited": "📖 Citado (Confiança Média)",
                 "inferred": "🔍 Inferido (Confiança Baixa)",
-                "unknown": "❓ Desconhecido"
+                "unknown": "❓ Desconhecido",
             }
             quality_display = quality_badges.get(evidence_quality, evidence_quality)
 
             is_single_source = len(r.sources) <= 1
-            source_warning = " | ⚠️ **Fonte Única (Single Source)**" if is_single_source else ""
+            source_warning = (
+                " | ⚠️ **Fonte Única (Single Source)**" if is_single_source else ""
+            )
 
             flags = getattr(r, "hallucination_flags", []) or []
             flags_display = ""
@@ -281,15 +486,19 @@ class ReportGenerator:
                     "content_brief": "Conteúdo Sucinto",
                     "untrusted_domain": "Domínio Não Confiável",
                     "clickbait_title": "Título Clickbait",
-                    "absolute_claim_detected": "Afirmação Absoluta"
+                    "absolute_claim_detected": "Afirmação Absoluta",
                 }
-                flags_display = " | 🚫 **Alertas:** " + ", ".join(flag_labels.get(f, f) for f in flags)
+                flags_display = " | 🚫 **Alertas:** " + ", ".join(
+                    flag_labels.get(f, f) for f in flags
+                )
 
             entry_lines = [
                 f"### 2.{i+1} {r.title or '(sem título)'}",
             ]
             if verdict_display:
-                entry_lines.append(f"> **Veredito:** {verdict_display}  |  ⏱️ ~{read_min} min  |  **Qualidade:** {quality_display}{source_warning}{flags_display}")
+                entry_lines.append(
+                    f"> **Veredito:** {verdict_display}  |  ⏱️ ~{read_min} min  |  **Qualidade:** {quality_display}{source_warning}{flags_display}"
+                )
             if tldr:
                 entry_lines.append(f"> {tldr}")
             entry_lines += [
@@ -314,6 +523,18 @@ class ReportGenerator:
         sentiment_section: str,
         metadata: ResearchMetadata,
     ) -> list[str]:
+        """Constroi o bloco de analise com tendencias, recomendacao e sentimento.
+
+        Args:
+            results: Resultados sintetizados para contexto da analise.
+            trends: Texto de tendencias gerado pelo LLM.
+            recommendation: Texto de recomendacao gerado pelo LLM.
+            sentiment_section: Bloco Markdown de analise de sentimento.
+            metadata: Metadados da pesquisa.
+
+        Returns:
+            list[str]: Linhas Markdown do bloco de analise.
+        """
         recommendation_clean = str(recommendation or "").strip()
         if not recommendation_clean:
             recommendation_clean = (
@@ -359,7 +580,9 @@ class ReportGenerator:
             lang = r.metrics.get("language")
             if lang:
                 languages.setdefault(lang, []).append(r.title or "(sem título)")
-        for lang, projects in sorted(languages.items(), key=lambda x: len(x[1]), reverse=True)[:10]:
+        for lang, projects in sorted(
+            languages.items(), key=lambda x: len(x[1]), reverse=True
+        )[:10]:
             proj_str = ", ".join(projects[:3]) + ("..." if len(projects) > 3 else "")
             lines.append(f"- **{lang}** — usado por {proj_str}")
 
@@ -377,14 +600,18 @@ class ReportGenerator:
             for r in reddit_results[:3]:
                 sub = r.metrics.get("subreddit", "unknown")
                 upvotes = r.metrics.get("upvotes", 0)
-                lines.append(f"- **r/{sub}**: {(r.title or '')[:80]}... ({upvotes} upvotes)")
+                lines.append(
+                    f"- **r/{sub}**: {(r.title or '')[:80]}... ({upvotes} upvotes)"
+                )
             lines.append("")
         if hn_results:
             lines.append("### Hacker News")
             for r in hn_results[:3]:
                 points = r.metrics.get("points", 0)
                 author = r.metrics.get("author", "unknown")
-                lines.append(f"- **{author}**: {(r.title or '')[:80]}... ({points} points)")
+                lines.append(
+                    f"- **{author}**: {(r.title or '')[:80]}... ({points} points)"
+                )
             lines.append("")
 
         if sentiment_section:
@@ -432,7 +659,7 @@ class ReportGenerator:
                 "",
                 "### Links Inválidos ou Quebrados Detectados",
                 "As seguintes referências citadas pelas fontes originais falharam nos testes de conexão (404, timeouts ou inacessíveis):",
-                ""
+                "",
             ]
             for url in sorted(all_dead_links):
                 lines.append(f"- ❌ {url}")
@@ -496,6 +723,7 @@ class ReportGenerator:
         if ReportFormat.PDF in extra_formats:
             try:
                 from src.exporters.pdf_exporter import PDFExporter
+
                 pdf_result = PDFExporter().export(report, md_path)
                 if pdf_result:
                     logger.info(f"PDF exportado: {pdf_result}")
@@ -505,6 +733,7 @@ class ReportGenerator:
         if ReportFormat.DOCX in extra_formats:
             try:
                 from src.exporters.docx_exporter import DOCXExporter
+
                 docx_result = DOCXExporter().export(report, md_path)
                 if docx_result:
                     logger.info(f"DOCX exportado: {docx_result}")
@@ -514,6 +743,7 @@ class ReportGenerator:
         if ReportFormat.PPTX in extra_formats:
             try:
                 from src.exporters.pptx_exporter import PPTXExporter
+
                 pptx_result = PPTXExporter().export(report, md_path)
                 if pptx_result:
                     logger.info(f"PPTX exportado: {pptx_result}")

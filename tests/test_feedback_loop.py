@@ -1,11 +1,9 @@
 """Testes do Feedback Loop P3 — FeedbackStore, FeedbackRanker, MCP tool."""
+
 import json
 import pytest
 import tempfile
-import os
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.feedback_store import FeedbackStore, VALID_SIGNALS
 from src.feedback_ranker import FeedbackRanker, _result_id
@@ -14,12 +12,15 @@ from src.types import SynthesizedResult
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 def _tmp_store() -> FeedbackStore:
     tmp = tempfile.mktemp(suffix=".jsonl")
     return FeedbackStore(store_path=tmp)
 
 
-def _make_result(title: str, entity: str = "", score: float = 70.0) -> SynthesizedResult:
+def _make_result(
+    title: str, entity: str = "", score: float = 70.0
+) -> SynthesizedResult:
     return SynthesizedResult(
         entity=entity or title.lower().split()[0],
         title=title,
@@ -35,6 +36,7 @@ def _make_result(title: str, entity: str = "", score: float = 70.0) -> Synthesiz
 
 
 # ── FeedbackStore ─────────────────────────────────────────────────────────────
+
 
 class TestFeedbackStore:
     def test_record_creates_file(self):
@@ -81,7 +83,9 @@ class TestFeedbackStore:
 
     def test_load_all_skips_malformed_lines(self, tmp_path):
         fpath = tmp_path / "fb.jsonl"
-        fpath.write_text('{"result_id": "a", "signal": "useful", "query": "", "timestamp": "t"}\n{INVALID}\n')
+        fpath.write_text(
+            '{"result_id": "a", "signal": "useful", "query": "", "timestamp": "t"}\n{INVALID}\n'
+        )
         store = FeedbackStore(store_path=str(fpath))
         records = store.load_all()
         assert len(records) == 1
@@ -132,6 +136,7 @@ class TestFeedbackStore:
 
 # ── _result_id helper ─────────────────────────────────────────────────────────
 
+
 class TestResultId:
     def test_deterministic(self):
         r = _make_result("Twenty CRM", entity="twenty")
@@ -148,6 +153,7 @@ class TestResultId:
 
 
 # ── FeedbackRanker ────────────────────────────────────────────────────────────
+
 
 class TestFeedbackRanker:
     def test_no_feedback_returns_same_order(self):
@@ -245,10 +251,12 @@ class TestFeedbackRanker:
 
 # ── MCP tool record_feedback ──────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_mcp_record_feedback_valid():
     """Tool retorna JSON com recorded=True para sinal válido."""
     from unittest.mock import patch as _patch
+
     with _patch("src.feedback_store.FeedbackStore.record") as mock_record:
         mock_record.return_value = {
             "result_id": "abc123def456",
@@ -256,12 +264,16 @@ async def test_mcp_record_feedback_valid():
             "query": "test",
             "timestamp": "2024-01-01T00:00:00+00:00",
         }
-        import importlib, src.mcp_server as ms
+        import src.mcp_server as ms
+
         if not hasattr(ms, "mcp"):
             pytest.skip("MCP FastMCP não disponível neste ambiente")
 
         from src.mcp_server import record_feedback
-        result = await record_feedback(result_id="abc123def456", signal="useful", query="test")
+
+        result = await record_feedback(
+            result_id="abc123def456", signal="useful", query="test"
+        )
         data = json.loads(result)
         assert data["recorded"] is True
         assert data["signal"] == "useful"

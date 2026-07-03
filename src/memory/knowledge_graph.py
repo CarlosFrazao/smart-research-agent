@@ -1,3 +1,5 @@
+"""Grafo de conhecimento persistente para armazenar entidades e relacoes extraidas de pesquisas."""
+
 from __future__ import annotations
 
 import logging
@@ -18,16 +20,21 @@ class KnowledgeGraph:
         if self._driver is None:
             try:
                 from neo4j import AsyncGraphDatabase
+
                 uri = self._config.neo4j_uri
                 user = getattr(self._config, "neo4j_user", "neo4j")
                 password = getattr(self._config, "neo4j_password", "password123")
                 self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
                 logger.info("KnowledgeGraph: Neo4j conectado com sucesso.")
             except ImportError:
-                logger.warning("neo4j driver nao instalado. KnowledgeGraph desabilitado.")
+                logger.warning(
+                    "neo4j driver nao instalado. KnowledgeGraph desabilitado."
+                )
                 self._enabled = False
             except Exception as e:
-                logger.warning(f"Erro ao conectar com Neo4j: {e}. KnowledgeGraph desabilitado.")
+                logger.warning(
+                    f"Erro ao conectar com Neo4j: {e}. KnowledgeGraph desabilitado."
+                )
                 self._enabled = False
         return self._driver
 
@@ -37,7 +44,7 @@ class KnowledgeGraph:
         predicate: str,
         obj: str,
         metadata: dict[str, Any] | None = None,
-        source: str = ""
+        source: str = "",
     ) -> bool:
         driver = await self._get_driver()
         if driver is None:
@@ -55,7 +62,7 @@ class KnowledgeGraph:
                     "subject": subject.strip(),
                     "predicate": predicate.strip(),
                     "obj": obj.strip(),
-                    "source": source
+                    "source": source,
                 }
                 if metadata:
                     for k, v in metadata.items():
@@ -78,7 +85,7 @@ class KnowledgeGraph:
                     "RETURN s.name AS subject, r.type AS predicate, o.name AS object, "
                     "       r.source AS source "
                     "LIMIT 50",
-                    name=entity_name.strip()
+                    name=entity_name.strip(),
                 )
                 return [dict(record) async for record in result]
         except Exception as e:

@@ -1,1 +1,1 @@
-﻿# __init__.py for e2e tests
+# __init__.py for e2e tests

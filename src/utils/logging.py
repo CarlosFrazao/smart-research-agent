@@ -1,3 +1,5 @@
+"""Utilitarios de configuracao de logging estruturado com suporte a JSON e niveis de log dinamicos."""
+
 from __future__ import annotations
 
 import json
@@ -5,6 +7,18 @@ import logging
 import os
 import sys
 from datetime import datetime
+
+# Força UTF-8 nos fluxos padrão para evitar UnicodeEncodeError no Windows (CP1252)
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 
 class ColoredFormatter(logging.Formatter):
@@ -54,28 +68,32 @@ class StructuredLogger:
         except Exception:
             pass  # Fail-safe
 
-    def log_search(self, source: str, query: str, results_count: int, error: str = None):
-        self._write_log({
-            "event": "search",
-            "source": source,
-            "query": query,
-            "results_count": results_count,
-            "error": error
-        })
+    def log_search(
+        self, source: str, query: str, results_count: int, error: str = None
+    ):
+        self._write_log(
+            {
+                "event": "search",
+                "source": source,
+                "query": query,
+                "results_count": results_count,
+                "error": error,
+            }
+        )
 
     def log_gap(self, gap_description: str, query_used: str, iteration: int):
-        self._write_log({
-            "event": "gap_detection",
-            "gap_description": gap_description,
-            "query_used": query_used,
-            "iteration": iteration
-        })
-        
+        self._write_log(
+            {
+                "event": "gap_detection",
+                "gap_description": gap_description,
+                "query_used": query_used,
+                "iteration": iteration,
+            }
+        )
+
     def log_event(self, event_name: str, **kwargs):
-        self._write_log({
-            "event": event_name,
-            **kwargs
-        })
+        self._write_log({"event": event_name, **kwargs})
+
 
 structured_logger = StructuredLogger()
 
@@ -91,10 +109,10 @@ def setup_logging(
     realiza fallback seguro para o logging padrão do Python.
     """
     numeric_level = getattr(logging, level.upper(), logging.INFO)
-    
+
     try:
         import structlog
-        
+
         shared_processors = [
             structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
@@ -106,7 +124,9 @@ def setup_logging(
         if json_output:
             processors = shared_processors + [structlog.processors.JSONRenderer()]
         else:
-            processors = shared_processors + [structlog.dev.ConsoleRenderer(colors=True)]
+            processors = shared_processors + [
+                structlog.dev.ConsoleRenderer(colors=True)
+            ]
 
         structlog.configure(
             processors=processors,
@@ -117,14 +137,12 @@ def setup_logging(
             ),
             cache_logger_on_first_use=True,
         )
-        
+
         # Redireciona logs tradicionais do Python para o structlog
         logging.basicConfig(
-            format="%(message)s",
-            stream=sys.stdout,
-            level=numeric_level
+            format="%(message)s", stream=sys.stdout, level=numeric_level
         )
-        
+
     except ImportError:
         # Fallback se structlog não estiver no virtualenv
         log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -134,13 +152,13 @@ def setup_logging(
                 format=log_format,
                 filename=log_file,
                 filemode="a",
-                encoding="utf-8"
+                encoding="utf-8",
             )
         else:
             logging.basicConfig(
-                level=numeric_level,
-                format=log_format,
-                stream=sys.stdout
+                level=numeric_level, format=log_format, stream=sys.stdout
             )
         logger = logging.getLogger(__name__)
-        logger.warning("structlog não está instalado. Usando fallback do logging padrão.")
+        logger.warning(
+            "structlog não está instalado. Usando fallback do logging padrão."
+        )

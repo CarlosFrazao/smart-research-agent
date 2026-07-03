@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy interrogate
+          pip install -e .[all]
+
+      - name: Run Ruff Check
+        run: ruff check src/
+
+      - name: Run Ruff Format Check
+        run: ruff format --check src/
+
+      - name: Run Mypy
+        run: mypy src/ --ignore-missing-imports
+
+      - name: Run Interrogate (Docstrings Check)
+        run: interrogate src/orchestrator.py src/main.py src/config.py src/search/ -vv --fail-under 80
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-mock aioresponses pytest-cov
+          pip install -e .[all]
+
+      - name: Run tests with pytest
+        run: pytest

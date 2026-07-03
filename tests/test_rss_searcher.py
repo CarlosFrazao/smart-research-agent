@@ -1,6 +1,7 @@
 """Testes do RSSSearcher P2 — parse XML, normalização e scoring."""
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch
 
 from src.search.rss_searcher import (
     RSSSearcher,
@@ -15,6 +16,7 @@ from src.types import SearchResult
 
 
 # ── Helpers unit ─────────────────────────────────────────────────────────────
+
 
 class TestStripHtml:
     def test_removes_tags(self):
@@ -77,7 +79,12 @@ class TestScoreRelevance:
         assert score > 30
 
     def test_no_match_low_score(self):
-        score = _score_relevance("quantum physics neutron star", "CRM Software Update", "Business tools for teams", 1.0)
+        score = _score_relevance(
+            "quantum physics neutron star",
+            "CRM Software Update",
+            "Business tools for teams",
+            1.0,
+        )
         assert score < 30
 
     def test_empty_query_returns_weight_based(self):
@@ -86,11 +93,15 @@ class TestScoreRelevance:
 
     def test_title_match_bonus(self):
         score_title = _score_relevance("llm", "LLM Benchmark 2024", "Details here", 1.0)
-        score_desc = _score_relevance("llm", "Tech Update", "LLM performance benchmark data", 1.0)
+        score_desc = _score_relevance(
+            "llm", "Tech Update", "LLM performance benchmark data", 1.0
+        )
         assert score_title > score_desc
 
     def test_max_100(self):
-        score = _score_relevance("claude ai model", "Claude AI Model", "Claude AI Model excellent", 5.0)
+        score = _score_relevance(
+            "claude ai model", "Claude AI Model", "Claude AI Model excellent", 5.0
+        )
         assert score <= 100.0
 
 
@@ -182,21 +193,24 @@ class TestParseFeedXml:
 
 # ── RSSSearcher.normalize ─────────────────────────────────────────────────────
 
+
 class TestRSSSearcherNormalize:
     def _searcher(self):
         return RSSSearcher({"enabled": True, "timeout": 10, "max_results": 20})
 
     def test_normalize_dict_produces_search_result(self):
         s = self._searcher()
-        result = s.normalize({
-            "title": "Claude Update",
-            "url": "https://anthropic.com/blog/update",
-            "description": "Latest update.",
-            "feed": "Anthropic",
-            "feed_id": "anthropic",
-            "published": "2024-01-15T10:00:00+00:00",
-            "weight": 1.5,
-        })
+        result = s.normalize(
+            {
+                "title": "Claude Update",
+                "url": "https://anthropic.com/blog/update",
+                "description": "Latest update.",
+                "feed": "Anthropic",
+                "feed_id": "anthropic",
+                "published": "2024-01-15T10:00:00+00:00",
+                "weight": 1.5,
+            }
+        )
         assert isinstance(result, SearchResult)
         assert result.title == "Claude Update"
         assert result.source == "rss:anthropic"
@@ -210,35 +224,60 @@ class TestRSSSearcherNormalize:
 
     def test_normalize_truncates_description(self):
         s = self._searcher()
-        result = s.normalize({
-            "title": "T", "url": "https://x.com", "description": "x" * 600,
-            "feed": "F", "feed_id": "f", "weight": 1.0,
-        })
+        result = s.normalize(
+            {
+                "title": "T",
+                "url": "https://x.com",
+                "description": "x" * 600,
+                "feed": "F",
+                "feed_id": "f",
+                "weight": 1.0,
+            }
+        )
         assert len(result.description) <= 500
 
     def test_normalize_stable_id_in_metrics(self):
         s = self._searcher()
-        result = s.normalize({
-            "title": "Title", "url": "https://x.com", "description": "desc",
-            "feed": "F", "feed_id": "f", "weight": 1.0,
-        })
+        result = s.normalize(
+            {
+                "title": "Title",
+                "url": "https://x.com",
+                "description": "desc",
+                "feed": "F",
+                "feed_id": "f",
+                "weight": 1.0,
+            }
+        )
         assert "item_id" in result.metrics
         assert len(result.metrics["item_id"]) == 12
 
 
 # ── RSSSearcher.search mocked ─────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_search_returns_results_sorted_by_relevance():
     """Verifica que search() ordena por relevance_score desc."""
-    s = RSSSearcher({"enabled": True, "timeout": 10, "max_results": 20,
-                     "feeds": [DEFAULT_FEEDS[0], DEFAULT_FEEDS[1]]})
+    s = RSSSearcher(
+        {
+            "enabled": True,
+            "timeout": 10,
+            "max_results": 20,
+            "feeds": [DEFAULT_FEEDS[0], DEFAULT_FEEDS[1]],
+        }
+    )
 
     async def fake_fetch(query, feed):
         items = [
-            SearchResult(source=f"rss:{feed['id']}", title=f"Match {query}",
-                         url="https://x.com", description=query,
-                         metrics={"relevance_score": 80.0 if feed["id"] == "anthropic" else 40.0}),
+            SearchResult(
+                source=f"rss:{feed['id']}",
+                title=f"Match {query}",
+                url="https://x.com",
+                description=query,
+                metrics={
+                    "relevance_score": 80.0 if feed["id"] == "anthropic" else 40.0
+                },
+            ),
         ]
         return items
 
@@ -260,8 +299,9 @@ async def test_search_disabled_returns_empty():
 @pytest.mark.asyncio
 async def test_search_feed_error_is_swallowed():
     """Uma falha em um feed não deve quebrar a busca inteira."""
-    s = RSSSearcher({"enabled": True, "timeout": 10, "max_results": 20,
-                     "feeds": [DEFAULT_FEEDS[0]]})
+    s = RSSSearcher(
+        {"enabled": True, "timeout": 10, "max_results": 20, "feeds": [DEFAULT_FEEDS[0]]}
+    )
 
     async def raise_error(query, feed):
         raise ConnectionError("Network failure")
@@ -274,14 +314,19 @@ async def test_search_feed_error_is_swallowed():
 
 @pytest.mark.asyncio
 async def test_search_respects_max_results():
-    s = RSSSearcher({"enabled": True, "timeout": 10, "max_results": 3,
-                     "feeds": DEFAULT_FEEDS[:2]})
+    s = RSSSearcher(
+        {"enabled": True, "timeout": 10, "max_results": 3, "feeds": DEFAULT_FEEDS[:2]}
+    )
 
     async def fake_fetch(query, feed):
         return [
-            SearchResult(source=f"rss:{feed['id']}", title=f"Item {i}",
-                         url=f"https://x.com/{i}", description="content",
-                         metrics={"relevance_score": float(10 - i)})
+            SearchResult(
+                source=f"rss:{feed['id']}",
+                title=f"Item {i}",
+                url=f"https://x.com/{i}",
+                description="content",
+                metrics={"relevance_score": float(10 - i)},
+            )
             for i in range(5)
         ]
 
@@ -292,6 +337,7 @@ async def test_search_respects_max_results():
 
 
 # ── DEFAULT_FEEDS catalog ─────────────────────────────────────────────────────
+
 
 class TestDefaultFeedsCatalog:
     def test_minimum_15_feeds(self):
