@@ -208,6 +208,9 @@ async def cmd_schedule(args):
 
 
 async def main():
+    from src.utils.logging import setup_logging
+    setup_logging(json_output=True)
+
     parser = create_parser()
     args = parser.parse_args()
 

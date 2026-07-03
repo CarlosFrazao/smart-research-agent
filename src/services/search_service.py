@@ -227,32 +227,28 @@ class SearchService:
 
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
         from src.utils.logger import structured_logger
+        from src.observability.metrics import track_search
         error_msg = None
         res = []
         try:
-            res = await self._search_with_timeout(searcher, query, domain)
+            async with track_search(source_name):
+                res = await asyncio.wait_for(
+                    searcher.search(query, domain=domain),
+                    timeout=searcher.timeout,
+                )
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout em {searcher.__class__.__name__}")
+            error_msg = "TimeoutError"
+            if self.health_monitor:
+                self.health_monitor.report_failure(source_name, "TimeoutError")
+            res = searcher.fallback(query)
         except Exception as e:
+            logger.error(f"Erro em {searcher.__class__.__name__}: {e}")
             error_msg = str(e)
+            if self.health_monitor:
+                self.health_monitor.report_failure(source_name, str(e))
+            res = []
+
         structured_logger.log_search(source_name, query, len(res), error_msg)
         return source_name, query, res
 
-    async def _search_with_timeout(self, searcher, query: str, domain: str):
-        try:
-            return await asyncio.wait_for(
-                searcher.search(query, domain=domain),
-                timeout=searcher.timeout,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(f"Timeout em {searcher.__class__.__name__}")
-            if self.health_monitor:
-                cls_name = searcher.__class__.__name__.lower()
-                source_name = "hackernews" if "hn" in cls_name else cls_name.replace("searcher", "")
-                self.health_monitor.report_failure(source_name, "TimeoutError")
-            return searcher.fallback(query)
-        except Exception as e:
-            logger.error(f"Erro em {searcher.__class__.__name__}: {e}")
-            if self.health_monitor:
-                cls_name = searcher.__class__.__name__.lower()
-                source_name = "hackernews" if "hn" in cls_name else cls_name.replace("searcher", "")
-                self.health_monitor.report_failure(source_name, str(e))
-            return []
