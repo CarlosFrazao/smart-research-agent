@@ -33,6 +33,31 @@ def test_llm_client_init_ollama():
         assert client.model == "llama3"
 
 
+def test_llm_client_init_ollama_api_key():
+    from src.clients.llm_client import LLMClient, LLMProvider
+    with patch("openai.AsyncOpenAI") as MockOpenAI:
+        # Testa com api_key configurada
+        LLMClient(
+            LLMProvider.OLLAMA, 
+            {"base_url": "http://localhost:11434", "model": "llama3", "api_key": "my-ollama-key"}
+        )
+        MockOpenAI.assert_called_with(
+            base_url="http://localhost:11434/v1",
+            api_key="my-ollama-key"
+        )
+        
+    with patch("openai.AsyncOpenAI") as MockOpenAI:
+        # Testa sem api_key (deve usar fallback ollama-local)
+        LLMClient(
+            LLMProvider.OLLAMA, 
+            {"base_url": "http://localhost:11434", "model": "llama3"}
+        )
+        MockOpenAI.assert_called_with(
+            base_url="http://localhost:11434/v1",
+            api_key="ollama-local"
+        )
+
+
 def test_llm_client_invalid_provider():
     from src.clients.llm_client import LLMClient, LLMProvider
     with pytest.raises(ValueError):

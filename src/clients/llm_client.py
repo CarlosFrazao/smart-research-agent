@@ -128,7 +128,7 @@ class LLMClient:
             import openai
             self._client = openai.AsyncOpenAI(
                 base_url=f"{self.config.get('base_url', 'http://localhost:11434')}/v1",
-                api_key="ollama",
+                api_key=self.config.get("api_key") or "ollama-local",
             )
             self.model = self.config.get("model", "llama3.1")
 
@@ -269,7 +269,7 @@ class LLMClient:
             elif provider == LLMProvider.OLLAMA:
                 client = openai.AsyncOpenAI(
                     base_url=f"{cfg.get('base_url', 'http://localhost:11434')}/v1",
-                    api_key="ollama",
+                    api_key=cfg.get("api_key") or "ollama-local",
                 )
                 model = cfg.get("model", "llama3.1")
             else:
@@ -490,7 +490,7 @@ class LLMClient:
             import openai
             client = openai.AsyncOpenAI(
                 base_url="http://host.docker.internal:11434/v1",
-                api_key="ollama",
+                api_key="ollama-local",
             )
             response = await client.chat.completions.create(
                 model="llama3.1",

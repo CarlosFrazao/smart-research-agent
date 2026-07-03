@@ -226,7 +226,7 @@ class SearchService:
         return results
 
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
-        from src.utils.logger import structured_logger
+        from src.utils.logging import structured_logger
         from src.observability.metrics import track_search
         error_msg = None
         res = []

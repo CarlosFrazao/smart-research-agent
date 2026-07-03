@@ -27,6 +27,7 @@ class Config(BaseSettings):
     groq_model: str = "llama-3.3-70b-versatile"  # free tier
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
+    ollama_api_key: Optional[str] = None
 
     firecrawl_api_key: Optional[str] = None
     firecrawl_base_url: Optional[str] = None
@@ -119,7 +120,7 @@ class Config(BaseSettings):
         elif self.llm_provider == LLMProvider.GROQ:
             return {"api_key": self.groq_api_key, "model": self.groq_model}
         elif self.llm_provider == LLMProvider.OLLAMA:
-            return {"base_url": self.ollama_base_url, "model": self.ollama_model}
+            return {"base_url": self.ollama_base_url, "model": self.ollama_model, "api_key": self.ollama_api_key}
         raise ValueError(f"Provider nao suportado: {self.llm_provider}")
 
     def get_all_llm_configs(self) -> dict:
@@ -131,7 +132,7 @@ class Config(BaseSettings):
             configs["gemini"] = {"api_key": self.gemini_api_key, "model": self.gemini_model}
         if self.groq_api_key:
             configs["groq"] = {"api_key": self.groq_api_key, "model": self.groq_model}
-        configs["ollama"] = {"base_url": self.ollama_base_url, "model": self.ollama_model}
+        configs["ollama"] = {"base_url": self.ollama_base_url, "model": self.ollama_model, "api_key": self.ollama_api_key}
         return configs
 
     def validate_config(self) -> None:

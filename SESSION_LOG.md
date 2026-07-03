@@ -1,24 +1,17 @@
-# Session Log — Smart Research Agent v6.0
+# Session Log — Smart Research Agent v6.1
 
-## Sessão: 2026-07-02 21:14
-- Item concluído: Bloco 1 (F0A — Bugs Críticos: Import Circular, Config, Proxy, SSL)
-- Próximo item: Bloco 2 (F0B — Segurança: Thread-Safety, Streaming, Healthcheck, LLM Sanitizer)
-- Arquivos modificados/criados:
-  - `src/clients/firecrawl_client.py` [MODIFY]
-  - `src/clients/__init__.py` [MODIFY]
-  - `src/config.py` [MODIFY]
-  - `src/main.py` [MODIFY]
-  - `src/proxy_manager.py` [MODIFY]
-  - `tests/test_proxy_manager.py` [MODIFY]
-- Observações:
-  - Import circular do `race_client` resolvido com `@property` lazy initialization.
-  - Duplicidade da chave `openrouter_api_key` limpa de `config.py`.
-  - Método `validate_config()` integrado ao startup para barrar o placeholder `"fc-placeholder"`.
-  - Bug de bloqueio de domínio do proxy re-calibrado para 3 falhas consecutivas com reset no sucesso (teste unitário adicionado e passando).
-  - Brecha `ssl=False` na validação de proxies substituída por `ssl.create_default_context()`.
-  - Executados 621 testes da suíte completa passando perfeitamente (621 passed, 0 failures).
-  - Git commit executado: `fix(f0a): circular import, config duplicada, proxy logic invertida, SSL habilitado`.
-- Handoff necessário: não
-- QA realizado: sim (suíte completa de testes unitários executada com 100% de sucesso)
-- Próxima sessão deve começar em: Bloco 2 (F0B — Segurança)
+## Sessões de Desenvolvimento (v6.1 Correções & Melhorias)
 
+### Sessão: 2026-07-03 02:15 — Bloco 1: FEAT-B01 — Bugs Críticos: API Key Ollama & Módulos de Logging (BUG-01 & BUG-02)
+
+#### 🎯 Entregas
+- **Configuração da Chave Ollama (BUG-01)**: Adicionado campo `ollama_api_key` dinâmico em `config.py` e integrado ao `LLMClient` e failovers em `llm_client.py`, com fallback seguro para `"ollama-local"`.
+- **Unificação de Logging (BUG-02)**: Mescladas todas as classes, métodos e variáveis de `src/utils/logger.py` em `src/utils/logging.py`. O arquivo `src/utils/logger.py` foi deletado permanentemente. Imports atualizados em `search_service.py`, `orchestrator.py` e `main.py`.
+
+#### 🧪 Testes e Validação
+- **Novo Teste**: Adicionado `test_llm_client_init_ollama_api_key` em `tests/test_part2_clients_searchers.py` validando ambos os cenários (com e sem chave Ollama configurada).
+- **Execução**: Suite unitária/E2E completa rodada com sucesso absoluto: **763 passed** (1 teste a mais, correspondendo à validação nova).
+
+#### 🔧 Próximo Bloco
+- Bloco 2: FEAT-B02 — Qualidade e Limpeza (Remoção de Prints, Imports Não Usados e UP Typings)
+- Agente: @code-archaeologist / @observability-engineer

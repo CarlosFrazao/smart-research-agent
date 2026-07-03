@@ -6,7 +6,7 @@ import logging
 from src.orchestrator import Orchestrator
 from src.deep_researcher import DeepResearcher
 from src.config import Config
-from src.utils.logger import setup_logger
+from src.utils.logging import setup_logger
 
 logger = setup_logger("main")
 

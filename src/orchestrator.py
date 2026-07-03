@@ -47,7 +47,7 @@ from src.conflict_detector import ConflictDetector
 from src.peer_review_agent import PeerReviewAgent
 from src.evidence_graph import EvidenceGraph
 from src.utils.cache import Cache
-from src.utils.logger import setup_logger
+from src.utils.logging import setup_logger
 from src.utils.dead_letter_queue import DeadLetterQueue
 
 # Importações dos novos serviços
@@ -362,7 +362,7 @@ class Orchestrator:
                 break
 
             logger.info(f"  Gap detectado (iter {iteration + 1}): {gap.missing_aspects}")
-            from src.utils.logger import structured_logger
+            from src.utils.logging import structured_logger
             structured_logger.log_gap(
                 gap_description=", ".join(gap.missing_aspects),
                 query_used=", ".join(gap.new_queries),
