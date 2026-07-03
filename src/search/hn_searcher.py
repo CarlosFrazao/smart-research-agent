@@ -4,9 +4,20 @@ import time
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
+from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
+from src.utils.retry import with_retry, RetryConfig
 import logging
 
 logger = logging.getLogger(__name__)
+
+_RETRY_CONFIG = RetryConfig(
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=10.0,
+    exponential_base=2.0,
+    jitter=True,
+    retryable_exceptions=(Exception,)
+)
 
 
 class HNSearcher(BaseSearcher):
@@ -17,12 +28,29 @@ class HNSearcher(BaseSearcher):
         self.last_request_time = 0.0
         self.min_interval = 3.6  # segundos entre requests
         self._cache: Dict[str, List[SearchResult]] = {}
+        self.circuit = CircuitBreakerRegistry.get(
+            "hn_api", failure_threshold=3, recovery_timeout=300
+        )
 
     async def search(self, query: str, **kwargs) -> List[SearchResult]:
         cache_key = f"{query}:{self.max_results}"
         if cache_key in self._cache:
             logger.info(f"HN search cache hit para: '{query}'")
             return self._cache[cache_key]
+
+        if not hasattr(self, "circuit"):
+            self.circuit = CircuitBreakerRegistry.get(
+                "hn_api", failure_threshold=3, recovery_timeout=300
+            )
+
+        try:
+            return await self.circuit.call(self._do_search, query, cache_key)
+        except CircuitBreakerOpen as e:
+            logger.warning(f"HNSearcher: {e}")
+            return self.fallback(query)
+
+    @with_retry(_RETRY_CONFIG)
+    async def _do_search(self, query: str, cache_key: str) -> List[SearchResult]:
 
         elapsed = time.time() - self.last_request_time
         if elapsed < self.min_interval:

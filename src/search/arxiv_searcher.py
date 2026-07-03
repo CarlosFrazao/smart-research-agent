@@ -2,10 +2,21 @@ from typing import List, Dict, Any
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
+from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
+from src.utils.retry import with_retry, RetryConfig
 import xml.etree.ElementTree as ET
 import logging
 
 logger = logging.getLogger(__name__)
+
+_RETRY_CONFIG = RetryConfig(
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=10.0,
+    exponential_base=2.0,
+    jitter=True,
+    retryable_exceptions=(Exception,)
+)
 
 
 class ArxivSearcher(BaseSearcher):
@@ -14,8 +25,24 @@ class ArxivSearcher(BaseSearcher):
         self.base_url = "http://export.arxiv.org/api/query"
         self.http = HTTPClient(timeout=self.timeout)
         self.firecrawl_client = firecrawl_client
+        self.circuit = CircuitBreakerRegistry.get(
+            "arxiv_api", failure_threshold=3, recovery_timeout=300
+        )
 
     async def search(self, query: str, **kwargs) -> List[SearchResult]:
+        if not hasattr(self, "circuit"):
+            self.circuit = CircuitBreakerRegistry.get(
+                "arxiv_api", failure_threshold=3, recovery_timeout=300
+            )
+
+        try:
+            return await self.circuit.call(self._do_search, query)
+        except CircuitBreakerOpen as e:
+            logger.warning(f"ArxivSearcher: {e}")
+            return self.fallback(query)
+
+    @with_retry(_RETRY_CONFIG)
+    async def _do_search(self, query: str) -> List[SearchResult]:
         params = {
             "search_query": f"all:{query}",
             "start": 0,

@@ -98,6 +98,12 @@ class Orchestrator:
         self.searchers = self._init_searchers()
         self.cache = Cache(cache_dir=self.config.cache_dir)
 
+        # SmartCache — Redis → memória, TTL por tipo de fonte
+        from src.utils.smart_cache import SmartCache
+        redis_url = getattr(self.config, "redis_url", None)
+        self.smart_cache = SmartCache(redis_url=redis_url)
+
+
         # ── Fase 4: Autonomia ─────────────────────────────────────
         # Modo de operação ativo (default: cirurgia)
         mode_name = getattr(self.config, "operation_mode", OperationModes.DEFAULT_MODE)

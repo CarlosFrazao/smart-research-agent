@@ -2,9 +2,20 @@ from typing import List, Dict, Any
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
+from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
+from src.utils.retry import with_retry, RetryConfig
 import logging
 
 logger = logging.getLogger(__name__)
+
+_RETRY_CONFIG = RetryConfig(
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=10.0,
+    exponential_base=2.0,
+    jitter=True,
+    retryable_exceptions=(Exception,)
+)
 
 DOMAIN_QUALIFIERS = {
     "saas_b2b": "stars:>50 sort:stars",
@@ -23,6 +34,9 @@ class GitHubSearcher(BaseSearcher):
         self.token = config.get("github_token")
         self.base_url = "https://api.github.com/search/repositories"
         self.http = HTTPClient(timeout=self.timeout)
+        self.circuit = CircuitBreakerRegistry.get(
+            "github_api", failure_threshold=3, recovery_timeout=600
+        )
 
     async def search(self, query: str, domain: str = "general", **kwargs) -> List[SearchResult]:
         # 1. Clean query: remove stop words and keep it concise for GitHub search
@@ -54,37 +68,51 @@ class GitHubSearcher(BaseSearcher):
             "per_page": min(self.max_results, 100),
         }
 
+        if not hasattr(self, "circuit"):
+            self.circuit = CircuitBreakerRegistry.get(
+                "github_api", failure_threshold=3, recovery_timeout=600
+            )
+
         try:
             logger.info(f"GitHub buscando: '{full_query}'")
-            data = await self.http.get(self.base_url, headers=headers, params=params)
-            items = data.get("items", [])
-            
-            # 2. Resilient Fallback: if rigid qualifiers returned 0 results, retry with a cleaner search
-            if not items and qualifiers != "sort:stars":
-                fallback_query = f"{cleaned_query} sort:stars"
-                logger.info(f"GitHub 0 resultados. Tentando fallback mais brando: '{fallback_query}'")
-                params["q"] = fallback_query
-                data = await self.http.get(self.base_url, headers=headers, params=params)
-                items = data.get("items", [])
-                
-            results = [self.normalize(item) for item in items]
-
-            # 3. Code Search fallback: acionar busca por conteúdo se repos < 2
-            if len(results) < 2:
-                logger.info(f"GitHub repos < 2 para '{query}'. Ativando Code Search...")
-                code_results = await self.search_code(query)
-                seen_urls = {r.url for r in results}
-                for r in code_results:
-                    if r.url not in seen_urls:
-                        results.append(r)
-                        seen_urls.add(r.url)
-
-            return results
+            return await self.circuit.call(self._do_search, full_query, cleaned_query, qualifiers, query, headers, params)
+        except CircuitBreakerOpen as e:
+            logger.warning(f"GitHubSearcher: {e}")
+            return self.fallback(query)
         except Exception as e:
             logger.error(f"GitHub search erro: {e}")
             return self.fallback(query)
 
+    @with_retry(_RETRY_CONFIG)
+    async def _do_search(self, full_query: str, cleaned_query: str, qualifiers: str, original_query: str, headers: dict, params: dict) -> List[SearchResult]:
+        """Lógica real de busca no GitHub API, protegida pelo circuit breaker."""
+        data = await self.http.get(self.base_url, headers=headers, params=params)
+        items = data.get("items", [])
+
+        # 2. Resilient Fallback: se qualificadores rígidos retornaram 0 resultados
+        if not items and qualifiers != "sort:stars":
+            fallback_query = f"{cleaned_query} sort:stars"
+            logger.info(f"GitHub 0 resultados. Tentando fallback mais brando: '{fallback_query}'")
+            params["q"] = fallback_query
+            data = await self.http.get(self.base_url, headers=headers, params=params)
+            items = data.get("items", [])
+
+        results = [self.normalize(item) for item in items]
+
+        # 3. Code Search fallback: se repos < 2
+        if len(results) < 2:
+            logger.info(f"GitHub repos < 2 para '{original_query}'. Ativando Code Search...")
+            code_results = await self.search_code(original_query)
+            seen_urls = {r.url for r in results}
+            for r in code_results:
+                if r.url not in seen_urls:
+                    results.append(r)
+                    seen_urls.add(r.url)
+
+        return results
+
     async def search_code(self, query: str, language: str = None) -> List[SearchResult]:
+
         """Code Search via GitHub API — busca conteúdo dentro de arquivos."""
         code_search_url = "https://api.github.com/search/code"
         q = f"{query} language:{language}" if language else query

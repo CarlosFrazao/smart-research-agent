@@ -5,11 +5,22 @@ from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
 from src.clients.firecrawl_client import FirecrawlClient
+from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitBreakerOpen
+from src.utils.retry import with_retry, RetryConfig
 import logging
 import urllib.parse
 import json
 
 logger = logging.getLogger(__name__)
+
+_RETRY_CONFIG = RetryConfig(
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=10.0,
+    exponential_base=2.0,
+    jitter=True,
+    retryable_exceptions=(Exception,)
+)
 
 TECH_SUBREDDITS = {
     "saas_b2b": ["selfhosted", "SaaS", "startups", "webdev"],
@@ -43,8 +54,24 @@ class RedditSearcher(BaseSearcher):
                 self._firecrawl = FirecrawlClient(api_key=fc_key, base_url=fc_url)
             except Exception as e:
                 logger.warning(f"Reddit: Firecrawl nao disponivel: {e}")
+        self.circuit = CircuitBreakerRegistry.get(
+            "reddit_api", failure_threshold=3, recovery_timeout=300
+        )
 
     async def search(self, query: str, domain: str = "general", **kwargs) -> List[SearchResult]:
+        if not hasattr(self, "circuit"):
+            self.circuit = CircuitBreakerRegistry.get(
+                "reddit_api", failure_threshold=3, recovery_timeout=300
+            )
+
+        try:
+            return await self.circuit.call(self._search_pipeline, query, domain)
+        except CircuitBreakerOpen as e:
+            logger.warning(f"RedditSearcher: {e}")
+            return self.fallback(query)
+
+    @with_retry(_RETRY_CONFIG)
+    async def _search_pipeline(self, query: str, domain: str) -> List[SearchResult]:
         # Strategy 1: Firecrawl-powered Reddit search (bypasses bot detection)
         results = await self._search_via_firecrawl(query, domain)
         if results:
