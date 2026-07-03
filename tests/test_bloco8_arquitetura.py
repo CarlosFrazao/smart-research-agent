@@ -217,3 +217,28 @@ class TestCeleryApp:
         assert "query" in params
         assert "mode" in params
         assert "options" in params
+
+    def test_research_task_apply_with_mock_orchestrator(self):
+        from src.worker.celery_app import research_task
+
+        mock_result = "Mock research result"
+        with patch("src.worker.celery_app.asyncio.new_event_loop") as mock_loop_fn, \
+             patch("src.worker.celery_app.asyncio.set_event_loop") as mock_set_loop_fn:
+            mock_loop = MagicMock()
+            mock_loop.run_until_complete = MagicMock(return_value=mock_result)
+            mock_loop.close = MagicMock()
+            mock_loop.shutdown_asyncgens = AsyncMock()
+            mock_loop_fn.return_value = mock_loop
+
+            with patch("src.orchestrator.Orchestrator") as MockOrch:
+
+                mock_orch = MagicMock()
+                mock_orch.research = AsyncMock(return_value=mock_result)
+                MockOrch.return_value = mock_orch
+
+                result = research_task.apply(args=["test query", "standard"]).get()
+                assert result["status"] == "success"
+                assert result["query"] == "test query"
+                assert result["mode"] == "standard"
+                assert result["result"] == mock_result
+

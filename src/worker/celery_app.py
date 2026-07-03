@@ -1,17 +1,19 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import Optional
-
+from typing import Optional, Any
 from celery import Celery
+from src.config import Config
 
 logger = logging.getLogger(__name__)
 
+# Instancia a config para ler parametros de conexao do Celery
+_config = Config()
 
 celery_app = Celery(
     "smart_research_agent",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/1",
+    broker=_config.celery_broker_url,
+    backend=_config.celery_result_backend,
 )
 
 celery_app.conf.update(
@@ -21,29 +23,11 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=3600,
-    task_soft_time_limit=3000,
-    worker_prefetch_multiplier=1,
-    result_expires=86400,
+    task_time_limit=3600,          # 1 hora maximo
+    task_soft_time_limit=3000,     # Alerta aos 50min
+    worker_prefetch_multiplier=1,  # Um task por vez
+    result_expires=86400,          # 24 horas
 )
-
-
-def _apply_config_overrides() -> None:
-    """Sobrescreve broker/backend com valores do .env se disponiveis."""
-    try:
-        from src.config import Config
-        cfg = Config()
-        broker = getattr(cfg, "celery_broker_url", None)
-        backend = getattr(cfg, "celery_result_backend", None)
-        if broker:
-            celery_app.conf.broker_url = broker
-        if backend:
-            celery_app.conf.result_backend = backend
-    except Exception as e:
-        logger.debug(f"celery_app: nao foi possivel carregar Config para override: {e}")
-
-
-_apply_config_overrides()
 
 
 @celery_app.task(
@@ -52,48 +36,39 @@ _apply_config_overrides()
     default_retry_delay=60,
     name="sra.research",
 )
-def research_task(
-    self,
-    query: str,
-    mode: str = "standard",
-    options: Optional[dict] = None,
-) -> dict:
-    """
-    Task Celery para processamento de pesquisas em background.
+def research_task(self, query: str, mode: str = "standard", options: Optional[dict] = None) -> dict:
+    """Task de pesquisa processada em background via Celery."""
+    from src.config import Config as SRAConfig
+    from src.orchestrator import Orchestrator
 
-    Suporta até 2 retentativas com intervalo de 60s entre elas.
-    Executa o Orchestrator.research() em um loop asyncio isolado
-    para compatibilidade com ambientes multi-process do Celery.
-    """
     try:
-        from src.config import Config
-        from src.orchestrator import Orchestrator
-
-        cfg = Config()
+        config = SRAConfig()
         if mode and mode != "standard":
-            cfg_dict = cfg.model_dump() if hasattr(cfg, "model_dump") else {}
-            cfg_dict["operation_mode"] = mode
-            try:
-                cfg = Config(**{k: v for k, v in cfg_dict.items() if v is not None})
-            except Exception:
-                pass
+            config.operation_mode = mode
+        
+        # Copia opcoes customizadas se fornecidas
+        if options:
+            for k, v in options.items():
+                if hasattr(config, k):
+                    setattr(config, k, v)
 
-        orchestrator = Orchestrator(cfg)
-
-        # Cria novo loop asyncio isolado — necessario em workers Celery (processo filho)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        orchestrator = Orchestrator(config)
+        
         try:
-            result = loop.run_until_complete(orchestrator.research(query))
-        finally:
-            try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            except Exception:
-                pass
-            loop.close()
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-        return {"status": "success", "query": query, "mode": mode, "result": result}
-
+        result = loop.run_until_complete(
+            orchestrator.research(query)
+        )
+        return {"status": "success", "result": result, "query": query, "mode": mode}
     except Exception as exc:
-        logger.error(f"research_task falhou (tentativa {self.request.retries + 1}): {exc}")
-        raise self.retry(exc=exc, countdown=60)
+        logger.error(f"research_task falhou: {exc}")
+        # Tenta retry se for um erro transitorio
+        try:
+            raise self.retry(exc=exc, countdown=60)
+        except Exception as retry_exc:
+            # Se exceder o limite de retries, levanta a excecao original
+            raise retry_exc

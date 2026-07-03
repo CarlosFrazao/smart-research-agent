@@ -91,6 +91,9 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"OrvixMemoryV2 falhou ao inicializar: {e} — pesquisa continua sem memória")
 
+        from src.memory.knowledge_graph import KnowledgeGraph
+        self.knowledge_graph = KnowledgeGraph(self.config)
+
         self.intent_analyzer = IntentAnalyzer(self.llm)
         self.query_expander = QueryExpander(self.llm)
         self.source_planner = SourcePlanner()
@@ -552,4 +555,15 @@ class Orchestrator:
     @reports.setter
     def reports(self, value):
         self._report_service = value
+
+    async def close(self) -> None:
+        """Encerra pools de conexoes e recursos da memoria e do Grafo de Conhecimento."""
+        if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+            await self.knowledge_graph.close()
+        if self.memory:
+            try:
+                self.memory.close()
+            except Exception as e:
+                logger.warning(f"Erro ao fechar OrvixMemoryV2: {e}")
+
 

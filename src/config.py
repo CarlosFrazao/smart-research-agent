@@ -86,6 +86,8 @@ class Config(BaseSettings):
     output_dir: str = "./reports"
     cache_dir: str = "./.cache"
     log_level: str = "INFO"
+    operation_mode: str = "cirurgia"
+
 
     # SerpAPI — fallback de último recurso para buscas na web
     serpapi_api_key: Optional[str] = Field(default=None)

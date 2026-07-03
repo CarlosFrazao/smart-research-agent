@@ -22,6 +22,14 @@ from contextvars import ContextVar
 from typing import Dict
 
 app = FastAPI(title="Smart Research Agent MCP Server")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global _orchestrator
+    logger.info("MCP Server: Encerrando conexoes no shutdown...")
+    if _orchestrator is not None:
+        await _orchestrator.close()
+
 _orchestrator: Optional[Orchestrator] = None
 _deep_researcher: Optional[DeepResearcher] = None
 _confidence_scorer: Optional[ConfidenceScorer] = None
