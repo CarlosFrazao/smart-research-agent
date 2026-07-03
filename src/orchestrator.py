@@ -21,26 +21,8 @@ from src.ranker import QualityRanker
 from src.report_generator import ReportGenerator
 from src.research_auditor import ResearchAuditor
 from src.research_score import ResearchScoreAggregator
-from src.search.arxiv_searcher import ArxivSearcher
-from src.search.awesome_searcher import AwesomeSearcher
-from src.search.firecrawl_searcher import FirecrawlSearcher
-from src.search.github_searcher import GitHubSearcher
-from src.search.hn_searcher import HNSearcher
-from src.search.jina_searcher import JinaSearcher
-from src.search.playwright_searcher import PlaywrightSearcher
-from src.search.producthunt_searcher import ProductHuntSearcher
-from src.search.pubmed_searcher import PubMedSearcher
-from src.search.reddit_searcher import RedditSearcher
-from src.search.rss_searcher import RSSSearcher
-from src.search.searxng_searcher import SearXNGSearcher
+from src.search.factory import SearcherFactory
 from src.search.semantic_reranker import SemanticReranker
-from src.search.semantic_scholar_searcher import SemanticScholarSearcher
-from src.search.spider_searcher import SpiderSearcher
-from src.search.stackoverflow_searcher import StackOverflowSearcher
-from src.search.steel_searcher import SteelSearcher
-from src.search.wayback_searcher import WaybackSearcher
-from src.search.web_searcher import WebSearcher
-from src.search.youtube_searcher import YouTubeSearcher
 from src.services.memory_service import MemoryService
 from src.services.reasoning_service import ReasoningService
 from src.services.report_service import ReportService
@@ -178,107 +160,7 @@ class Orchestrator:
         self.health_monitor.register_fallback("disable_cache", fallback_disable_cache)
 
     def _init_searchers(self) -> dict[str, Any]:
-        cfg = {
-            "timeout": self.config.timeout_per_source,
-            "max_results": self.config.max_results_per_source,
-            "github_token": self.config.github_token,
-            "producthunt_token": self.config.producthunt_token,
-            "firecrawl_api_key": self.config.firecrawl_api_key,
-            "firecrawl_base_url": self.config.firecrawl_base_url,
-            "spider_api_key": self.config.spider_api_key,
-            "spider_base_url": self.config.spider_base_url,
-            "enabled": True,
-            "steel_api_key": self.config.steel_api_key,
-            "steel_base_url": self.config.steel_base_url,
-        }
-        searxng_cfg = {
-            **cfg,
-            "searxng_url": os.getenv("SEARXNG_URL", "http://127.0.0.1:3023"),
-            "searxng_engines": os.getenv("SEARXNG_ENGINES", "google,bing,duckduckgo"),
-            "searxng_categories": os.getenv("SEARXNG_CATEGORIES", "general")
-        }
-
-        searchers = {
-            "github": GitHubSearcher(cfg),
-            "reddit": RedditSearcher(cfg),
-            "hackernews": HNSearcher(cfg),
-            "awesome": AwesomeSearcher(cfg),
-            "arxiv": ArxivSearcher(cfg),
-            "producthunt": ProductHuntSearcher(cfg),
-            "web": WebSearcher(cfg),
-            "firecrawl": FirecrawlSearcher(cfg),
-            "rss": RSSSearcher({**cfg, "enabled": True}),
-            "searxng": SearXNGSearcher(searxng_cfg),
-            "stackoverflow": StackOverflowSearcher(cfg),
-            "wayback": WaybackSearcher(cfg),
-        }
-        if self.config.spider_enabled:
-            searchers["spider"] = SpiderSearcher(cfg)
-        if self.config.steel_enabled:
-            searchers["steel"] = SteelSearcher(cfg)
-        if getattr(self.config, "host_mode", False):
-            logger.info("HOST MODE ativo — Firecrawl substituido por JinaSearcher como fallback")
-            jina_cfg = {
-                **cfg,
-                "jina_base_url": getattr(self.config, "jina_reader_base_url", "https://r.jina.ai/"),
-            }
-            searchers["firecrawl"] = JinaSearcher(jina_cfg)
-
-        s2_cfg = {
-            **cfg,
-            "semantic_scholar_api_key": getattr(self.config, "semantic_scholar_api_key", None),
-        }
-        semantic_scholar = SemanticScholarSearcher(s2_cfg)
-        semantic_scholar.web_fallback = searchers.get("web")
-        searchers["semantic_scholar"] = semantic_scholar
-
-        pubmed_cfg = {
-            **cfg,
-            "ncbi_api_key": getattr(self.config, "ncbi_api_key", None),
-        }
-        pubmed = PubMedSearcher(pubmed_cfg)
-        pubmed.web_fallback = searchers.get("web")
-        searchers["pubmed"] = pubmed
-
-        youtube_cfg = {
-            **cfg,
-            "youtube_api_key": getattr(self.config, "youtube_api_key", None),
-        }
-        youtube = YouTubeSearcher(youtube_cfg)
-        youtube.web_fallback = searchers.get("web")
-        searchers["youtube"] = youtube
-
-        if getattr(self.config, "playwright_enabled", False):
-            proxy_url = None
-            if getattr(self.config, "residential_proxy_provider", None):
-                try:
-                    prov = ResidentialProxyProvider(
-                        provider=self.config.residential_proxy_provider,
-                        username=self.config.residential_proxy_username or "",
-                        password=self.config.residential_proxy_password or "",
-                    )
-                    proxy_url = prov.get_proxy_url()
-                except Exception as e:
-                    logger.warning(f"Falha ao configurar proxy residencial: {e}")
-
-            playwright_cfg = {
-                **cfg,
-                "proxy_url": proxy_url,
-                "playwright_headless": getattr(self.config, "playwright_headless", True),
-            }
-            searchers["playwright"] = PlaywrightSearcher(playwright_cfg)
-
-        # SerpAPI — fallback de último recurso (registro condicional)
-        serpapi_key = getattr(self.config, "serpapi_api_key", None)
-        serpapi_enabled = getattr(self.config, "serpapi_enabled", True)
-        if serpapi_enabled and serpapi_key:
-            from src.search.serpapi_searcher import SerpAPISearcher
-            searchers["serpapi"] = SerpAPISearcher(api_key=serpapi_key)
-            logger.info("SerpAPISearcher registrado como fallback de último recurso")
-        else:
-            logger.debug("SerpAPISearcher desabilitado (SERPAPI_API_KEY ausente ou serpapi_enabled=false)")
-
-        return searchers
+        return SearcherFactory.create_searchers(self)
 
     async def research(self, query: str, formats: list[Any] | None = None) -> str:
         start_time = datetime.now()
@@ -297,11 +179,23 @@ class Orchestrator:
             return await self.reasoning.run_debate_mode(query, start_time, formats=formats)
 
         memory_context = self.memory_service.get_context(query)
-
-        logger.info("Passo 1/9: Analisando intencao...")
         enriched_query = query
         if memory_context:
             enriched_query = f"{memory_context}\n\n---\n\nQuery atual: {query}"
+
+        # 1. Planejamento
+        intent, expanded_queries, source_plan = await self._plan_search(query, enriched_query)
+
+        # 2. Execução das buscas
+        ranked = await self._execute_searches(query, intent, expanded_queries, source_plan)
+
+        # 3. Síntese e geração de relatório
+        report = await self._synthesize_results(query, ranked, intent, source_plan, start_time, formats)
+
+        return report
+
+    async def _plan_search(self, query: str, enriched_query: str) -> tuple[Any, list[ExpandedQuery], Any]:
+        logger.info("Passo 1/9: Analisando intencao...")
         intent = await self.reasoning.analyze_intent(enriched_query)
         logger.info(f"  Dominio: {intent.domain.value}, Intencao: {intent.intention.value}")
 
@@ -313,9 +207,20 @@ class Orchestrator:
         source_plan = self.source_planner.plan(intent, expanded_queries)
         logger.info(f"  Primarias: {', '.join(source_plan.primary)}")
 
+        return intent, expanded_queries, source_plan
+
+    async def _execute_searches(
+        self,
+        query: str,
+        intent: Any,
+        expanded_queries: list[ExpandedQuery],
+        source_plan: Any
+    ) -> list[Any]:
         logger.info("Passo 4/9: Buscando em paralelo...")
         all_results = await self.search.execute(expanded_queries, source_plan, intent)
-        logger.info(f"  {len(all_results)} resultados brutos")
+        self._last_all_results_count = len(all_results)
+        self._last_all_results_sources = list(set(r.source for r in all_results)) if all_results else list(self.searchers.keys())
+        logger.info(f"  {self._last_all_results_count} resultados brutos")
 
         logger.info("Passo 5/9: Ranqueando e re-ranqueando semanticamente...")
         ranked = await self.reasoning.rank(all_results, query=query)
@@ -375,6 +280,9 @@ class Orchestrator:
             ranked.sort(key=lambda x: x.score, reverse=True)
             iteration += 1
 
+        self._last_gap = gap
+        self._last_iterations = iteration
+
         logger.info("Passo 7b/9: Sanitização anti-injection (LLMSanitizer)...")
         sanitized = await self.sanitizer.sanitize_batch([r.description or "" for r in ranked])
         safe_ranked = []
@@ -384,8 +292,18 @@ class Orchestrator:
                 safe_ranked.append(r)
             else:
                 logger.warning(f"LLMSanitizer bloqueou/filtrou resultado com alto risco ({s.risk_score}) de '{r.url[:50]}'")
-        ranked = safe_ranked
+        
+        return safe_ranked
 
+    async def _synthesize_results(
+        self,
+        query: str,
+        ranked: list[Any],
+        intent: Any,
+        source_plan: Any,
+        start_time: datetime,
+        formats: list[Any] | None
+    ) -> str:
         logger.info("Passo 8/9: Sintetizando resultados...")
         synthesized = await self.synthesizer.synthesize(ranked)
         logger.info(f"  {len(synthesized)} entidades sintetizadas")
@@ -393,12 +311,15 @@ class Orchestrator:
         logger.info("Passo 9/9: Gerando relatorio...")
         duration = (datetime.now() - start_time).total_seconds()
 
+        total_results = getattr(self, "_last_all_results_count", len(ranked))
+        sources = getattr(self, "_last_all_results_sources", list(self.searchers.keys()))
+
         metadata = ResearchMetadata(
             query=query,
             domain=intent.domain.value,
-            sources=list(set(r.source for r in all_results)) if all_results else list(self.searchers.keys()),
-            total_results=len(all_results),
-            iterations=iteration + 1,
+            sources=sources,
+            total_results=total_results,
+            iterations=self._last_iterations + 1,
             timestamp=datetime.now(),
             duration_seconds=duration,
         )
@@ -408,6 +329,7 @@ class Orchestrator:
         # ── Evidence Graph ────────────────────────────────────────────────────────
         logger.info("EvidenceGraph: construindo grafo de evidências...")
         try:
+            from src.evidence_graph import EvidenceGraph
             self.evidence_graph = EvidenceGraph()
             self.evidence_graph.build_from_results(ranked)
             graph_summary = self.evidence_graph.summary()
@@ -437,7 +359,7 @@ class Orchestrator:
                 results=synthesized,
                 metadata=metadata,
                 all_raw_results=ranked,
-                gap_analysis=gap,
+                gap_analysis=self._last_gap,
                 planned_sources=list(source_plan.primary),
             )
             report = self.score_aggregator.inject_into_report(report, research_score)
@@ -445,13 +367,13 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"ResearchScoreAggregator falhou (não crítico): {e}")
 
-        # ── Injetando Relatório de Conflitos Detectados ───────────────────────
-        if getattr(self, "_last_conflict_report", None) and self._last_conflict_report.conflict_count > 0:
+        conflict_report = getattr(self, "_last_conflict_report", None)
+        if conflict_report is not None and conflict_report.conflict_count > 0:
             try:
-                conflict_block = self.conflict_detector.format_conflicts_for_report(self._last_conflict_report)
+                conflict_block = self.conflict_detector.format_conflicts_for_report(conflict_report)
                 if conflict_block:
                     report = report + "\n" + conflict_block
-                    logger.info(f"ConflictDetector: {self._last_conflict_report.conflict_count} conflitos injetados no relatório")
+                    logger.info(f"ConflictDetector: {conflict_report.conflict_count} conflitos injetados no relatório")
             except Exception as e:
                 logger.warning(f"Falha ao injetar bloco de conflitos no relatório: {e}")
 

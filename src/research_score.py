@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from src.types import GapAnalysis, RankedResult, ResearchMetadata, SearchResult
 
@@ -33,7 +34,7 @@ class ResearchScoreAggregator:
 
     def calculate(
         self,
-        results: list[RankedResult],
+        results: list[Any],
         metadata: ResearchMetadata,
         all_raw_results: list[SearchResult],
         gap_analysis: GapAnalysis | None = None,
@@ -59,76 +60,12 @@ class ResearchScoreAggregator:
                 total_claims_unverified=0
             )
 
-        # 1. Cobertura (Coverage)
-        if gap_analysis:
-            if gap_analysis.is_complete:
-                coverage = 1.0
-            else:
-                missing = len(gap_analysis.missing_aspects) if gap_analysis.missing_aspects else 0
-                coverage = max(0.0, 1.0 - missing * 0.15)
-        else:
-            coverage = 1.0
-
-        # 2. Diversidade (Diversity)
-        sources_used = set()
-        for r in results:
-            r_sources = getattr(r, "sources", None)
-            if isinstance(r_sources, list):
-                sources_used.update(src for src in r_sources if src)
-            else:
-                r_source = getattr(r, "source", None)
-                if r_source:
-                    sources_used.add(r_source)
-        total_sources_used = len(sources_used)
-        if planned_sources:
-            unique_planned = set(planned_sources)
-            if unique_planned:
-                diversity = min(1.0, total_sources_used / len(unique_planned))
-            else:
-                diversity = min(1.0, total_sources_used / 5.0)
-        else:
-            diversity = min(1.0, total_sources_used / 5.0)
-
-        # 3. Qualidade (Quality)
-        quality = sum(
-            getattr(r, "confidence_score", getattr(r, "combined_score", getattr(r, "score", 0.0)))
-            for r in results
-        ) / len(results)
-
-        # 4. Confiabilidade (Reliability)
-        verified_count = sum(
-            1 for r in results 
-            if getattr(r, "evidence_quality", "unknown") in ["verified", "cited"]
-        )
-        reliability = verified_count / len(results)
-
-        # 5. Recência (Recency)
-        now = datetime.now()
-        thirty_days_ago = now - timedelta(days=30)
-        
-        recent_count = 0
-        for r in results:
-            fetched = getattr(r, "fetched_at", getattr(r, "last_seen", getattr(r, "first_seen", None)))
-            if fetched:
-                # Converter para naive se for naive no fetched_at
-                if fetched.tzinfo is not None and now.tzinfo is None:
-                    fetched = fetched.replace(tzinfo=None)
-                if fetched >= thirty_days_ago:
-                    recent_count += 1
-            else:
-                # Se não tem fetched_at, assume que foi pego no momento da pesquisa
-                recent_count += 1
-                
-        recency = recent_count / len(results)
-
-        # 6. Conflitos (Conflicts)
-        conflicts = sum(
-            len(getattr(r, "contradictions", [])) 
-            for r in results 
-            if getattr(r, "contradictions", None)
-        )
-        conflict_penalty = min(1.0, conflicts * 0.10)
-        conflict_score = max(0.0, 1.0 - conflict_penalty)
+        coverage = self._calculate_coverage(gap_analysis)
+        diversity, total_sources_used = self._calculate_diversity(results, planned_sources)
+        quality = self._calculate_quality(results)
+        reliability = self._calculate_reliability(results)
+        recency = self._calculate_recency(results)
+        conflicts, conflict_score = self._calculate_conflicts(results)
 
         # 7. Gaps
         gaps = len(gap_analysis.missing_aspects) if gap_analysis and gap_analysis.missing_aspects else 0
@@ -170,6 +107,76 @@ class ResearchScoreAggregator:
             total_claims_verified=total_claims_verified,
             total_claims_unverified=total_claims_unverified
         )
+
+    def _calculate_coverage(self, gap_analysis: GapAnalysis | None) -> float:
+        if gap_analysis:
+            if gap_analysis.is_complete:
+                return 1.0
+            else:
+                missing = len(gap_analysis.missing_aspects) if gap_analysis.missing_aspects else 0
+                return max(0.0, 1.0 - missing * 0.15)
+        return 1.0
+
+    def _calculate_diversity(self, results: list[RankedResult], planned_sources: list[str] | None) -> tuple[float, int]:
+        sources_used: set[str] = set()
+        for r in results:
+            r_sources = getattr(r, "sources", None)
+            if isinstance(r_sources, list):
+                sources_used.update(src for src in r_sources if src)
+            else:
+                r_source = getattr(r, "source", None)
+                if r_source:
+                    sources_used.add(r_source)
+        total_sources_used = len(sources_used)
+        if planned_sources:
+            unique_planned = set(planned_sources)
+            if unique_planned:
+                diversity = min(1.0, total_sources_used / len(unique_planned))
+            else:
+                diversity = min(1.0, total_sources_used / 5.0)
+        else:
+            diversity = min(1.0, total_sources_used / 5.0)
+        return diversity, total_sources_used
+
+    def _calculate_quality(self, results: list[RankedResult]) -> float:
+        return sum(
+            getattr(r, "confidence_score", getattr(r, "combined_score", getattr(r, "score", 0.0)))
+            for r in results
+        ) / len(results)
+
+    def _calculate_reliability(self, results: list[RankedResult]) -> float:
+        verified_count = sum(
+            1 for r in results 
+            if getattr(r, "evidence_quality", "unknown") in ["verified", "cited"]
+        )
+        return verified_count / len(results)
+
+    def _calculate_recency(self, results: list[RankedResult]) -> float:
+        now = datetime.now()
+        thirty_days_ago = now - timedelta(days=30)
+        
+        recent_count = 0
+        for r in results:
+            fetched = getattr(r, "fetched_at", getattr(r, "last_seen", getattr(r, "first_seen", None)))
+            if fetched:
+                if fetched.tzinfo is not None and now.tzinfo is None:
+                    fetched = fetched.replace(tzinfo=None)
+                if fetched >= thirty_days_ago:
+                    recent_count += 1
+            else:
+                recent_count += 1
+                
+        return recent_count / len(results)
+
+    def _calculate_conflicts(self, results: list[RankedResult]) -> tuple[int, float]:
+        conflicts = sum(
+            len(getattr(r, "contradictions", [])) 
+            for r in results 
+            if getattr(r, "contradictions", None)
+        )
+        conflict_penalty = min(1.0, conflicts * 0.10)
+        conflict_score = max(0.0, 1.0 - conflict_penalty)
+        return conflicts, conflict_score
 
     def _grade(self, overall: float) -> str:
         if overall >= 0.95:

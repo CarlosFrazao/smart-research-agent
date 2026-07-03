@@ -158,6 +158,23 @@ class ReportGenerator:
         sentiment_section: str = "",
         comparison_section: str = "",
     ) -> str:
+        lines = []
+        lines.extend(self._build_summary(query, metadata, executive_summary, comparison_section, timeline_section, results))
+        lines.extend(self._build_sources(results))
+        lines.extend(self._build_analysis(results, trends, recommendation, sentiment_section, metadata))
+
+        cleaned_lines = [str(line) for line in lines if line is not None]
+        return "\n".join(cleaned_lines)
+
+    def _build_summary(
+        self,
+        query: str,
+        metadata: ResearchMetadata,
+        executive_summary: str | None,
+        comparison_section: str,
+        timeline_section: str,
+        results: list[SynthesizedResult],
+    ) -> list[str]:
         timestamp = metadata.timestamp.strftime("%Y-%m-%d %H:%M")
 
         exec_summary_clean = str(executive_summary or "").strip()
@@ -166,21 +183,6 @@ class ReportGenerator:
                 f"Pesquisa realizada com sucesso sobre '{query}'. Foram encontrados {len(results)} "
                 f"projetos relevantes nas fontes pesquisadas ({', '.join(s for s in metadata.sources if s)}). "
                 f"Consulte a lista de ferramentas detalhadas abaixo para obter mais informações."
-            )
-
-        recommendation_clean = str(recommendation or "").strip()
-        if not recommendation_clean:
-            recommendation_clean = (
-                "### Recomendação Automática\n"
-                "Com base nos dados disponíveis, sugerimos priorizar os projetos com maiores pontuações de relevância "
-                "e atividade contínua no repositório. Verifique a tabela de comparação para detalhes adicionais."
-            )
-
-        trends_clean = str(trends or "").strip()
-        if not trends_clean:
-            trends_clean = (
-                "- **Foco em Integração Simplificada**: Crescimento de ferramentas prontas e CDNs.\n"
-                "- **Segurança e Privacidade**: Foco em soluções self-hosted e políticas de RLS/mTLS."
             )
 
         lines = [
@@ -217,8 +219,10 @@ class ReportGenerator:
                 "---",
                 "",
             ]
+        return lines
 
-        lines += [
+    def _build_sources(self, results: list[SynthesizedResult]) -> list[str]:
+        lines = [
             "## 2. Projetos / Ferramentas Encontradas",
             "",
         ]
@@ -253,7 +257,6 @@ class ReportGenerator:
             }
             verdict_display = verdict_icons.get(verdict, verdict)
 
-            # Novo V2: Qualidade de evidência e avisos de confiança
             evidence_quality = getattr(r, "evidence_quality", "unknown")
             quality_badges = {
                 "verified": "🌟 Verificado (Alta Confiança)",
@@ -263,11 +266,9 @@ class ReportGenerator:
             }
             quality_display = quality_badges.get(evidence_quality, evidence_quality)
 
-            # Alerta de Fonte Única (Single Source)
             is_single_source = len(r.sources) <= 1
             source_warning = " | ⚠️ **Fonte Única (Single Source)**" if is_single_source else ""
 
-            # Flags de alucinação/confiança
             flags = getattr(r, "hallucination_flags", []) or []
             flags_display = ""
             if flags:
@@ -303,8 +304,32 @@ class ReportGenerator:
                 entry_lines.append(f"- **Proxima Acao:** {next_step}")
             entry_lines.append("")
             lines += entry_lines
+        return lines
 
-        lines += [
+    def _build_analysis(
+        self,
+        results: list[SynthesizedResult],
+        trends: str | None,
+        recommendation: str | None,
+        sentiment_section: str,
+        metadata: ResearchMetadata,
+    ) -> list[str]:
+        recommendation_clean = str(recommendation or "").strip()
+        if not recommendation_clean:
+            recommendation_clean = (
+                "### Recomendação Automática\n"
+                "Com base nos dados disponíveis, sugerimos priorizar os projetos com maiores pontuações de relevância "
+                "e atividade contínua no repositório. Verifique a tabela de comparação para detalhes adicionais."
+            )
+
+        trends_clean = str(trends or "").strip()
+        if not trends_clean:
+            trends_clean = (
+                "- **Foco em Integração Simplificada**: Crescimento de ferramentas prontas e CDNs.\n"
+                "- **Segurança e Privacidade**: Foco em soluções self-hosted e políticas de RLS/mTLS."
+            )
+
+        lines = [
             "---",
             "",
             "## 3. Comparacao Lado a Lado",
@@ -396,7 +421,6 @@ class ReportGenerator:
         for i, url in enumerate(all_urls[:20], 1):
             lines.append(f"{i}. [{url}]({url})")
 
-        # Novo V2: Agrega todos os links mortos para transparência
         all_dead_links = set()
         for r in results:
             dead = r.metrics.get("dead_links", [])
@@ -434,9 +458,7 @@ class ReportGenerator:
             "",
             f"*Relatório gerado por Smart Research Agent v2.0 | {metadata.timestamp.strftime('%Y-%m-%d %H:%M')}*",
         ]
-
-        cleaned_lines = [str(line) for line in lines if line is not None]
-        return "\n".join(cleaned_lines)
+        return lines
 
     def save_report(
         self,

@@ -4,6 +4,7 @@ import json
 import logging
 import os
 
+from typing import Any
 from fastapi import FastAPI, Response
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -856,6 +857,83 @@ try:
     # ─────────────────────────────────────────────────────────────────────────
     # TOOL 14 — Verificação de confiança de uma afirmação contra fontes reais
     # ─────────────────────────────────────────────────────────────────────────
+    async def _scrape_sources(claim: str, sources: list[str], scorer: Any, orc: Any) -> list[Any]:
+        scored_results = []
+        for url in sources[:5]:
+            try:
+                raw = await orc._select_scraper_for_url(url)
+                if raw:
+                    scored = await scorer.score_result(raw[0])
+                    scored_results.append(scored)
+            except Exception as src_err:
+                logger.warning(f"[confidence_check] falha ao processar {url}: {src_err}")
+        return scored_results
+
+
+    async def _run_fallback_search(claim: str, scorer: Any, orc: Any) -> list[Any]:
+        logger.warning(f"[confidence_check] Scraping falhou para todas as fontes. Iniciando fallback de busca para '{claim[:50]}'...")
+        fallback_searchers = ["github", "hackernews", "web"]
+        fallback_results = []
+        for s_name in fallback_searchers:
+            searcher = orc.searchers.get(s_name)
+            if searcher and searcher.enabled:
+                try:
+                    res = await searcher.search(claim[:100])
+                    if res:
+                        fallback_results.extend(res[:2])
+                except Exception as e:
+                    logger.debug(f"[confidence_check] Fallback de busca em '{s_name}' falhou: {e}")
+
+        scored_results = []
+        for r in fallback_results:
+            try:
+                scored = await scorer.score_result(r)
+                scored_results.append(scored)
+            except Exception:
+                pass
+        return scored_results
+
+
+    def _build_confidence_check_response(claim: str, scored_results: list[Any]) -> str:
+        scores = [r.confidence_score for r in scored_results]
+        overall = sum(scores) / len(scores)
+
+        supporting = [r.url for r in scored_results if r.confidence_score >= 0.55]
+        contradicting = [r.url for r in scored_results if r.contradictions]
+        all_flags: list[str] = []
+        for r in scored_results:
+            all_flags.extend(r.hallucination_flags)
+        unique_flags = list(dict.fromkeys(all_flags))
+
+        if overall >= 0.75:
+            recommendation = "use_with_confidence"
+        elif overall >= 0.45:
+            recommendation = "verify_further"
+        else:
+            recommendation = "do_not_use"
+
+        quality_levels = [r.evidence_quality for r in scored_results]
+        best_quality = next(
+            (q for q in ("verified", "cited", "inferred") if q in quality_levels),
+            "unknown",
+        )
+
+        return json.dumps(
+            {
+                "claim": claim,
+                "overall_confidence": round(overall, 3),
+                "evidence_quality": best_quality,
+                "supporting_sources": supporting,
+                "contradicting_sources": contradicting,
+                "hallucination_flags": unique_flags,
+                "recommendation": recommendation,
+                "sources_checked": len(scored_results),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
     @mcp.tool()
     async def confidence_check(claim: str, sources: list[str]) -> str:
         """
@@ -882,17 +960,10 @@ try:
             scorer = get_confidence_scorer()
             orc = get_orchestrator()
 
-            scored_results = []
-            for url in sources[:5]:
-                try:
-                    raw = await orc._select_scraper_for_url(url)
-                    if raw:
-                        scored = await scorer.score_result(raw[0])
-                        scored_results.append(scored)
-                except Exception as src_err:
-                    logger.warning(f"[confidence_check] falha ao processar {url}: {src_err}")
+            # 1. Tentar scraping direto
+            scored_results = await _scrape_sources(claim, sources, scorer, orc)
 
-            # Fallback chain se scraping direto falhou para todas as fontes (BUG-09)
+            # 2. Fallback chain se scraping direto falhou para todas as fontes
             if not scored_results:
                 from unittest.mock import MagicMock
                 if isinstance(orc, MagicMock):
@@ -906,25 +977,7 @@ try:
                         "recommendation": "do_not_use",
                     })
 
-                logger.warning(f"[confidence_check] Scraping falhou para todas as fontes. Iniciando fallback de busca para '{claim[:50]}'...")
-                fallback_searchers = ["github", "hackernews", "web"]
-                fallback_results = []
-                for s_name in fallback_searchers:
-                    searcher = orc.searchers.get(s_name)
-                    if searcher and searcher.enabled:
-                        try:
-                            res = await searcher.search(claim[:100])
-                            if res:
-                                fallback_results.extend(res[:2])
-                        except Exception as e:
-                            logger.debug(f"[confidence_check] Fallback de busca em '{s_name}' falhou: {e}")
-
-                for r in fallback_results:
-                    try:
-                        scored = await scorer.score_result(r)
-                        scored_results.append(scored)
-                    except Exception:
-                        pass
+                scored_results = await _run_fallback_search(claim, scorer, orc)
 
             if not scored_results:
                 return json.dumps({
@@ -938,43 +991,8 @@ try:
                     "note": "Scrapers indisponiveis e busca de fallback nao retornou resultados. Verificacao manual recomendada."
                 })
 
-            scores = [r.confidence_score for r in scored_results]
-            overall = sum(scores) / len(scores)
-
-            supporting = [r.url for r in scored_results if r.confidence_score >= 0.55]
-            contradicting = [r.url for r in scored_results if r.contradictions]
-            all_flags: list[str] = []
-            for r in scored_results:
-                all_flags.extend(r.hallucination_flags)
-            unique_flags = list(dict.fromkeys(all_flags))
-
-            if overall >= 0.75:
-                recommendation = "use_with_confidence"
-            elif overall >= 0.45:
-                recommendation = "verify_further"
-            else:
-                recommendation = "do_not_use"
-
-            quality_levels = [r.evidence_quality for r in scored_results]
-            best_quality = next(
-                (q for q in ("verified", "cited", "inferred") if q in quality_levels),
-                "unknown",
-            )
-
-            return json.dumps(
-                {
-                    "claim": claim,
-                    "overall_confidence": round(overall, 3),
-                    "evidence_quality": best_quality,
-                    "supporting_sources": supporting,
-                    "contradicting_sources": contradicting,
-                    "hallucination_flags": unique_flags,
-                    "recommendation": recommendation,
-                    "sources_checked": len(scored_results),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+            # 3. Montar e retornar resposta final
+            return _build_confidence_check_response(claim, scored_results)
         except Exception as e:
             logger.error(f"[confidence_check] erro: {e}")
             return json.dumps({"claim": claim, "error": str(e)})

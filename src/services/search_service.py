@@ -179,18 +179,26 @@ class SearchService:
                 )
                 tasks.append(task)
 
-        for task in asyncio.as_completed(tasks):
-            try:
-                source_name, query_str, res = await task
-                results.extend(res)
-                if res:
-                    await self.cache.set(
-                        "search",
-                        f"{source_name}:{query_str}",
-                        [r.__dict__ for r in res],
-                    )
-            except Exception as e:
-                logger.warning(f"Busca falhou: {e}")
+        if tasks:
+            gathered_results = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, res_val in enumerate(gathered_results):
+                if isinstance(res_val, Exception):
+                    task_obj = tasks[idx]
+                    task_name = task_obj.get_name() if hasattr(task_obj, "get_name") else f"task_{idx}"
+                    logger.error(f"Exceção não tratada na busca concorrente {task_name}: {res_val}")
+                    continue
+                try:
+                    assert isinstance(res_val, tuple)
+                    source_name, query_str, res = res_val
+                    results.extend(res)
+                    if res:
+                        await self.cache.set(
+                            "search",
+                            f"{source_name}:{query_str}",
+                            [r.__dict__ for r in res],
+                        )
+                except Exception as e:
+                    logger.warning(f"Erro ao processar resultado de busca: {e}")
 
         # Fallback de último recurso: SerpAPI
         if not results and "serpapi" in self.searchers:
@@ -227,7 +235,7 @@ class SearchService:
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
         from src.observability.metrics import track_search
         from src.utils.logging import structured_logger
-        error_msg = None
+        error_msg = ""
         res = []
         try:
             async with track_search(source_name):
