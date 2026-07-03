@@ -91,6 +91,18 @@ class Config(BaseSettings):
     serpapi_api_key: Optional[str] = Field(default=None)
     serpapi_enabled: bool = Field(default=True)
 
+    # Neo4j — banco de grafos para conhecimento persistente
+    neo4j_uri: Optional[str] = Field(default=None)
+    neo4j_user: str = Field(default="neo4j")
+    neo4j_password: str = Field(default="password123")
+
+    # Celery & Redis
+    celery_broker_url: str = Field(default="redis://localhost:6379/0")
+    celery_result_backend: str = Field(default="redis://localhost:6379/1")
+
+    # Cohere — reranking de buscas híbridas
+    cohere_api_key: Optional[str] = Field(default=None)
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     def get_llm_config(self) -> dict:
