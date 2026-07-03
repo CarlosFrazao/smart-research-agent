@@ -46,5 +46,29 @@
 - **Execução**: Suite unitária/E2E completa rodada com sucesso absoluto: **763 passed**. Todos os testes de cache e memória passaram sem regressões de nenhuma natureza.
 
 #### 🔧 Próximo Bloco
-- Bloco 4: FEAT-B04 — Correções de Mapeamento, CLI & Exibição de Custo (MEL-06, INFRA-01)
+- Bloco 4: FEAT-B04 — Arquitetura de Busca: Decomposição de Funções, Factory de Searchers e Paralelização (MEL-06, MEL-08, INFRA-05)
+- Agente: @ceo-agent
+
+---
+
+### Sessão: 2026-07-03 06:06 — Bloco 4: FEAT-B04 — Arquitetura de Busca: Decomposição de Funções, Factory de Searchers e Paralelização (MEL-06, MEL-08, INFRA-05)
+
+#### 🎯 Entregas
+- **Decomposição de Funções Grandes (MEL-06)**:
+  - Decomposta a lógica de montagem do relatório `_assemble_report` em `src/report_generator.py` em submétodos privados dedicados (`_build_summary`, `_build_sources`, `_build_analysis`).
+  - Decomposta a lógica de cálculo de pontuação agregada `calculate` em `src/research_score.py` em métodos privados SRP específicos (`_calculate_coverage`, `_calculate_diversity`, `_calculate_quality`, `_calculate_reliability`, `_calculate_recency`, `_calculate_conflicts`).
+  - Decomposta a lógica principal de pesquisa do orchestrator `research` em `src/orchestrator.py` em submétodos lógicos de responsabilidade única (`_plan_search`, `_execute_searches`, `_synthesize_results`).
+  - Extraídas as validações auxiliares internas da ferramenta MCP `confidence_check` em `src/mcp_server.py` para as funções privadas `_scrape_sources`, `_run_fallback_search` e `_build_confidence_check_response`, restaurando a indentação correta para pertencer ao bloco `try`.
+- **Factory Pattern de Searchers (MEL-08)**:
+  - Criada a fábrica de searchers `SearcherFactory` em `src/search/factory.py` centralizando a instanciação condicional sob demanda de todos os searchers físicos da pasta `src/search/`.
+  - Removidos imports acoplados e estáticos no topo do `src/orchestrator.py`, reduzindo a pegada do orquestrador em mais de 100 linhas e agilizando significativamente o tempo de import/boot.
+- **Paralelização Robusta de Buscas no Orquestrador (INFRA-05)**:
+  - Substituído o loop concorrente `as_completed` por `asyncio.gather(*tasks, return_exceptions=True)` isolando exceções e timeouts individuais de cada searcher sem derrubar ou comprometer o restante do pipeline.
+
+#### 🧪 Testes e Validação
+- **Verificação Estática**: Resolvidos todos os erros de tipagem estática levantados pelo Mypy no código refatorado de `search_service.py`, `factory.py`, `research_score.py` e `mcp_server.py`.
+- **Suite pytest**: Executados com 100% de sucesso todos os 763 testes unitários e de integração: **763 passed**.
+
+#### 🔧 Próximo Bloco
+- Bloco 5: FEAT-B05 — Infra, DevOps & Documentação: Docstrings, CI/CD, Pre-commit & Docker (MEL-07, INFRA-01, INFRA-02, INFRA-03)
 - Agente: @ceo-agent
