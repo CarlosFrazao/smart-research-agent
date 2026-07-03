@@ -4,6 +4,8 @@ import random
 from typing import Optional, Dict, Any
 import logging
 
+from src.utils.rate_limiter import DomainRateLimiter
+
 logger = logging.getLogger(__name__)
 
 USER_AGENTS = [
@@ -63,6 +65,9 @@ class HTTPClient:
     ) -> Dict[str, Any]:
         headers = headers or {}
         headers.setdefault("User-Agent", random.choice(USER_AGENTS))
+
+        # Throttling por domínio — respeita limites de cada API
+        await DomainRateLimiter.wait(url)
 
         for attempt in range(self.max_retries):
             try:

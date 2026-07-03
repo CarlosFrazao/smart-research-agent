@@ -1,11 +1,8 @@
 import asyncio
 import logging
 import os
-import shutil
 from datetime import datetime
-from statistics import mean
 from typing import Dict, Any, List, Optional
-from urllib.parse import quote
 
 from src.config import Config
 from src.types import ResearchMetadata, ExpandedQuery
@@ -14,6 +11,7 @@ from src.intent_analyzer import IntentAnalyzer
 from src.query_expander import QueryExpander
 from src.source_planner import SourcePlanner
 from src.ranker import QualityRanker
+from src.confidence_scorer_v2 import ConfidenceScorerV2
 from src.gap_detector import GapDetector
 from src.synthesizer import Synthesizer
 from src.report_generator import ReportGenerator
@@ -35,6 +33,8 @@ from src.search.wayback_searcher import WaybackSearcher
 from src.search.semantic_scholar_searcher import SemanticScholarSearcher
 from src.search.pubmed_searcher import PubMedSearcher
 from src.search.youtube_searcher import YouTubeSearcher
+from src.search.playwright_searcher import PlaywrightSearcher
+from src.anti_blocking.residential_proxy import ResidentialProxyProvider
 from src.clients.smart_model_router import SmartModelRouter, get_router
 from src.memory.orvix_memory_v2 import OrvixMemoryV2
 from src.confidence_scorer_v2 import ConfidenceScorerV2
@@ -48,11 +48,23 @@ from src.peer_review_agent import PeerReviewAgent
 from src.evidence_graph import EvidenceGraph
 from src.utils.cache import Cache
 from src.utils.logger import setup_logger
+from src.utils.dead_letter_queue import DeadLetterQueue
+
+# Importações dos novos serviços
+from src.services.search_service import SearchService
+from src.services.reasoning_service import ReasoningService
+from src.services.memory_service import MemoryService
+from src.services.report_service import ReportService
 
 logger = setup_logger("orchestrator")
 
 
 class Orchestrator:
+    """
+    Facade principal do Smart Research Agent (SRA).
+    Delega a execução para serviços especializados para manter a legibilidade e manutenibilidade.
+    """
+
     def __init__(self, config: Config = None):
         self.config = config or Config()
 
@@ -103,25 +115,35 @@ class Orchestrator:
         redis_url = getattr(self.config, "redis_url", None)
         self.smart_cache = SmartCache(redis_url=redis_url)
 
+        # Dead Letter Queue
+        self.dlq = DeadLetterQueue(path=getattr(self.config, "dlq_path", "./.dlq"))
 
-        # ── Fase 4: Autonomia ─────────────────────────────────────
-        # Modo de operação ativo (default: cirurgia)
+        # Modo de operação ativo
         mode_name = getattr(self.config, "operation_mode", OperationModes.DEFAULT_MODE)
         self.operation_mode: OperationConfig = OperationModes.get_mode(mode_name)
         logger.info(f"OperationMode ativo: '{self.operation_mode.name}'")
 
-        # ResearchAuditor (loop de auditoria, máx 3 iterações)
+        # ResearchAuditor
         self.auditor = ResearchAuditor(
             llm_client=self.llm,
             orchestrator=self,
             confidence_scorer=self.confidence_scorer,
         )
 
-        # HealthMonitor (verificação de serviços, instanciado sem iniciar o loop)
+        # HealthMonitor
         self.health_monitor = HealthMonitor()
         self.health_monitor.orchestrator = self
+        self._register_health_fallbacks()
 
-        # Registro de fallbacks para o HealthMonitor
+        # Instanciação dos novos Serviços (Facade)
+        self._search_service = SearchService(self)
+        self._reasoning_service = ReasoningService(self)
+        self._memory_service = MemoryService(self)
+        self._report_service = ReportService(self)
+
+        logger.info("Orchestrator inicializado")
+
+    def _register_health_fallbacks(self):
         def fallback_use_ephemeral_chroma(svc, result):
             if self.memory:
                 try:
@@ -152,8 +174,6 @@ class Orchestrator:
         self.health_monitor.register_fallback("fallback_to_duckduckgo", fallback_to_duckduckgo)
         self.health_monitor.register_fallback("disable_cache", fallback_disable_cache)
 
-        logger.info("Orchestrator inicializado")
-
     def _init_searchers(self) -> Dict[str, Any]:
         cfg = {
             "timeout": self.config.timeout_per_source,
@@ -168,7 +188,6 @@ class Orchestrator:
             "steel_api_key": self.config.steel_api_key,
             "steel_base_url": self.config.steel_base_url,
         }
-        # Adiciona chaves de ambiente customizadas para o SearXNG
         searxng_cfg = {
             **cfg,
             "searxng_url": os.getenv("SEARXNG_URL", "http://127.0.0.1:3023"),
@@ -202,17 +221,14 @@ class Orchestrator:
             }
             searchers["firecrawl"] = JinaSearcher(jina_cfg)
 
-        # Semantic Scholar — sempre ativo, sem dependências externas críticas
         s2_cfg = {
             **cfg,
             "semantic_scholar_api_key": getattr(self.config, "semantic_scholar_api_key", None),
         }
         semantic_scholar = SemanticScholarSearcher(s2_cfg)
-        # Injeta web fallback após criação para evitar dependência circular
         semantic_scholar.web_fallback = searchers.get("web")
         searchers["semantic_scholar"] = semantic_scholar
 
-        # PubMed
         pubmed_cfg = {
             **cfg,
             "ncbi_api_key": getattr(self.config, "ncbi_api_key", None),
@@ -221,7 +237,6 @@ class Orchestrator:
         pubmed.web_fallback = searchers.get("web")
         searchers["pubmed"] = pubmed
 
-        # YouTube
         youtube_cfg = {
             **cfg,
             "youtube_api_key": getattr(self.config, "youtube_api_key", None),
@@ -230,78 +245,27 @@ class Orchestrator:
         youtube.web_fallback = searchers.get("web")
         searchers["youtube"] = youtube
 
+        if getattr(self.config, "playwright_enabled", False):
+            proxy_url = None
+            if getattr(self.config, "residential_proxy_provider", None):
+                try:
+                    prov = ResidentialProxyProvider(
+                        provider=self.config.residential_proxy_provider,
+                        username=self.config.residential_proxy_username or "",
+                        password=self.config.residential_proxy_password or "",
+                    )
+                    proxy_url = prov.get_proxy_url()
+                except Exception as e:
+                    logger.warning(f"Falha ao configurar proxy residencial: {e}")
+
+            playwright_cfg = {
+                **cfg,
+                "proxy_url": proxy_url,
+                "playwright_headless": getattr(self.config, "playwright_headless", True),
+            }
+            searchers["playwright"] = PlaywrightSearcher(playwright_cfg)
+
         return searchers
-
-    async def _select_scraper_for_url(self, url: str) -> List[Any]:
-        """
-        Smart cascade: tries scrapers in priority order for a given URL.
-
-        Priority:
-        1. Firecrawl — default, reliable, clean markdown
-        2. Spider.cloud — if Firecrawl times out (>10s), raises an error or returns empty
-        3. Steel.dev — if Spider returns empty content (JS-heavy page suspected)
-        4. Jina Reader — zero-setup final fallback (prefixes URL with r.jina.ai/)
-        """
-        firecrawl = self.searchers.get("firecrawl")
-        spider = self.searchers.get("spider")
-        steel = self.searchers.get("steel")
-
-        # 1. Tentativa primária: Firecrawl
-        if firecrawl:
-            try:
-                result = await asyncio.wait_for(firecrawl.search(url), timeout=10.0)
-                if result and result[0].description and len(result[0].description.strip()) > 200:
-                    return result
-                logger.warning(f"Firecrawl content too short/empty for '{url[:50]}'")
-            except (asyncio.TimeoutError, Exception) as e:
-                logger.warning(f"Firecrawl failed for '{url[:50]}': {e}")
-
-        # 2. Tentativa secundária: Spider (se habilitado)
-        if spider and self.config.spider_enabled:
-            try:
-                result = await spider.search(url)
-                if result and result[0].description and len(result[0].description.strip()) > 200:
-                    return result
-            except Exception as e:
-                logger.warning(f"Spider failed for '{url[:50]}': {e}")
-
-        # 3. Tentativa terciária: Steel (se habilitado)
-        if steel and self.config.steel_enabled:
-            try:
-                result = await steel.search(url)
-                if result and result[0].description and len(result[0].description.strip()) > 200:
-                    return result
-            except Exception as e:
-                logger.warning(f"Steel failed for '{url[:50]}': {e}")
-
-        # 4. Fallback incondicional final: Jina Reader
-        jina_url = f"https://r.jina.ai/{quote(url, safe=':/.?=#&')}"
-        try:
-            logger.info(f"Using Jina Reader fallback for '{url[:50]}'")
-            raw = await self.searchers["firecrawl"].client.scrape(jina_url)
-            if raw and raw.get("markdown"):
-                from src.types import SearchResult
-                return [SearchResult(
-                    source="jina_reader",
-                    title=f"Jina: {url}",
-                    url=url,
-                    description=str(raw.get("markdown", "")),
-                    metrics={},
-                    raw=raw,
-                )]
-        except Exception as e:
-            logger.warning(f"Jina Reader failed for '{url[:50]}': {e}")
-
-        # Fallback de desespero: se tudo falhar, retorna o primeiro resultado que o Firecrawl obteve
-        if firecrawl:
-            try:
-                result = await firecrawl.search(url)
-                if result:
-                    return result
-            except Exception:
-                pass
-
-        return []
 
     async def research(self, query: str, formats: Optional[List[Any]] = None) -> str:
         start_time = datetime.now()
@@ -315,61 +279,21 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"Falha ao executar health check: {e}")
 
-        # Intercepta fluxo se o modo for debate (Bloco 3.1)
+        # Intercepta fluxo se o modo for debate
         if getattr(self.operation_mode, "enable_debate", False):
-            logger.info("Modo DEBATE ativo. Iniciando DebateOrchestrator...")
-            from src.debate_orchestrator import DebateOrchestrator
-            debate = DebateOrchestrator(llm_client=self.llm, searchers=self.searchers)
-            debate_round = await debate.run(query)
-            report = debate.format_debate_markdown(debate_round)
-            
-            # Salvar e sincronizar
-            duration = (datetime.now() - start_time).total_seconds()
-            filepath = self.report_generator.save_report(report, query, self.config.output_dir, formats=formats)
-            logger.info(f"Debate completo em {round(duration, 1)}s. Relatorio: {filepath}")
+            return await self.reasoning.run_debate_mode(query, start_time, formats=formats)
 
-            if getattr(self.config, "obsidian_vault_path", None) and getattr(self.config, "obsidian_auto_sync", False):
-                try:
-                    vault_dir = self.config.obsidian_vault_path
-                    os.makedirs(vault_dir, exist_ok=True)
-                    vault_path = os.path.join(vault_dir, os.path.basename(filepath))
-                    shutil.copy2(filepath, vault_path)
-                    logger.info(f"Obsidian sync: {vault_path}")
-                except Exception as e:
-                    logger.warning(f"Obsidian sync falhou (nao critico): {e}")
-
-            if self.memory:
-                try:
-                    self.memory.store_research_result(
-                        query=query,
-                        executive_summary=f"Debate vencedor: {debate_round.winner}. Veredito: {debate_round.verdict}",
-                        top_entities=[debate_round.winner] if debate_round.winner else [],
-                        domain="general",
-                        duration_seconds=duration,
-                    )
-                except Exception as e:
-                    logger.warning(f"OrvixMemory.store_research_result falhou para o debate: {e}")
-
-            return report
-
-        memory_context = ""
-        if self.memory:
-            try:
-                memory_context = self.memory.get_context(query, top_k=3)
-                if memory_context:
-                    logger.info("OrvixMemory: contexto de pesquisas anteriores recuperado")
-            except Exception as e:
-                logger.warning(f"OrvixMemory.get_context falhou: {e}")
+        memory_context = self.memory_service.get_context(query)
 
         logger.info("Passo 1/9: Analisando intencao...")
         enriched_query = query
         if memory_context:
             enriched_query = f"{memory_context}\n\n---\n\nQuery atual: {query}"
-        intent = await self.intent_analyzer.analyze(enriched_query)
+        intent = await self.reasoning.analyze_intent(enriched_query)
         logger.info(f"  Dominio: {intent.domain.value}, Intencao: {intent.intention.value}")
 
         logger.info("Passo 2/9: Expandindo queries...")
-        expanded_queries = await self.query_expander.expand(query, intent)
+        expanded_queries = await self.reasoning.expand_queries(query, intent)
         logger.info(f"  {len(expanded_queries)} queries expandidas")
 
         logger.info("Passo 3/9: Planejando fontes...")
@@ -377,11 +301,11 @@ class Orchestrator:
         logger.info(f"  Primarias: {', '.join(source_plan.primary)}")
 
         logger.info("Passo 4/9: Buscando em paralelo...")
-        all_results = await self._parallel_search(expanded_queries, source_plan, intent)
+        all_results = await self.search.execute(expanded_queries, source_plan, intent)
         logger.info(f"  {len(all_results)} resultados brutos")
 
         logger.info("Passo 5/9: Ranqueando resultados...")
-        ranked = await self.ranker.rank(all_results)
+        ranked = await self.reasoning.rank(all_results)
 
         logger.info("Passo 5b/9: Scoring de confianca e anti-hallucination...")
         scored = await self.confidence_scorer.score_batch(ranked, cross_validate=True)
@@ -432,8 +356,8 @@ class Orchestrator:
                 ExpandedQuery(query=q, type="gap_fill", priority="alta", rationale="gap detection")
                 for q in gap.new_queries
             ]
-            new_results = await self._parallel_search(gap_queries, source_plan, intent)
-            new_ranked = await self.ranker.rank(new_results)
+            new_results = await self.search.execute(gap_queries, source_plan, intent)
+            new_ranked = await self.reasoning.rank(new_results)
             ranked.extend(new_ranked)
             ranked.sort(key=lambda x: x.score, reverse=True)
             iteration += 1
@@ -466,7 +390,7 @@ class Orchestrator:
             duration_seconds=duration,
         )
 
-        report = await self.report_generator.generate(query, synthesized, metadata)
+        report = await self.reports.generate(query, synthesized, metadata)
 
         # ── Evidence Graph ────────────────────────────────────────────────────────
         logger.info("EvidenceGraph: construindo grafo de evidências...")
@@ -534,164 +458,85 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"PeerReviewAgent falhou (não crítico): {e}")
 
-        filepath = self.report_generator.save_report(report, query, self.config.output_dir, formats=formats)
+        filepath = self.reports.save(report, query, formats=formats)
         logger.info(f"Pesquisa completa em {round(duration, 1)}s. Relatorio: {filepath}")
 
-        if getattr(self.config, "obsidian_vault_path", None) and getattr(self.config, "obsidian_auto_sync", False):
-            try:
-                vault_dir = self.config.obsidian_vault_path
-                os.makedirs(vault_dir, exist_ok=True)
-                vault_path = os.path.join(vault_dir, os.path.basename(filepath))
-                shutil.copy2(filepath, vault_path)
-                logger.info(f"Obsidian sync: {vault_path}")
-            except Exception as e:
-                logger.warning(f"Obsidian sync falhou (nao critico): {e}")
+        # Sincroniza Obsidian Vault
+        self.reports.sync_to_vault(filepath)
 
-        if self.memory and synthesized:
-            try:
-                top_entities = [r.title for r in synthesized[:5]]
-                exec_summary_snippet = report.split("## 1. Resumo Executivo")[-1].split("---")[0].strip()[:600]
-                self.memory.store_research_result(
-                    query=query,
-                    executive_summary=exec_summary_snippet,
-                    top_entities=top_entities,
-                    domain=intent.domain.value,
-                    duration_seconds=duration,
-                )
-            except Exception as e:
-                logger.warning(f"OrvixMemory.store_research_result falhou: {e}")
+        if synthesized:
+            top_entities = [r.title for r in synthesized[:5]]
+            exec_summary_snippet = report.split("## 1. Resumo Executivo")[-1].split("---")[0].strip()[:600]
+            self.memory_service.store(
+                query=query,
+                executive_summary=exec_summary_snippet,
+                top_entities=top_entities,
+                domain=intent.domain.value,
+                duration_seconds=duration,
+            )
 
         return report
 
-    async def _search_task(self, searcher, source_name: str, query: str, domain: str):
-        from src.utils.logger import structured_logger
-        error_msg = None
-        res = []
-        try:
-            res = await self._search_with_timeout(searcher, query, domain)
-        except Exception as e:
-            error_msg = str(e)
-        structured_logger.log_search(source_name, query, len(res), error_msg)
-        return source_name, query, res
+    # ── Retrocompatibilidade / Delegados do Facade ───────────────────────
+
+    async def _select_scraper_for_url(self, url: str) -> List[Any]:
+        return await self.search.select_scraper_for_url(url)
 
     async def _parallel_search(self, queries: List[ExpandedQuery], plan, intent):
-        from src.types import SearchResult
-        tasks = []
-        results = []
+        return await self.search.execute(queries, plan, intent)
 
-        # Injeta RSSSearcher se for query urgente/recente de tecnologia e o RSS estiver habilitado
-        if intent.urgency == "sim" and intent.domain.value in ("ai_ml", "dev_tools", "saas_b2b") and queries:
-            rss = self.searchers.get("rss")
-            if rss and rss.enabled:
-                primary_query = queries[0].query
-                cache_key = f"rss:{primary_query}"
-                cached = self.cache.get("search", cache_key)
-                if cached is not None:
-                    logger.debug(f"Cache hit para RSS: {cache_key}")
-                    deserialized = []
-                    for r in cached:
-                        if "fetched_at" in r and isinstance(r["fetched_at"], str):
-                            try:
-                                r["fetched_at"] = datetime.fromisoformat(r["fetched_at"])
-                            except Exception:
-                                r["fetched_at"] = datetime.now()
-                        deserialized.append(SearchResult(**r))
-                    results.extend(deserialized)
-                else:
-                    task = asyncio.create_task(
-                        self._search_task(rss, "rss", primary_query, intent.domain.value),
-                        name=f"rss:{primary_query[:30]}",
-                    )
-                    tasks.append(task)
-
-        for source_name, source_queries in plan.sources.items():
-            if source_name not in self.operation_mode.searchers:
-                logger.debug(f"Searcher '{source_name}' filtrado (desabilitado no modo '{self.operation_mode.name}')")
-                continue
-            searcher = self.searchers.get(source_name)
-            if not searcher or not searcher.enabled:
-                continue
-            for eq in source_queries:
-                from src.query_validator import QueryValidator
-                sanitized = QueryValidator.sanitize(eq.query)
-                if not QueryValidator.is_valid(sanitized):
-                    logger.warning(f"Query desconsiderada por ser inválida ou malformada: '{eq.query[:50]}'")
-                    continue
-                eq.query = sanitized
-                cache_key = f"{source_name}:{eq.query}"
-                cached = self.cache.get("search", cache_key)
-                if cached is not None:
-                    logger.debug(f"Cache hit: {cache_key}")
-                    deserialized = []
-                    for r in cached:
-                        if "fetched_at" in r and isinstance(r["fetched_at"], str):
-                            try:
-                                r["fetched_at"] = datetime.fromisoformat(r["fetched_at"])
-                            except Exception:
-                                r["fetched_at"] = datetime.now()
-                        deserialized.append(SearchResult(**r))
-                    results.extend(deserialized)
-                    continue
-
-                task = asyncio.create_task(
-                    self._search_task(searcher, source_name, eq.query, intent.domain.value),
-                    name=f"{source_name}:{eq.query[:30]}",
-                )
-                tasks.append(task)
-
-        for task in asyncio.as_completed(tasks):
-            try:
-                source_name, query_str, res = await task
-                results.extend(res)
-                if res:
-                    self.cache.set(
-                        "search",
-                        f"{source_name}:{query_str}",
-                        [r.__dict__ for r in res],
-                    )
-            except Exception as e:
-                logger.warning(f"Busca falhou: {e}")
-
-        return results
+    async def _search_task(self, searcher, source_name: str, query: str, domain: str):
+        return await self.search._search_task(searcher, source_name, query, domain)
 
     async def _search_with_timeout(self, searcher, query: str, domain: str):
-        try:
-            return await asyncio.wait_for(
-                searcher.search(query, domain=domain),
-                timeout=searcher.timeout,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(f"Timeout em {searcher.__class__.__name__}")
-            if self.health_monitor:
-                cls_name = searcher.__class__.__name__.lower()
-                source_name = "hackernews" if "hn" in cls_name else cls_name.replace("searcher", "")
-                self.health_monitor.report_failure(source_name, "TimeoutError")
-            return searcher.fallback(query)
-        except Exception as e:
-            logger.error(f"Erro em {searcher.__class__.__name__}: {e}")
-            if self.health_monitor:
-                cls_name = searcher.__class__.__name__.lower()
-                source_name = "hackernews" if "hn" in cls_name else cls_name.replace("searcher", "")
-                self.health_monitor.report_failure(source_name, str(e))
-            return []
+        return await self.search._search_with_timeout(searcher, query, domain)
 
     async def _calculate_overall_confidence(self, results: List) -> float:
-        """
-        Calcula a confiança geral com base nos scores individuais,
-        diversidade de fontes e qualidade relativa dos resultados.
-        """
-        if not results:
-            return 0.0
-        individual_scores = [
-            r.confidence_score
-            for r in results
-            if hasattr(r, "confidence_score") and r.confidence_score is not None
-        ]
-        if not individual_scores:
-            return 0.5
-        source_diversity = len(set(getattr(r, "source", "") for r in results))
-        diversity_bonus = min(source_diversity / 5, 1.0)
-        high_quality = sum(1 for s in individual_scores if s > 0.7)
-        quality_ratio = high_quality / len(individual_scores)
-        base_confidence = mean(individual_scores)
-        return round(min(base_confidence * diversity_bonus * (0.5 + 0.5 * quality_ratio), 1.0), 4)
+        return await self.reasoning.calculate_overall_confidence(results)
+
+    # ── Lazy-loaded Service Properties ─────────────────────────────────────
+
+    @property
+    def search(self):
+        if not hasattr(self, "_search_service") or self._search_service is None:
+            from src.services.search_service import SearchService
+            self._search_service = SearchService(self)
+        return self._search_service
+
+    @search.setter
+    def search(self, value):
+        self._search_service = value
+
+    @property
+    def reasoning(self):
+        if not hasattr(self, "_reasoning_service") or self._reasoning_service is None:
+            from src.services.reasoning_service import ReasoningService
+            self._reasoning_service = ReasoningService(self)
+        return self._reasoning_service
+
+    @reasoning.setter
+    def reasoning(self, value):
+        self._reasoning_service = value
+
+    @property
+    def memory_service(self):
+        if not hasattr(self, "_memory_service") or self._memory_service is None:
+            from src.services.memory_service import MemoryService
+            self._memory_service = MemoryService(self)
+        return self._memory_service
+
+    @memory_service.setter
+    def memory_service(self, value):
+        self._memory_service = value
+
+    @property
+    def reports(self):
+        if not hasattr(self, "_report_service") or self._report_service is None:
+            from src.services.report_service import ReportService
+            self._report_service = ReportService(self)
+        return self._report_service
+
+    @reports.setter
+    def reports(self, value):
+        self._report_service = value
+

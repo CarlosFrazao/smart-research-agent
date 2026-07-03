@@ -20,8 +20,42 @@ from typing import List, Optional
 
 from src.types import SearchResult
 from src.clients.llm_client import LLMClient
+from src.exceptions import BudgetExceededError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ResearchBudget:
+    """Orçamento configurável para uma pesquisa profunda."""
+    max_total_nodes: int = 20
+    max_depth: int = 3
+    max_branches_per_node: int = 3
+    max_llm_calls: int = 50
+    max_tokens_total: int = 100_000
+    max_cost_usd: float = 5.0
+
+    # Contadores internos (não configurar externamente):
+    nodes_created: int = field(default=0, repr=False)
+    llm_calls: int = field(default=0, repr=False)
+    tokens_used: int = field(default=0, repr=False)
+    estimated_cost: float = field(default=0.0, repr=False)
+
+    def is_exhausted(self) -> bool:
+        return (
+            self.nodes_created >= self.max_total_nodes
+            or self.llm_calls >= self.max_llm_calls
+            or self.tokens_used >= self.max_tokens_total
+            or self.estimated_cost >= self.max_cost_usd
+        )
+
+    def summary(self) -> dict:
+        return {
+            "nodes": f"{self.nodes_created}/{self.max_total_nodes}",
+            "llm_calls": f"{self.llm_calls}/{self.max_llm_calls}",
+            "tokens": f"{self.tokens_used}/{self.max_tokens_total}",
+            "cost_usd": f"${self.estimated_cost:.4f}/${self.max_cost_usd}",
+        }
 
 
 @dataclass
@@ -46,6 +80,8 @@ class DeepResearchResult:
     total_nodes_explored: int
     confirmed_hypotheses: List[str]
     dead_end_hypotheses: List[str]
+    budget_exceeded: bool = False
+    budget_summary: Optional[dict] = None
 
 
 class DeepResearcher:
@@ -67,11 +103,29 @@ class DeepResearcher:
     MIN_CONFIDENCE: float = 0.4
     CONFIRMED_THRESHOLD: float = 0.75
 
-    def __init__(self, llm_client: LLMClient, orchestrator=None, memory=None):
+    MODEL_PRICES = {
+        "gemma-4-26b": 0.0,         # Free no OpenRouter
+        "gemini-2.5-flash": 0.0001,  # Muito barato
+        "gpt-4o": 0.005,
+        "claude-3-5-sonnet": 0.003,
+        "default": 0.001,
+    }
+
+    def __init__(self, llm_client: LLMClient, orchestrator=None, memory=None, budget: Optional[ResearchBudget] = None):
         self.llm = llm_client
         self.orchestrator = orchestrator
         # OrvixMemoryV2 opcional — injeta contexto do grafo nas hipóteses
         self.memory = memory
+        self.config = getattr(orchestrator, "config", None)
+        if budget is not None:
+            self.budget = budget
+        else:
+            max_nodes = 20
+            max_cost = 5.0
+            if self.config:
+                max_nodes = getattr(self.config, "max_research_nodes", 20)
+                max_cost = getattr(self.config, "max_research_budget_usd", 5.0)
+            self.budget = ResearchBudget(max_total_nodes=max_nodes, max_cost_usd=max_cost)
 
     async def research(
         self,
@@ -91,7 +145,12 @@ class DeepResearcher:
             depth=0,
         )
 
-        root = await self._explore_node(root)
+        budget_exceeded = False
+        try:
+            root = await self._explore_node(root)
+        except BudgetExceededError as e:
+            logger.warning(f"DeepResearcher: budget exceeded: {e}")
+            budget_exceeded = True
 
         findings = self._consolidate_tree(root)
         reasoning_tree_md = self._export_tree_as_markdown(root)
@@ -112,7 +171,25 @@ class DeepResearcher:
             total_nodes_explored=all_nodes,
             confirmed_hypotheses=confirmed,
             dead_end_hypotheses=dead_ends,
+            budget_exceeded=budget_exceeded,
+            budget_summary=self.budget.summary(),
         )
+
+    async def _check_budget(self) -> None:
+        """Lança BudgetExceededError se o orçamento estiver esgotado."""
+        if self.budget.is_exhausted():
+            raise BudgetExceededError(f"Budget esgotado: {self.budget.summary()}")
+
+    async def _track_llm_call(self, prompt: str) -> None:
+        """Incrementa contadores após chamada de LLM."""
+        estimated_tokens = len(prompt) // 4 + 500
+        self.budget.llm_calls += 1
+        self.budget.tokens_used += estimated_tokens
+        model = "default"
+        if self.config:
+            model = getattr(self.config, "model", "default")
+        price = self.MODEL_PRICES.get(model, self.MODEL_PRICES["default"])
+        self.budget.estimated_cost += (estimated_tokens / 1000) * price
 
     async def _explore_node(self, node: ResearchNode) -> ResearchNode:
         """
@@ -123,6 +200,9 @@ class DeepResearcher:
         - node.confidence > CONFIRMED_THRESHOLD (sufficiently confirmed)
         - all children are dead ends
         """
+        await self._check_budget()
+        self.budget.nodes_created += 1
+
         logger.debug(f"Exploring node id={node.id} depth={node.depth} q='{node.query[:50]}'")
 
         node.results = await self._search_for_node(node)
@@ -205,6 +285,14 @@ class DeepResearcher:
             return scored[:10]
         except Exception as e:
             logger.warning(f"Search for node {node.id} failed: {e}")
+            # Arquiva a falha na Dead Letter Queue para análise/retry posterior
+            if hasattr(self, "dlq") and self.dlq is not None:
+                await self.dlq.push(self.dlq.create_failed_task(
+                    task_type="search",
+                    payload={"query": node.query, "node_id": node.id, "depth": node.depth},
+                    error=str(e),
+                    source="deep_researcher._search_for_node",
+                ))
             return []
 
     async def _generate_hypotheses(
@@ -252,6 +340,7 @@ class DeepResearcher:
         schema = {"type": "array", "items": {"type": "string"}}
 
         try:
+            await self._track_llm_call(prompt)  # Contabiliza tokens e custo estimado
             hypotheses = await self.llm.generate_structured(prompt, schema, temperature=0.4)
             if isinstance(hypotheses, list):
                 return [str(h) for h in hypotheses if h][: self.MAX_BRANCHES]

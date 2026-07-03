@@ -65,7 +65,7 @@ class OperationModes:
             description="Máxima velocidade — pesquisas rápidas sem deep research. "
                         "Ideal para consultas factuais simples com prazo curto.",
             searchers=["google", "brave", "searxng", "duckduckgo"],
-            scrapers=["firecrawl", "jina", "curl_impersonate"],
+            scrapers=["firecrawl", "jina", "curl_impersonate", "playwright"],
             confidence_threshold=0.50,
             max_depth=1,
             enable_auditor=False,
@@ -150,7 +150,7 @@ class OperationModes:
             ],
             scrapers=[
                 "firecrawl", "spider", "steel", "jina",
-                "scrapingbee", "scrapingant", "zenrows", "curl_impersonate",
+                "scrapingbee", "scrapingant", "zenrows", "curl_impersonate", "playwright",
             ],
             confidence_threshold=0.90,
             max_depth=4,

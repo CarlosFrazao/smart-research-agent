@@ -39,6 +39,17 @@ class Config(BaseSettings):
     steel_base_url: str = "https://api.steel.dev/v1"
     steel_enabled: bool = Field(default=False)
 
+    # ── Anti-Blocking (Bloco 5) ───────────────────────────────────────────────
+    playwright_enabled: bool = Field(default=False)
+    playwright_headless: bool = Field(default=True)
+
+    captcha_provider: Optional[str] = Field(default=None)   # "2captcha" | "capsolver"
+    captcha_api_key: Optional[str] = Field(default=None)
+
+    residential_proxy_provider: Optional[str] = Field(default=None)  # "brightdata" | "smartproxy"
+    residential_proxy_username: Optional[str] = Field(default=None)
+    residential_proxy_password: Optional[str] = Field(default=None)
+
     # --- Firecrawl v4.30.3 Feature Flags ---
     firecrawl_redact_pii: bool = Field(default=False)
     firecrawl_lockdown_mode: bool = Field(default=False)
