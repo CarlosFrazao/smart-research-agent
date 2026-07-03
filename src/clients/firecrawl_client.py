@@ -221,3 +221,146 @@ class FirecrawlClient:
         except Exception as e:
             logger.error(f"Firecrawl map erro em {url}: {e}")
             return []
+
+    # ------------------------------------------------------------------
+    # Agent Mode (Plano SRA v6.0 → item 3.5)
+    # ------------------------------------------------------------------
+
+    async def _post(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Chamada HTTP POST genérica à API Firecrawl. Retorna {} se API key ausente."""
+        if not self.api_key:
+            return {}
+        import aiohttp
+        base = self.base_url or "https://api.firecrawl.dev"
+        url = f"{base}{endpoint}"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                    if resp.status >= 400:
+                        text = await resp.text()
+                        logger.warning(f"Firecrawl POST {endpoint} → {resp.status}: {text[:200]}")
+                        return {}
+                    return await resp.json()
+        except Exception as exc:
+            logger.warning(f"Firecrawl._post {endpoint} falhou: {exc}")
+            return {}
+
+    async def agent_search(
+        self,
+        task: str,
+        max_steps: int = 10,
+        timeout: int = 60,
+    ) -> Dict[str, Any]:
+        """
+        Firecrawl Agent Mode — pesquisa baseada em tarefa com raciocínio multi-step.
+        Retorna dict com 'answer', 'sources', 'steps'. Retorna {} sem crash se API key ausente.
+        """
+        if not self.api_key:
+            return {}
+        # Tenta usar SDK v4 se disponível (app.agent_search)
+        if self.app and hasattr(self.app, "agent_search"):
+            try:
+                result = await asyncio.to_thread(
+                    self.app.agent_search,
+                    task,
+                    max_steps=max_steps,
+                    timeout=timeout * 1000,
+                )
+                if hasattr(result, "model_dump"):
+                    return result.model_dump()
+                return result if isinstance(result, dict) else {}
+            except Exception as exc:
+                logger.warning(f"FirecrawlClient.agent_search SDK falhou ({exc}). Tentando REST...")
+        # Fallback REST
+        payload = {"prompt": task, "maxSteps": max_steps, "timeout": timeout * 1000}
+        return await self._post("/v1/agent", payload)
+
+    async def interact(
+        self,
+        url: str,
+        instructions: List[str],
+        wait_ms: int = 1000,
+    ) -> Dict[str, Any]:
+        """
+        Firecrawl Interact — executa sequência de instruções de browser num site.
+        Retorna dict com 'result', 'screenshots'. Retorna {} sem crash se API key ausente.
+        """
+        if not self.api_key:
+            return {}
+        if self.app and hasattr(self.app, "interact"):
+            try:
+                result = await asyncio.to_thread(
+                    self.app.interact,
+                    url,
+                    instructions=instructions,
+                    wait=wait_ms,
+                )
+                if hasattr(result, "model_dump"):
+                    return result.model_dump()
+                return result if isinstance(result, dict) else {}
+            except Exception as exc:
+                logger.warning(f"FirecrawlClient.interact SDK falhou ({exc}). Tentando REST...")
+        payload = {"url": url, "instructions": instructions, "wait": wait_ms}
+        return await self._post("/v1/interact", payload)
+
+    async def map_domain(self, url: str, limit: int = 1000) -> List[str]:
+        """
+        Firecrawl map completo de domínio — retorna lista de URLs encontradas.
+        Retorna [] sem crash se API key ausente.
+        """
+        if not self.api_key:
+            return []
+        if self.app and hasattr(self.app, "map_url"):
+            try:
+                result = await self._with_retry(
+                    asyncio.to_thread,
+                    self.app.map_url,
+                    url,
+                    limit=limit,
+                )
+                if hasattr(result, "links"):
+                    return result.links or []
+                if hasattr(result, "model_dump"):
+                    return result.model_dump().get("links", [])
+                if isinstance(result, dict):
+                    return result.get("links", [])
+                return []
+            except Exception as exc:
+                logger.warning(f"FirecrawlClient.map_domain falhou ({exc}). Tentando REST...")
+        data = await self._post("/v1/map", {"url": url, "limit": limit})
+        return data.get("links", [])
+
+    async def batch_scrape(
+        self,
+        urls: List[str],
+        formats: Optional[List[str]] = None,
+        concurrency: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Scraping paralelo de múltiplas URLs. Retorna lista de dicts com resultado de cada URL.
+        Retorna [] sem crash se API key ausente.
+        """
+        if not self.api_key or not urls:
+            return []
+        formats = formats or ["markdown"]
+        # Tenta batch endpoint REST
+        payload = {"urls": urls, "formats": formats}
+        data = await self._post("/v1/batch/scrape", payload)
+        if data:
+            items = data.get("data", data.get("results", []))
+            if isinstance(items, list):
+                return items
+        # Fallback: scrape individual com semáforo
+        import asyncio as _aio
+        sem = _aio.Semaphore(concurrency)
+
+        async def _one(url: str) -> Dict[str, Any]:
+            async with sem:
+                try:
+                    return await self._direct_scrape_call(url, formats=formats)
+                except Exception:
+                    return {}
+
+        results = await _aio.gather(*[_one(u) for u in urls], return_exceptions=False)
+        return list(results)
