@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
 from src.utils.http_client import HTTPClient
@@ -111,7 +111,7 @@ class GitHubSearcher(BaseSearcher):
 
         return results
 
-    async def search_code(self, query: str, language: str = None) -> List[SearchResult]:
+    async def search_code(self, query: str, language: Optional[str] = None) -> List[SearchResult]:
 
         """Code Search via GitHub API — busca conteúdo dentro de arquivos."""
         code_search_url = "https://api.github.com/search/code"
@@ -154,25 +154,25 @@ class GitHubSearcher(BaseSearcher):
             logger.warning(f"GitHub Code Search erro: {e}")
             return []
 
-    def normalize(self, item: dict) -> SearchResult:
-        updated_at = item.get("pushed_at", item.get("updated_at", ""))
-        license_info = item.get("license") or {}
+    def normalize(self, raw_result: Any) -> SearchResult:
+        updated_at = raw_result.get("pushed_at", raw_result.get("updated_at", ""))
+        license_info = raw_result.get("license") or {}
 
         return SearchResult(
             source="github",
-            title=item.get("full_name", ""),
-            url=item.get("html_url", ""),
-            description=item.get("description", "") or "",
+            title=raw_result.get("full_name", ""),
+            url=raw_result.get("html_url", ""),
+            description=raw_result.get("description", "") or "",
             metrics={
-                "stars": item.get("stargazers_count", 0),
-                "forks": item.get("forks_count", 0),
-                "open_issues": item.get("open_issues_count", 0),
-                "language": item.get("language"),
+                "stars": raw_result.get("stargazers_count", 0),
+                "forks": raw_result.get("forks_count", 0),
+                "open_issues": raw_result.get("open_issues_count", 0),
+                "language": raw_result.get("language"),
                 "updated_at": updated_at,
-                "created_at": item.get("created_at", ""),
+                "created_at": raw_result.get("created_at", ""),
                 "license": license_info.get("spdx_id") if license_info else None,
-                "topics": item.get("topics", []),
-                "watchers": item.get("watchers_count", 0),
+                "topics": raw_result.get("topics", []),
+                "watchers": raw_result.get("watchers_count", 0),
             },
-            raw=item,
+            raw=raw_result,
         )
