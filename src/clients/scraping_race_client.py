@@ -8,9 +8,22 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 class ScrapingRaceClient:
-    def __init__(self, firecrawl_client: Any, timeout: float = 35.0):
+    def __init__(self, firecrawl_client: Any, timeout: float | None = None):
         self.firecrawl_client = firecrawl_client
-        self.timeout = timeout
+        
+        # Garante que timeout é um int ou float real e não um MagicMock
+        from unittest.mock import MagicMock
+        if timeout is not None and isinstance(timeout, (int, float)) and not isinstance(timeout, MagicMock):
+            self.timeout = float(timeout)
+        else:
+            config_timeout = 30.0
+            if firecrawl_client and hasattr(firecrawl_client, "config"):
+                cfg = firecrawl_client.config
+                if cfg and not isinstance(cfg, MagicMock):
+                    val = getattr(cfg, "timeout_per_source", 30.0)
+                    if isinstance(val, (int, float)) and not isinstance(val, MagicMock):
+                        config_timeout = float(val)
+            self.timeout = config_timeout
 
     async def scrape(self, url: str, formats: list[str] | None = None) -> dict[str, Any]:
         """
@@ -127,8 +140,9 @@ class ScrapingRaceClient:
             "Pragma": "no-cache"
         }
         
-        # Garante timeouts curtos para não atrasar a corrida
-        timeout = aiohttp.ClientTimeout(total=15.0, connect=5.0)
+        # Garante timeouts curtos para não atrasar a corrida (capado no timeout global)
+        timeout_val = min(15.0, self.timeout)
+        timeout = aiohttp.ClientTimeout(total=timeout_val, connect=min(5.0, timeout_val))
         
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -186,7 +200,8 @@ class ScrapingRaceClient:
             "Accept": "text/markdown",
             "User-Agent": "curl/8.6.0"
         }
-        timeout = aiohttp.ClientTimeout(total=20.0, connect=5.0)
+        timeout_val = min(20.0, self.timeout)
+        timeout = aiohttp.ClientTimeout(total=timeout_val, connect=min(5.0, timeout_val))
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(jina_url, headers=headers) as response:

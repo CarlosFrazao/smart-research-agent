@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import logging
 import re
+from datetime import datetime, UTC
+from typing import Any
 
 from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
+# --- Padrões do V1 ---
 _TRUSTED_DOMAINS = frozenset({
     "github.com", "arxiv.org", "reddit.com", "news.ycombinator.com",
     "stackoverflow.com", "docs.python.org", "developer.mozilla.org",
@@ -37,8 +42,38 @@ _DATE_PATTERN = re.compile(
 )
 
 _URL_PATTERN = re.compile(r"https?://[^\s\"\'<>]+")
-
 _REPETITION_THRESHOLD = 0.30
+
+# --- Padrões do V2 ---
+_FACT_PATTERNS = re.compile(
+    r"\b(?:according\s+to|estudos\s+mostram|pesquisa\s+indica|dados\s+de|statistics\s+show|survey\s+found|report\s+says|in\s+\d{4}|em\s+\d{4})\b|"
+    r"\b\d+(?:[\.,]\d+)?\s*%|"
+    r"\b\d+\s+(?:million|billion|thousand|milhões|bilhões)\b|"
+    r"\b(?:source|fonte|referência|published|publicado)\b",
+    re.IGNORECASE,
+)
+
+_OPINION_PATTERNS = re.compile(
+    r"\b(?:I\s+think|I\s+believe|in\s+my\s+opinion|acredito|acho\s+que|na\s+minha\s+opinião)\b|"
+    r"\b(?:arguably|seems\s+to|appears\s+to|might\s+be|could\s+be)\b|"
+    r"\b(?:many\s+people\s+think|some\s+argue|critics\s+say|defensores\s+argumentam)\b",
+    re.IGNORECASE,
+)
+
+_STATISTICS_PATTERNS = re.compile(
+    r"\b\d+(?:[\.,]\d+)?\s*%|"
+    r"\b\d+\s*(?:percent|porcento)\b|"
+    r"\b\d+\s*(?:users|utilizadores|respondents|entrevistados)\b|"
+    r"\b(?:median|average|mean|média|mediana|variância|desvio\s+padrão|correlation|correlação|p-value|statistical)\b",
+    re.IGNORECASE,
+)
+
+_YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
+_FRESHNESS_PENALTY_YEARS = 3
+
+
+def _get_current_year() -> int:
+    return datetime.now(UTC).year
 
 
 class ConfidenceScorer:
@@ -65,7 +100,6 @@ class ConfidenceScorer:
             score -= 0.20
             flags.append("untrusted_domain")
 
-        # GitHub repos and HN posts typically have short descriptions — don't penalize
         CODE_SOURCES = {"github", "hackernews", "awesome"}
         if word_count >= 300:
             score += 0.15
@@ -76,7 +110,6 @@ class ConfidenceScorer:
             score -= 0.10
             flags.append("content_brief")
 
-        # Bonus for code/community sources with engagement metrics
         if result.source == "github":
             stars = result.metrics.get("stars", 0)
             if stars > 100:
@@ -122,10 +155,7 @@ class ConfidenceScorer:
         results: list[SearchResult],
         cross_validate: bool = True,
     ) -> list[SearchResult]:
-        """
-        Scores a list of SearchResults.
-        When cross_validate=True, also checks for contradictions between results.
-        """
+        """Scores a list of SearchResults."""
         scored = [await self.score_result(r) for r in results]
 
         if cross_validate and len(scored) > 1:
@@ -144,11 +174,6 @@ class ConfidenceScorer:
     def _detect_contradictions(
         self, results: list[SearchResult]
     ) -> dict[str, list[str]]:
-        """
-        Detects when two results make opposing claims about the same subject.
-        Uses simple heuristic: same title keywords + opposing sentiment signals.
-        Returns {result_url: [urls_that_contradict_it]}.
-        """
         positive_signals = re.compile(
             r"\b(fast|better|best|recommended|popular|reliable|stable|"
             r"rápido|melhor|recomendado|popular|confiável|estável)\b",
@@ -186,12 +211,10 @@ class ConfidenceScorer:
         return contradictions
 
     def _extract_domain(self, url: str) -> str:
-        """Extracts the bare domain (e.g. 'github.com') from a URL."""
         match = re.search(r"https?://(?:www\.)?([^/\s?#]+)", url)
         return match.group(1).lower() if match else ""
 
     def _has_repetition(self, text: str) -> bool:
-        """Returns True when repeated phrases exceed REPETITION_THRESHOLD of the text."""
         if not text:
             return False
         words = text.lower().split()
@@ -204,7 +227,6 @@ class ConfidenceScorer:
         return unique_ratio < (1.0 - _REPETITION_THRESHOLD)
 
     def _classify_evidence_quality(self, score: float) -> str:
-        """Maps numeric score to evidence quality label."""
         if score >= 0.75:
             return "verified"
         elif score >= 0.55:
@@ -212,3 +234,166 @@ class ConfidenceScorer:
         elif score >= 0.35:
             return "inferred"
         return "unknown"
+
+
+class ConfidenceScorerV2(ConfidenceScorer):
+    """
+    Extensão do ConfidenceScorer v1 com:
+      - Classificação factual (fact/opinion/statistics) por heurística + LLM opcional
+      - Detecção de circularidade de links entre fontes
+      - Penalização por frescor de conteúdo
+    """
+
+    def __init__(self, llm_client=None):
+        super().__init__()
+        self.llm = llm_client
+
+    async def score_result(self, result: SearchResult) -> SearchResult:
+        result = await super().score_result(result)
+        content = result.description or ""
+
+        # Classificação Factual
+        claim_type, claim_confidence = self._classify_claim(content, result.title or "")
+        result.metrics["claim_type"] = claim_type
+        result.metrics["claim_confidence"] = claim_confidence
+
+        if claim_type == "fact":
+            result.confidence_score = min(1.0, result.confidence_score + 0.08)
+        elif claim_type == "opinion":
+            result.confidence_score = max(0.0, result.confidence_score - 0.05)
+            if "opinion_content" not in result.hallucination_flags:
+                result.hallucination_flags.append("opinion_content")
+        elif claim_type == "statistics":
+            result.confidence_score = min(1.0, result.confidence_score + 0.12)
+
+        # Frescor do Conteúdo
+        freshness_score, freshness_year = self._calculate_freshness(content)
+        result.metrics["freshness_year"] = freshness_year
+        result.metrics["freshness_score"] = freshness_score
+
+        if freshness_score < 0.5:
+            penalty = round((0.5 - freshness_score) * 0.20, 3)
+            result.confidence_score = max(0.0, result.confidence_score - penalty)
+            if "stale_content" not in result.hallucination_flags:
+                result.hallucination_flags.append("stale_content")
+
+        result.confidence_score = round(max(0.0, min(1.0, result.confidence_score)), 3)
+        result.evidence_quality = self._classify_evidence_quality(result.confidence_score)
+
+        return result
+
+    async def score_batch(
+        self,
+        results: list[SearchResult],
+        cross_validate: bool = True,
+        detect_circularity: bool = True,
+    ) -> list[SearchResult]:
+        scored = [await self.score_result(r) for r in results]
+
+        if cross_validate and len(scored) > 1:
+            contradictions_map = self._detect_contradictions(scored)
+            for result in scored:
+                if result.url in contradictions_map:
+                    result.contradictions = contradictions_map[result.url]
+                    if "contradicted_by_other_sources" not in result.hallucination_flags:
+                        result.hallucination_flags.append("contradicted_by_other_sources")
+                    result.confidence_score = round(
+                        max(0.0, result.confidence_score - 0.10), 3
+                    )
+
+        if detect_circularity and len(scored) > 1:
+            circular_groups = self._detect_link_circularity(scored)
+            for result in scored:
+                if result.url in circular_groups:
+                    circular_partners = circular_groups[result.url]
+                    result.metrics["circular_sources"] = circular_partners
+                    if "circular_reference" not in result.hallucination_flags:
+                        result.hallucination_flags.append("circular_reference")
+                    result.confidence_score = round(
+                        max(0.0, result.confidence_score - 0.07), 3
+                    )
+                    logger.info(
+                        f"Circularidade detectada: {result.url[:60]} referencia {len(circular_partners)} parceiros"
+                    )
+
+        return scored
+
+    def _classify_claim(self, content: str, title: str) -> tuple[str, float]:
+        text = f"{title} {content}"
+        stat_hits = sum(1 for _ in _STATISTICS_PATTERNS.finditer(text))
+        fact_hits = sum(1 for _ in _FACT_PATTERNS.finditer(text))
+        opinion_hits = sum(1 for _ in _OPINION_PATTERNS.finditer(text))
+
+        total = stat_hits + fact_hits + opinion_hits
+
+        if total == 0:
+            return ("unknown", 0.4)
+
+        if stat_hits > 0:
+            confidence = min(1.0, (stat_hits * 1.5) / max(total, 1))
+            return ("statistics", round(confidence, 2))
+        elif fact_hits >= opinion_hits:
+            confidence = min(1.0, fact_hits / max(total, 1))
+            return ("fact", round(confidence, 2))
+        else:
+            confidence = min(1.0, opinion_hits / max(total, 1))
+            return ("opinion", round(confidence, 2))
+
+    def _calculate_freshness(self, content: str) -> tuple[float, int | None]:
+        years_found = [int(y) for y in _YEAR_PATTERN.findall(content)]
+
+        if not years_found:
+            return (0.7, None)
+
+        most_recent = max(years_found)
+        age = _get_current_year() - most_recent
+
+        if age <= 0:
+            return (1.0, most_recent)
+        elif age == 1:
+            return (0.90, most_recent)
+        elif age == 2:
+            return (0.75, most_recent)
+        elif age <= _FRESHNESS_PENALTY_YEARS:
+            return (0.60, most_recent)
+        elif age <= 5:
+            return (0.40, most_recent)
+        elif age <= 8:
+            return (0.25, most_recent)
+        else:
+            return (0.10, most_recent)
+
+    def _detect_link_circularity(
+        self, results: list[SearchResult]
+    ) -> dict[str, list[str]]:
+        _url_re = re.compile(r"https?://[^\s\"'<>]+")
+        citation_graph: dict[str, set] = {}
+
+        all_result_urls = {r.url for r in results if r.url}
+
+        for result in results:
+            if not result.url:
+                continue
+            content = result.description or ""
+            raw_cited = _url_re.findall(content)
+            
+            cited = set()
+            for url in raw_cited:
+                cleaned_url = url.rstrip(".,;:!?()[]{}")
+                cited.add(cleaned_url)
+                
+            cited_internal = cited & all_result_urls - {result.url}
+            citation_graph[result.url] = cited_internal
+
+        circular: dict[str, list[str]] = {}
+
+        urls = list(citation_graph.keys())
+        for i, url_a in enumerate(urls):
+            for url_b in urls[i + 1:]:
+                a_cites_b = url_b in citation_graph.get(url_a, set())
+                b_cites_a = url_a in citation_graph.get(url_b, set())
+                if a_cites_b and b_cites_a:
+                    circular.setdefault(url_a, []).append(url_b)
+                    circular.setdefault(url_b, []).append(url_a)
+
+        return circular

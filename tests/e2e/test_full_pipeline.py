@@ -77,7 +77,7 @@ async def test_circuit_breaker_integration():
 @pytest.mark.asyncio
 async def test_smart_cache_ttl():
     """Valida a expiração temporal do cache (TTL)."""
-    from src.utils.smart_cache import SmartCache
+    from src.cache import Cache as SmartCache
     
     cache = SmartCache()  # Memória apenas
     await cache.set("test_key", {"data": "value"}, ttl_seconds=1)

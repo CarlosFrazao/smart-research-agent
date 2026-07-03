@@ -4,7 +4,7 @@ import uuid
 import shutil
 import time
 from unittest.mock import AsyncMock, MagicMock
-from src.memory.orvix_memory_v2 import OrvixMemoryV2
+from src.memory.orvix_memory import OrvixMemoryV2
 from src.knowledge_graph import SemanticKnowledgeGraph, Triple
 from src.clients.llm_client import LLMClient
 

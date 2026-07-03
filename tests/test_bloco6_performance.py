@@ -189,7 +189,8 @@ async def test_search_service_serpapi_fallback():
     
     # Mock do cache
     mock_cache = MagicMock()
-    mock_cache.get.return_value = None
+    mock_cache.get = AsyncMock(return_value=None)
+    mock_cache.set = AsyncMock()
     mock_orch.cache = mock_cache
     
     # Mock dos searchers disponíveis

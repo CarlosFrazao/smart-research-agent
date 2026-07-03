@@ -64,32 +64,35 @@ def test_query_cleaner_disambiguate():
     assert any("java" in r for r in results)
 
 
-def test_cache_set_get():
-    from src.utils.cache import Cache
+@pytest.mark.asyncio
+async def test_cache_set_get():
+    from src.cache import Cache
     with tempfile.TemporaryDirectory() as tmpdir:
-        cache = Cache(cache_dir=tmpdir, ttl_hours=1)
-        cache.set("test", "my_query", {"data": "value"})
-        result = cache.get("test", "my_query")
+        cache = Cache(cache_dir=tmpdir)
+        await cache.set("test", "my_query", {"data": "value"})
+        result = await cache.get("test", "my_query")
         assert result == {"data": "value"}
 
 
-def test_cache_miss():
-    from src.utils.cache import Cache
+@pytest.mark.asyncio
+async def test_cache_miss():
+    from src.cache import Cache
     with tempfile.TemporaryDirectory() as tmpdir:
         cache = Cache(cache_dir=tmpdir)
-        result = cache.get("test", "nonexistent_query")
+        result = await cache.get("test", "nonexistent_query")
         assert result is None
 
 
-def test_cache_invalidate():
-    from src.utils.cache import Cache
+@pytest.mark.asyncio
+async def test_cache_invalidate():
+    from src.cache import Cache
     with tempfile.TemporaryDirectory() as tmpdir:
         cache = Cache(cache_dir=tmpdir)
-        cache.set("prefix", "q1", "val1")
-        cache.set("prefix", "q2", "val2")
-        cache.invalidate("prefix")
-        assert cache.get("prefix", "q1") is None
-        assert cache.get("prefix", "q2") is None
+        await cache.set("prefix", "q1", "val1")
+        await cache.set("prefix", "q2", "val2")
+        await cache.invalidate("prefix")
+        assert await cache.get("prefix", "q1") is None
+        assert await cache.get("prefix", "q2") is None
 
 
 def test_deduplicator_by_url(sample_search_result):

@@ -126,7 +126,7 @@ class SearchService:
             if rss and rss.enabled:
                 primary_query = queries[0].query
                 cache_key = f"rss:{primary_query}"
-                cached = self.cache.get("search", cache_key)
+                cached = await self.cache.get("search", cache_key)
                 if cached is not None:
                     logger.debug(f"Cache hit para RSS: {cache_key}")
                     deserialized = []
@@ -159,7 +159,7 @@ class SearchService:
                     continue
                 eq.query = sanitized
                 cache_key = f"{source_name}:{eq.query}"
-                cached = self.cache.get("search", cache_key)
+                cached = await self.cache.get("search", cache_key)
                 if cached is not None:
                     logger.debug(f"Cache hit: {cache_key}")
                     deserialized = []
@@ -184,7 +184,7 @@ class SearchService:
                 source_name, query_str, res = await task
                 results.extend(res)
                 if res:
-                    self.cache.set(
+                    await self.cache.set(
                         "search",
                         f"{source_name}:{query_str}",
                         [r.__dict__ for r in res],
@@ -214,7 +214,7 @@ class SearchService:
                                     raw=r
                                 ))
                             results.extend(normalized_res)
-                            self.cache.set(
+                            await self.cache.set(
                                 "search",
                                 f"serpapi:{q_str}",
                                 [r.__dict__ for r in normalized_res],

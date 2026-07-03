@@ -30,6 +30,21 @@
 - **Verificação Estática**: Executado `mypy src/ --ignore-missing-imports` para certificar que o erro em `deduplicator.py:55` foi resolvido de forma definitiva.
 - **Suite pytest**: Executados todos os 763 testes com 100% de sucesso: **763 passed**.
 
+
+---
+
+### Sessão: 2026-07-03 05:46 — Bloco 3: FEAT-B03 — Resiliência: Timeouts HTTP, Consolidação de Duplicatas e Caches (MEL-02, MEL-04, INFRA-04)
+
+#### 🎯 Entregas
+- **Timeouts HTTP Dinâmicos (MEL-02)**: Configurado timeout dinâmico em `reddit_searcher.py` e construtor do `ScrapingRaceClient` para usar o timeout configurado de forma resiliente, capando timeouts locais de direct_http e Jina no limite global configurado.
+- **Consolidação de Módulos Scorer e Memory (MEL-04)**:
+  - Unificados `confidence_scorer_v2.py` e `confidence_scorer.py` sob `src/confidence_scorer.py` mantendo total retrocompatibilidade e expondo `ConfidenceScorer` e `ConfidenceScorerV2`. Deletado `confidence_scorer_v2.py` e atualizados os testes.
+  - Unificados `orvix_memory_v2.py` e `orvix_memory.py` sob `src/memory/orvix_memory.py`. Deletado `orvix_memory_v2.py` e atualizados os testes.
+- **Consolidação de Infraestrutura de Caches (INFRA-04)**: Unificados os módulos de cache síncrono e assíncrono sob `src/cache/cache.py` com compressão `gzip` síncrona rodando em `asyncio.to_thread` para evitar bloqueios no event loop, e suporte a fallback RAM/Redis. Deletado `smart_cache.py` e atualizados os imports de `search_service.py`, `orchestrator.py` e das suítes de teste.
+
+#### 🧪 Testes e Validação
+- **Execução**: Suite unitária/E2E completa rodada com sucesso absoluto: **763 passed**. Todos os testes de cache e memória passaram sem regressões de nenhuma natureza.
+
 #### 🔧 Próximo Bloco
-- Bloco 3: FEAT-B03 — Resiliência: Timeouts HTTP, Consolidação de Duplicatas e Caches (MEL-02, MEL-04, INFRA-04)
-- Agente: @api-architect-pro / @code-archaeologist
+- Bloco 4: FEAT-B04 — Correções de Mapeamento, CLI & Exibição de Custo (MEL-06, INFRA-01)
+- Agente: @ceo-agent

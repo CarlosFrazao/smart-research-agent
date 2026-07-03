@@ -10,7 +10,7 @@ from src.utils.circuit_breaker import (
     CircuitBreaker, CircuitState, CircuitBreakerOpen, CircuitBreakerRegistry
 )
 from src.utils.retry import with_retry, RetryConfig
-from src.utils.smart_cache import SmartCache
+from src.cache import Cache as SmartCache
 
 
 # ─────────────────────────── CIRCUIT BREAKER TESTS ───────────────────────────

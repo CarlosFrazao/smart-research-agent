@@ -5,14 +5,14 @@ from typing import Any
 from src.anti_blocking.residential_proxy import ResidentialProxyProvider
 from src.clients.llm_client import LLMClient, LLMProvider
 from src.clients.smart_model_router import get_router
-from src.confidence_scorer_v2 import ConfidenceScorerV2
+from src.confidence_scorer import ConfidenceScorerV2
 from src.config import Config
 from src.conflict_detector import ConflictDetector
 from src.evidence_graph import EvidenceGraph
 from src.gap_detector import GapDetector
 from src.intent_analyzer import IntentAnalyzer
 from src.link_verifier import LinkVerifier
-from src.memory.orvix_memory_v2 import OrvixMemoryV2
+from src.memory.orvix_memory import OrvixMemoryV2
 from src.monitoring.health_monitor import HealthMonitor
 from src.operation_modes import OperationConfig, OperationModes
 from src.peer_review_agent import PeerReviewAgent
@@ -50,7 +50,7 @@ from src.services.search_service import SearchService
 from src.source_planner import SourcePlanner
 from src.synthesizer import Synthesizer
 from src.types import ExpandedQuery, ResearchMetadata
-from src.utils.cache import Cache
+from src.cache import Cache
 from src.utils.dead_letter_queue import DeadLetterQueue
 from src.utils.logging import setup_logger
 
@@ -114,7 +114,7 @@ class Orchestrator:
         self.cache = Cache(cache_dir=self.config.cache_dir)
 
         # SmartCache — Redis → memória, TTL por tipo de fonte
-        from src.utils.smart_cache import SmartCache
+        from src.cache import Cache as SmartCache
         redis_url = getattr(self.config, "redis_url", None)
         self.smart_cache = SmartCache(redis_url=redis_url)
 

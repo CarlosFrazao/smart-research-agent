@@ -189,7 +189,7 @@ class RedditSearcher(BaseSearcher):
             connector = aiohttp.TCPConnector(ssl=False)
             async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(
-                    self.base_url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=20)
+                    self.base_url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=self.timeout)
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
