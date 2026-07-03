@@ -55,6 +55,7 @@ from src.services.search_service import SearchService
 from src.services.reasoning_service import ReasoningService
 from src.services.memory_service import MemoryService
 from src.services.report_service import ReportService
+from src.search.semantic_reranker import SemanticReranker
 
 logger = setup_logger("orchestrator")
 
@@ -103,6 +104,8 @@ class Orchestrator:
         self.conflict_detector = ConflictDetector(llm_client=self.llm)
         self.peer_reviewer = PeerReviewAgent(llm_client=self.llm)
         self.evidence_graph = EvidenceGraph()
+        # SemanticReranker — lazy: modelo carregado na primeira chamada de rerank()
+        self.semantic_reranker = SemanticReranker()
 
         from src.security.llm_sanitizer import LLMSanitizer
         self.sanitizer = LLMSanitizer(self.llm)
@@ -265,6 +268,16 @@ class Orchestrator:
             }
             searchers["playwright"] = PlaywrightSearcher(playwright_cfg)
 
+        # SerpAPI — fallback de último recurso (registro condicional)
+        serpapi_key = getattr(self.config, "serpapi_api_key", None)
+        serpapi_enabled = getattr(self.config, "serpapi_enabled", True)
+        if serpapi_enabled and serpapi_key:
+            from src.search.serpapi_searcher import SerpAPISearcher
+            searchers["serpapi"] = SerpAPISearcher(api_key=serpapi_key)
+            logger.info("SerpAPISearcher registrado como fallback de último recurso")
+        else:
+            logger.debug("SerpAPISearcher desabilitado (SERPAPI_API_KEY ausente ou serpapi_enabled=false)")
+
         return searchers
 
     async def research(self, query: str, formats: Optional[List[Any]] = None) -> str:
@@ -304,8 +317,8 @@ class Orchestrator:
         all_results = await self.search.execute(expanded_queries, source_plan, intent)
         logger.info(f"  {len(all_results)} resultados brutos")
 
-        logger.info("Passo 5/9: Ranqueando resultados...")
-        ranked = await self.reasoning.rank(all_results)
+        logger.info("Passo 5/9: Ranqueando e re-ranqueando semanticamente...")
+        ranked = await self.reasoning.rank(all_results, query=query)
 
         logger.info("Passo 5b/9: Scoring de confianca e anti-hallucination...")
         scored = await self.confidence_scorer.score_batch(ranked, cross_validate=True)
@@ -357,7 +370,7 @@ class Orchestrator:
                 for q in gap.new_queries
             ]
             new_results = await self.search.execute(gap_queries, source_plan, intent)
-            new_ranked = await self.reasoning.rank(new_results)
+            new_ranked = await self.reasoning.rank(new_results, query=query)
             ranked.extend(new_ranked)
             ranked.sort(key=lambda x: x.score, reverse=True)
             iteration += 1

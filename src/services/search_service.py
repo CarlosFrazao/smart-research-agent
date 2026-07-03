@@ -193,6 +193,36 @@ class SearchService:
             except Exception as e:
                 logger.warning(f"Busca falhou: {e}")
 
+        # Fallback de último recurso: SerpAPI
+        if not results and "serpapi" in self.searchers:
+            serpapi = self.searchers["serpapi"]
+            if serpapi.is_available:
+                logger.info("Executando fallback de último recurso via SerpAPISearcher...")
+                from urllib.parse import urlparse
+                fallback_queries = [q.query for q in queries if q.priority == "alta"] or [queries[0].query] if queries else []
+                for q_str in fallback_queries:
+                    try:
+                        res = await serpapi.search(q_str)
+                        if res:
+                            normalized_res = []
+                            for r in res:
+                                normalized_res.append(SearchResult(
+                                    source="serpapi",
+                                    title=r.get("title", ""),
+                                    url=r.get("url", ""),
+                                    description=r.get("snippet", ""),
+                                    metrics={"source_domain": urlparse(r.get("url", "")).netloc},
+                                    raw=r
+                                ))
+                            results.extend(normalized_res)
+                            self.cache.set(
+                                "search",
+                                f"serpapi:{q_str}",
+                                [r.__dict__ for r in normalized_res],
+                            )
+                    except Exception as ex:
+                        logger.error(f"Fallback SerpAPI falhou para '{q_str}': {ex}")
+
         return results
 
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):

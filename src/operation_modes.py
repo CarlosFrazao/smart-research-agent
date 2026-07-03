@@ -64,7 +64,7 @@ class OperationModes:
             name="guerrilha",
             description="Máxima velocidade — pesquisas rápidas sem deep research. "
                         "Ideal para consultas factuais simples com prazo curto.",
-            searchers=["google", "brave", "searxng", "duckduckgo"],
+            searchers=["google", "brave", "searxng", "duckduckgo", "serpapi"],
             scrapers=["firecrawl", "jina", "curl_impersonate", "playwright"],
             confidence_threshold=0.50,
             max_depth=1,
@@ -80,7 +80,7 @@ class OperationModes:
             name="cirurgia",
             description="Máxima precisão — auditoria cruzada e verificação de cada claim. "
                         "Indicado para pesquisas que exigem alta confiabilidade.",
-            searchers=["google", "brave", "arxiv", "github", "stackoverflow", "hackernews", "reddit"],
+            searchers=["google", "brave", "arxiv", "github", "stackoverflow", "hackernews", "reddit", "serpapi"],
             scrapers=["firecrawl", "spider", "steel", "jina", "scrapingbee", "zenrows"],
             confidence_threshold=0.85,
             max_depth=3,
@@ -146,7 +146,7 @@ class OperationModes:
                         "deep research com auditoria iterativa. Cobertura máxima, custo máximo.",
             searchers=[
                 "google", "brave", "searxng", "arxiv", "github",
-                "stackoverflow", "hackernews", "reddit", "producthunt", "devto", "medium",
+                "stackoverflow", "hackernews", "reddit", "producthunt", "devto", "medium", "serpapi",
             ],
             scrapers=[
                 "firecrawl", "spider", "steel", "jina",
@@ -168,7 +168,7 @@ class OperationModes:
             description="Multi-Agent Debate — gera hipóteses opostas e as testa com pesquisa paralela. "
                         "Um juiz LLM avalia os argumentos e decide o vencedor. "
                         "Ideal para questões controversas, comparações e decisões estratégicas.",
-            searchers=["google", "brave", "arxiv", "github", "stackoverflow", "hackernews", "reddit"],
+            searchers=["google", "brave", "arxiv", "github", "stackoverflow", "hackernews", "reddit", "serpapi"],
             scrapers=["firecrawl", "jina"],
             confidence_threshold=0.75,
             max_depth=2,

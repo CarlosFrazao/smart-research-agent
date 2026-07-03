@@ -80,6 +80,8 @@ class HTTPClient:
                     raise ValueError(f"Método HTTP não suportado: {method}")
 
                 async with req_ctx as resp:
+                    # Alimenta o rate limiter adaptativo com o status real da resposta
+                    DomainRateLimiter.record(url, resp.status)
                     resp.raise_for_status()
                     content_type = resp.headers.get("Content-Type", "")
                     if "application/json" in content_type:

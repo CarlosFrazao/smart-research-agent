@@ -87,6 +87,10 @@ class Config(BaseSettings):
     cache_dir: str = "./.cache"
     log_level: str = "INFO"
 
+    # SerpAPI — fallback de último recurso para buscas na web
+    serpapi_api_key: Optional[str] = Field(default=None)
+    serpapi_enabled: bool = Field(default=True)
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     def get_llm_config(self) -> dict:

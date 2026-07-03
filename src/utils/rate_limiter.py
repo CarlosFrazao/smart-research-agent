@@ -22,14 +22,16 @@ class RateLimit:
 
 
 class TokenBucket:
-    """Algoritmo Token Bucket com controle assíncrono de concorrência."""
+    """Algoritmo Token Bucket com controle assíncrono e adaptação automática de taxa."""
 
     def __init__(self, rate: float, capacity: int):
-        self.rate = rate            # Tokens adicionados por segundo
+        self.rate = rate            # Tokens adicionados por segundo (adaptável)
+        self.initial_rate = rate    # Taxa original — usada como teto de recuperação
         self.capacity = capacity    # Capacidade máxima (burst)
         self.tokens = float(capacity)
         self.last_update = time.monotonic()
         self._lock = asyncio.Lock()
+        self._success_streak: int = 0   # Contagem de respostas bem-sucedidas consecutivas
 
     async def acquire(self) -> None:
         """Aguarda até que um token esteja disponível."""
@@ -47,6 +49,25 @@ class TokenBucket:
                 self.tokens = 0.0
             else:
                 self.tokens -= 1
+
+    def record(self, status_code: int) -> None:
+        """
+        Ajusta a taxa de requisições com base no código de resposta HTTP.
+        - 429 / 403 → reduz a taxa pela metade (mínimo 0.1 req/s)
+        - 2xx       → incrementa o streak; a cada 10 sucessos, aumenta 10% até o teto inicial
+        """
+        if status_code in (429, 403):
+            old = self.rate
+            self.rate = max(0.1, self.rate / 2)
+            self._success_streak = 0
+            logger.info(f"AdaptiveRateLimiter: {status_code} → taxa reduzida {old:.2f} → {self.rate:.2f} req/s")
+        elif 200 <= status_code < 300:
+            self._success_streak += 1
+            if self._success_streak >= 10:
+                old = self.rate
+                self.rate = min(self.initial_rate, self.rate * 1.1)
+                self._success_streak = 0
+                logger.debug(f"AdaptiveRateLimiter: 10 sucessos → taxa aumentada {old:.2f} → {self.rate:.2f} req/s")
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +109,19 @@ class DomainRateLimiter:
         except Exception as e:
             # Nunca bloquear a execução por falha no rate limiter
             logger.warning(f"DomainRateLimiter: erro inesperado para {url}: {e}")
+
+    @classmethod
+    def record(cls, url: str, status_code: int) -> None:
+        """
+        Notifica o bucket do domínio sobre o resultado de uma requisição.
+        Propaga para TokenBucket.record() que ajusta a taxa adaptativamente.
+        """
+        try:
+            domain = urlparse(url).netloc
+            bucket = cls._get_bucket(domain)
+            bucket.record(status_code)
+        except Exception as e:
+            logger.debug(f"DomainRateLimiter.record: erro ignorado para {url}: {e}")
 
     @classmethod
     def reset_all(cls) -> None:

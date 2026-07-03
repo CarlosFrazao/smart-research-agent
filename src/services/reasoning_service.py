@@ -65,8 +65,30 @@ class ReasoningService:
     async def expand_queries(self, query: str, intent) -> List[Any]:
         return await self.query_expander.expand(query, intent)
 
-    async def rank(self, results: List[Any]) -> List[Any]:
-        return await self.ranker.rank(results)
+    async def rank(self, results: List[Any], query: Optional[str] = None) -> List[Any]:
+        """
+        Ranqueia os resultados pelo score de qualidade clássico (ranker).
+        Se `query` for informado, aplica re-ranking semântico em seguida via SemanticReranker.
+        """
+        ranked = await self.ranker.rank(results)
+        if query and hasattr(self.orch, "semantic_reranker"):
+            try:
+                # Converte objetos SearchResult para dict para o reranker
+                as_dicts = [r.__dict__ if hasattr(r, "__dict__") else dict(r) for r in ranked]
+                reranked_dicts = await self.orch.semantic_reranker.rerank(query, as_dicts)
+                # Recria a ordem na lista original (preserva objetos originais, apenas reordena)
+                url_to_obj = {
+                    (r.url if hasattr(r, "url") else r.get("url", "")): r
+                    for r in ranked
+                }
+                ranked = [
+                    url_to_obj.get(d.get("url", ""), ranked[i])
+                    for i, d in enumerate(reranked_dicts)
+                ]
+            except Exception as e:
+                logger.warning(f"ReasoningService.rank: SemanticReranker falhou ({e}), mantendo ranking original")
+        return ranked
+
 
     async def calculate_overall_confidence(self, results: List[Any]) -> float:
         """
