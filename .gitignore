@@ -139,3 +139,5 @@ logs/
 *.jsonl
 .dlq/
 .test_cache/
+MagicMock/
+benchmark_results/

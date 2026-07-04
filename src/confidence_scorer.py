@@ -1,7 +1,15 @@
-"""Scorer de confianca de resultados de pesquisa usando heuristicas multi-dimensionais e LLM."""
+"""Scorer de confianca de resultados de pesquisa usando heuristicas multi-dimensionais e LLM.
+
+O LLM (quando injetado) e usado de forma seletiva e bounded: apenas para refinar a
+classificacao de tipo de afirmacao (fact/opinion/statistics) de conteudo textual
+ambiguo. Fontes estruturadas orientadas a API (github, hackernews, awesome) e
+casos onde a heuristica ja classifica com confianca nunca acionam o LLM — o
+scoring nesses casos permanece 100% heuristico, sem custo de rede/tokens.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import datetime, UTC
@@ -9,6 +17,12 @@ from datetime import datetime, UTC
 from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
+
+# Fontes com metadados objetivos vindos de API (contagens, votos, etc.) em vez de
+# prosa livre: nao ha o que uma classificacao de "tipo de afirmacao" agregaria aqui,
+# entao o scoring dessas fontes e sempre puramente heuristico (nunca aciona o LLM).
+_STRUCTURED_SOURCES = frozenset({"github", "hackernews", "awesome"})
+
 
 # --- Padrões do V1 ---
 _TRUSTED_DOMAINS = frozenset(
@@ -92,6 +106,17 @@ _STATISTICS_PATTERNS = re.compile(
 _YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 _FRESHNESS_PENALTY_YEARS = 3
 
+# --- Gate de uso do LLM (V2) ---
+# O LLM so e chamado quando o tipo heuristico e "unknown" (nenhum padrao bateu) ou
+# "opinion" (conteudo subjetivo por definicao). "fact"/"statistics" sao objetivos
+# pelo proprio padrao que os classificou (%, citacao, data, "segundo/according to"),
+# entao NUNCA acionam LLM — mesmo quando o numero de claim_confidence sai baixo, pois
+# essa formula e deliberadamente conservadora (dilui por hits de outras categorias)
+# e nao deve ser lida como "quao objetivo e o conteudo".
+_LLM_ELIGIBLE_CLAIM_TYPES = frozenset({"unknown", "opinion"})
+# Textos muito curtos nao tem sinal suficiente para justificar uma chamada de LLM.
+_MIN_WORDS_FOR_LLM_CLASSIFICATION = 15
+
 
 def _get_current_year() -> int:
     return datetime.now(UTC).year
@@ -121,13 +146,12 @@ class ConfidenceScorer:
             score -= 0.20
             flags.append("untrusted_domain")
 
-        CODE_SOURCES = {"github", "hackernews", "awesome"}
         if word_count >= 300:
             score += 0.15
-        elif word_count < 10 and result.source not in CODE_SOURCES:
+        elif word_count < 10 and result.source not in _STRUCTURED_SOURCES:
             score -= 0.30
             flags.append("content_too_short")
-        elif word_count < 50 and result.source not in CODE_SOURCES:
+        elif word_count < 50 and result.source not in _STRUCTURED_SOURCES:
             score -= 0.10
             flags.append("content_brief")
 
@@ -278,10 +302,25 @@ class ConfidenceScorerV2(ConfidenceScorer):
         result = await super().score_result(result)
         content = result.description or ""
 
-        # Classificação Factual
+        # Classificação Factual — heurística primeiro (grátis); LLM só se ambíguo
         claim_type, claim_confidence = self._classify_claim(content, result.title or "")
+        claim_source = "heuristic"
+
+        word_count = len(content.split())
+        if (
+            self.llm is not None
+            and result.source not in _STRUCTURED_SOURCES
+            and word_count >= _MIN_WORDS_FOR_LLM_CLASSIFICATION
+            and claim_type in _LLM_ELIGIBLE_CLAIM_TYPES
+        ):
+            refined = await self._refine_claim_with_llm(content, result.title or "")
+            if refined is not None:
+                claim_type, claim_confidence = refined
+                claim_source = "llm"
+
         result.metrics["claim_type"] = claim_type
         result.metrics["claim_confidence"] = claim_confidence
+        result.metrics["claim_source"] = claim_source
 
         if claim_type == "fact":
             result.confidence_score = min(1.0, result.confidence_score + 0.08)
@@ -316,7 +355,10 @@ class ConfidenceScorerV2(ConfidenceScorer):
         cross_validate: bool = True,
         detect_circularity: bool = True,
     ) -> list[SearchResult]:
-        scored = [await self.score_result(r) for r in results]
+        # gather (nao sequencial): score_result pode agora fazer uma chamada LLM real
+        # por item ambiguo, entao paralelizar evita empilhar N latencias de rede.
+        # asyncio.gather preserva a ordem da lista de entrada.
+        scored = list(await asyncio.gather(*(self.score_result(r) for r in results)))
 
         if cross_validate and len(scored) > 1:
             contradictions_map = self._detect_contradictions(scored)
@@ -371,6 +413,48 @@ class ConfidenceScorerV2(ConfidenceScorer):
         else:
             confidence = min(1.0, opinion_hits / max(total, 1))
             return ("opinion", round(confidence, 2))
+
+    async def _refine_claim_with_llm(
+        self, content: str, title: str
+    ) -> tuple[str, float] | None:
+        """Pede ao LLM para classificar o tipo de afirmação de um conteúdo ambíguo.
+
+        Só é chamado quando a heurística (`_classify_claim`) não teve confiança
+        suficiente. Retorna ``None`` (mantendo o valor heurístico) em caso de
+        qualquer falha — nunca derruba o scoring por causa de uma chamada LLM.
+        """
+        prompt = (
+            "Classifique o tipo de afirmação predominante no conteúdo abaixo.\n\n"
+            f"Título: {title}\n"
+            f"Conteúdo: {content[:800]}\n\n"
+            "Tipos possíveis:\n"
+            "- fact: afirmação verificável, com fonte, data ou referência objetiva\n"
+            "- statistics: contém números, percentuais ou dados estatísticos\n"
+            "- opinion: opinião pessoal, especulação ou julgamento subjetivo\n"
+            "- unknown: não é possível classificar com confiança\n"
+        )
+        schema = {
+            "type": "object",
+            "properties": {
+                "claim_type": {
+                    "type": "string",
+                    "enum": ["fact", "statistics", "opinion", "unknown"],
+                },
+                "confidence": {"type": "number"},
+            },
+            "required": ["claim_type", "confidence"],
+        }
+        try:
+            result = await self.llm.generate_structured(prompt, schema)
+            claim_type = result.get("claim_type", "unknown")
+            if claim_type not in ("fact", "statistics", "opinion", "unknown"):
+                claim_type = "unknown"
+            confidence = float(result.get("confidence", 0.5))
+            confidence = max(0.0, min(1.0, confidence))
+            return claim_type, round(confidence, 2)
+        except Exception as e:
+            logger.warning(f"Refinamento de claim_type via LLM falhou, mantendo heuristica: {e}")
+            return None
 
     def _calculate_freshness(self, content: str) -> tuple[float, int | None]:
         years_found = [int(y) for y in _YEAR_PATTERN.findall(content)]

@@ -294,12 +294,13 @@ class SearchService:
 
     async def _search_task(self, searcher, source_name: str, query: str, domain: str):
         from src.observability.metrics import track_search
+        from src.monitoring.tracing import trace_search_call
         from src.utils.logging import structured_logger
 
         error_msg = ""
         res = []
         try:
-            async with track_search(source_name):
+            async with track_search(source_name), trace_search_call(source_name, query):
                 res = await asyncio.wait_for(
                     searcher.search(query, domain=domain),
                     timeout=searcher.timeout,
@@ -316,6 +317,9 @@ class SearchService:
             if self.health_monitor:
                 self.health_monitor.report_failure(source_name, str(e))
             res = []
+        else:
+            if self.health_monitor:
+                self.health_monitor.report_success(source_name)
 
         structured_logger.log_search(source_name, query, len(res), error_msg)
         return source_name, query, res

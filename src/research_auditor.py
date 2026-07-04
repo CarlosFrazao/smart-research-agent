@@ -2,11 +2,18 @@
 research_auditor.py — Loop de Auditoria Autônoma de Relatórios
 
 Pipeline:
-  1. Extrai claims do relatório Markdown via LLM
-  2. Valida claims contra fontes existentes (ConfidenceScorerV2)
-  3. Detecta gaps: claims não verificadas ou de fonte única
-  4. Relança buscas focadas nos gaps (máx 3 iterações)
-  5. Retorna relatório enriquecido com status de auditoria
+  1. Skip antecipado se as fontes já têm confiança média alta (economiza LLM+buscas)
+  2. Extrai claims do relatório Markdown via LLM
+  3. Valida claims contra fontes existentes (ConfidenceScorerV2)
+  4. Detecta gaps: claims não verificadas ou de fonte única
+  5. Relança buscas focadas nos gaps (padrão: 1 iteração — budget-enforced)
+  6. Retorna relatório enriquecido com status de auditoria
+
+Custo controlado por dois mecanismos independentes:
+  - `max_iterations`: teto de rodadas de re-pesquisa (default: 1, era 3).
+  - `audit_budget_usd`: teto de gasto estimado (USD) por chamada de `audit()`,
+    reaproveitando `src.token_economy.Budget`. Ao esgotar, a auditoria para
+    de re-pesquisar gaps e retorna o que já validou (degradação graciosa).
 
 Skill: adversarial-debate-engine (Auto-crítica adversária sistemática)
 """
@@ -18,12 +25,29 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.clients.llm_client import LLMClient
+from src.token_economy import Budget, TokenEconomy, UsageRecord
 from src.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
-MAX_AUDIT_ITERATIONS = 3
+# Reduzido de 3 → 1: cada iteração adicional dispara novas buscas (caro) para
+# um ganho marginal de cobertura. Modos que realmente precisam de mais podem
+# passar `max_iterations` explicitamente ao chamar `audit()`.
+MAX_AUDIT_ITERATIONS = 1
 LOW_CONFIDENCE_THRESHOLD = 0.55
+
+# Se a confiança média das fontes já coletadas está acima disto, a auditoria
+# inteira (extração de claims + re-pesquisa) é pulada — não há o que ganhar
+# auditando fontes que o próprio ConfidenceScorerV2 já considera confiáveis.
+HIGH_CONFIDENCE_SKIP_THRESHOLD = 0.90
+
+# Teto de gasto estimado (USD) por chamada de `audit()`. Cobre a extração de
+# claims via LLM e as re-pesquisas de gap subsequentes.
+DEFAULT_AUDIT_BUDGET_USD = 0.15
+
+# Estimativa conservadora de custo por query de re-pesquisa de gap (busca +
+# scoring downstream). Não é exata — é um teto de segurança, não um medidor.
+ESTIMATED_COST_PER_GAP_QUERY_USD = 0.01
 
 
 # ─── Data Contracts ──────────────────────────────────────────────────────────
@@ -51,6 +75,9 @@ class AuditReport:
     iterations_run: int
     enriched_content: str  # Relatório original + notas de auditoria injetadas
     audit_summary: str
+    skipped: bool = False  # True se a auditoria foi pulada (alta confiança)
+    budget_exhausted: bool = False  # True se parou por ter estourado o budget
+    estimated_cost_usd: float = 0.0
 
 
 # ─── ResearchAuditor ─────────────────────────────────────────────────────────
@@ -70,10 +97,12 @@ class ResearchAuditor:
         llm_client: LLMClient,
         orchestrator: Any | None = None,
         confidence_scorer: Any | None = None,
+        audit_budget_usd: float = DEFAULT_AUDIT_BUDGET_USD,
     ) -> None:
         self.llm = llm_client
         self.orchestrator = orchestrator
         self.confidence_scorer = confidence_scorer
+        self.audit_budget_usd = audit_budget_usd
 
     # ── Entry Point ──────────────────────────────────────────────────────────
 
@@ -89,17 +118,46 @@ class ResearchAuditor:
         Args:
             report_text:      Texto Markdown do relatório gerado.
             existing_results: Fontes já coletadas no pipeline principal.
-            max_iterations:   Limite de rodadas de re-pesquisa (default: 3).
+            max_iterations:   Limite de rodadas de re-pesquisa (default: 1).
 
         Returns:
             AuditReport com status por claim, gaps e relatório enriquecido.
+            Pode retornar antecipadamente (`skipped=True`) se a confiança
+            média das fontes já é alta, ou parar cedo (`budget_exhausted=True`)
+            se o orçamento da auditoria se esgotar.
         """
         logger.info("ResearchAuditor: iniciando auditoria...")
 
         all_results = list(existing_results or [])
-        iteration = 0
 
-        claims = await self._extract_claims(report_text)
+        # ── Skip antecipado para resultados de alta confiança ───────────────
+        avg_confidence = self._average_confidence(all_results)
+        if all_results and avg_confidence >= HIGH_CONFIDENCE_SKIP_THRESHOLD:
+            logger.info(
+                f"ResearchAuditor: confiança média das fontes já é alta "
+                f"({avg_confidence:.0%} >= {HIGH_CONFIDENCE_SKIP_THRESHOLD:.0%}) "
+                "— pulando auditoria (economia de LLM + buscas)."
+            )
+            return AuditReport(
+                total_claims=0,
+                verified_claims=0,
+                low_confidence_claims=0,
+                gaps_detected=[],
+                iterations_run=0,
+                enriched_content=report_text,
+                audit_summary=(
+                    f"Auditoria pulada — confiança média das fontes já é "
+                    f"alta ({avg_confidence:.0%})."
+                ),
+                skipped=True,
+            )
+
+        # ── Budget dedicado a esta chamada de audit() ────────────────────────
+        audit_budget = Budget(max_cost_usd_session=self.audit_budget_usd)
+        budget_exhausted = False
+
+        iteration = 0
+        claims = await self._extract_claims(report_text, audit_budget)
         logger.info(f"ResearchAuditor: {len(claims)} claims extraídas.")
 
         while iteration < max_iterations:
@@ -118,7 +176,16 @@ class ResearchAuditor:
                 )
                 break
 
-            new_results = await self._research_gaps(gaps)
+            if audit_budget.is_over_session_budget():
+                budget_exhausted = True
+                logger.warning(
+                    f"ResearchAuditor: orçamento da auditoria esgotado "
+                    f"(${audit_budget.session_spent_usd:.4f} / "
+                    f"${self.audit_budget_usd:.4f}) — interrompendo re-pesquisa."
+                )
+                break
+
+            new_results = await self._research_gaps(gaps, audit_budget)
             all_results.extend(new_results)
 
             # Verifica se a re-pesquisa trouxe melhorias suficientes
@@ -136,6 +203,8 @@ class ResearchAuditor:
 
         enriched = self._inject_audit_notes(report_text, claims)
         summary = self._build_summary(claims, iteration)
+        if budget_exhausted:
+            summary += " Orçamento da auditoria esgotado antes de concluir todos os gaps."
 
         return AuditReport(
             total_claims=len(claims),
@@ -145,11 +214,15 @@ class ResearchAuditor:
             iterations_run=iteration,
             enriched_content=enriched,
             audit_summary=summary,
+            budget_exhausted=budget_exhausted,
+            estimated_cost_usd=audit_budget.session_spent_usd,
         )
 
     # ── Extração de Claims ───────────────────────────────────────────────────
 
-    async def _extract_claims(self, report_text: str) -> list[AuditClaim]:
+    async def _extract_claims(
+        self, report_text: str, audit_budget: Budget | None = None
+    ) -> list[AuditClaim]:
         """Usa o LLM para extrair afirmações verificáveis do relatório."""
         prompt = (
             "You are a fact-checking assistant. Extract all verifiable factual claims "
@@ -164,6 +237,10 @@ class ResearchAuditor:
         )
 
         schema = {"type": "array", "items": {"type": "string"}}
+
+        self._record_estimated_cost(
+            audit_budget, prompt, output_tokens=300, hint="audit:extract_claims"
+        )
 
         try:
             raw_claims = await self.llm.generate_structured(
@@ -240,10 +317,13 @@ class ResearchAuditor:
 
     # ── Re-pesquisa de Gaps ──────────────────────────────────────────────────
 
-    async def _research_gaps(self, gaps: list[AuditClaim]) -> list[SearchResult]:
+    async def _research_gaps(
+        self, gaps: list[AuditClaim], audit_budget: Budget | None = None
+    ) -> list[SearchResult]:
         """
         Relança buscas focadas nas claims com gap de evidência.
         Usa o Orchestrator se disponível; retorna lista vazia caso contrário.
+        Para antecipadamente se `audit_budget` estourar no meio da iteração.
         """
         if self.orchestrator is None:
             logger.debug(
@@ -254,6 +334,12 @@ class ResearchAuditor:
         new_results: list[SearchResult] = []
 
         for claim in gaps[:5]:  # Limita a 5 claims por iteração para controle de custo
+            if audit_budget is not None and audit_budget.is_over_session_budget():
+                logger.warning(
+                    "ResearchAuditor: orçamento esgotado — interrompendo gaps restantes desta iteração."
+                )
+                break
+
             gap_query = self._claim_to_query(claim.text)
             logger.info(f"ResearchAuditor: re-pesquisando gap → '{gap_query[:60]}'")
 
@@ -286,6 +372,17 @@ class ResearchAuditor:
                     expanded, source_plan, intent
                 )
                 new_results.extend(results[:5])
+
+                if audit_budget is not None:
+                    audit_budget.record(
+                        UsageRecord(
+                            model="search",
+                            input_tokens=0,
+                            output_tokens=0,
+                            estimated_cost_usd=ESTIMATED_COST_PER_GAP_QUERY_USD,
+                            query_hint=f"audit:gap_research:{claim.text[:40]}",
+                        )
+                    )
 
             except Exception as e:
                 logger.warning(
@@ -334,6 +431,45 @@ class ResearchAuditor:
         """Transforma uma claim em uma query de busca concisa."""
         # Remove pontuação terminal e trunca
         return claim_text.rstrip(".!?")[:100]
+
+    def _average_confidence(self, results: list[SearchResult]) -> float:
+        """Confiança média (`confidence_score`) das fontes já coletadas."""
+        if not results:
+            return 0.0
+        scores = [getattr(r, "confidence_score", 0.0) or 0.0 for r in results]
+        return sum(scores) / len(scores)
+
+    def _record_estimated_cost(
+        self,
+        audit_budget: Budget | None,
+        text: str,
+        output_tokens: int,
+        hint: str,
+    ) -> None:
+        """
+        Estima e contabiliza o custo de uma chamada LLM no budget da auditoria,
+        reaproveitando o `TokenEconomy` já anexado ao `LLMClient` (se houver).
+        É uma estimativa pré-chamada (não temos os tokens reais de resposta
+        antes de chamar) — suficiente para um teto de segurança, não uma
+        medição exata de custo.
+        """
+        if audit_budget is None:
+            return
+        token_economy = getattr(self.llm, "token_economy", None)
+        if not isinstance(token_economy, TokenEconomy):
+            return
+        input_tokens, cost = token_economy.estimate_cost(
+            text, output_tokens=output_tokens
+        )
+        audit_budget.record(
+            UsageRecord(
+                model=token_economy.default_model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost_usd=cost,
+                query_hint=hint,
+            )
+        )
 
     def _build_summary(self, claims: list[AuditClaim], iterations: int) -> str:
         """Gera sumário textual da auditoria."""

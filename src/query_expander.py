@@ -91,9 +91,22 @@ class QueryExpander:
             return [ExpandedQuery(**q) for q in queries]
         except Exception as e:
             logger.warning(f"LLM query expansion falhou, usando fallback: {e}")
-            return self._fallback_expand(query, intent)
+            return self.fallback_expand(query, intent)
 
-    def _fallback_expand(self, query: str, intent: IntentResult) -> list[ExpandedQuery]:
+    def fallback_expand(self, query: str, intent: IntentResult) -> list[ExpandedQuery]:
+        """Gera expansoes deterministicas (sem LLM) a partir de qualificadores fixos.
+
+        Usado tanto pelo fallback interno de `expand()` quanto pelo fluxo
+        consolidado do `IntentAnalyzer.analyze_and_expand()` quando a chamada
+        LLM combinada falha ou nao retorna queries.
+
+        Args:
+            query: Query original do usuario.
+            intent: Resultado da analise de intencao (usado para entidades).
+
+        Returns:
+            list[ExpandedQuery]: Ate 12 expansoes deterministicas.
+        """
         base = query.lower()
         expansions = [
             ExpandedQuery(
@@ -140,3 +153,6 @@ class QueryExpander:
                 )
             )
         return expansions[:12]
+
+    # Alias privado mantido por compatibilidade retroativa (nome anterior do metodo).
+    _fallback_expand = fallback_expand

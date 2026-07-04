@@ -28,7 +28,15 @@ from collections.abc import Callable
 
 import httpx
 
+from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitState
+
 logger = logging.getLogger(__name__)
+
+# Limiar de falhas consecutivas para abrir o circuito de uma fonte de busca.
+# Corresponde ao comportamento anterior (desabilitar após 3 falhas), agora
+# imposto por um circuit breaker real em vez de um contador solto.
+_SOURCE_FAILURE_THRESHOLD = 3
+_SOURCE_RECOVERY_TIMEOUT_SECONDS = 300.0  # 5 min até liberar tentativa de teste
 
 
 # ─── Enumerações e Contratos ─────────────────────────────────────────────────
@@ -73,6 +81,7 @@ class HealthSnapshot:
     services: dict[str, ServiceHealthResult]
     overall_status: ServiceStatus
     alerts: list[str]
+    circuit_breakers: dict[str, dict] = field(default_factory=dict)
 
     @property
     def is_healthy(self) -> bool:
@@ -100,12 +109,30 @@ class HealthSnapshot:
                 f"- {a}" for a in self.alerts
             )
 
+        cb_section = ""
+        if self.circuit_breakers:
+            cb_icon = {"closed": "🟢", "open": "🔴", "half_open": "🟡"}
+            cb_rows = [
+                "\n\n**Circuit Breakers (fontes de busca):**",
+                "| Fonte | Estado | Falhas | Último erro |",
+                "|---|---|---|---|",
+            ]
+            for name, m in self.circuit_breakers.items():
+                icon = cb_icon.get(m["state"], "⚪")
+                last_error = (m.get("last_error") or "-")[:50]
+                cb_rows.append(
+                    f"| {name} | {icon} {m['state']} | "
+                    f"{m['failure_count']}/{m['failure_threshold']} | {last_error} |"
+                )
+            cb_section = "\n".join(cb_rows)
+
         overall_icon = icon_map.get(self.overall_status, "⚪")
         return (
             f"## Health Monitor — {self.timestamp}\n\n"
             f"**Status Geral:** {overall_icon} {self.overall_status.value}\n\n"
             + "\n".join(rows)
             + alerts_section
+            + cb_section
         )
 
 
@@ -197,9 +224,6 @@ class HealthMonitor:
         # Referência ao orchestrator (injetada externamente se necessário)
         self.orchestrator: Any | None = None
 
-        # Contador de falhas por fonte de busca (MEL-6.2)
-        self.failure_counts: dict[str, int] = {}
-
     # ── Verificação Principal ─────────────────────────────────────────────────
 
     async def check_all(self) -> HealthSnapshot:
@@ -216,6 +240,7 @@ class HealthMonitor:
             services=results,
             overall_status=overall,
             alerts=alerts,
+            circuit_breakers=self._active_source_breaker_metrics(),
         )
 
         # Dispara fallbacks para serviços offline
@@ -419,42 +444,101 @@ class HealthMonitor:
         """Retorna o snapshot mais recente ou None."""
         return self._history[-1] if self._history else None
 
-    def report_failure(self, source: str, error: str) -> None:
-        """Incrementa contador de falhas consecutivas de uma fonte de busca e desabilita se >= 3."""
-        self.failure_counts[source] = self.failure_counts.get(source, 0) + 1
-        logger.warning(
-            f"HealthMonitor: falha relatada na fonte '{source}'. "
-            f"Contador: {self.failure_counts[source]}/3. Erro: {error}"
+    # ── Integração com Circuit Breaker (MEL-6.2) ────────────────────────────────
+    #
+    # Cada fonte de busca tem seu próprio CircuitBreaker (CLOSED/OPEN/HALF_OPEN)
+    # no registry compartilhado de `src.utils.circuit_breaker`. O HealthMonitor
+    # não mantém mais contadores de falha próprios — ele apenas reporta
+    # resultados (sucesso/falha) e consulta o estado do disjuntor.
+
+    def _breaker(self, source: str):
+        return CircuitBreakerRegistry.get(
+            source,
+            failure_threshold=_SOURCE_FAILURE_THRESHOLD,
+            recovery_timeout=_SOURCE_RECOVERY_TIMEOUT_SECONDS,
         )
 
-        if self.failure_counts[source] >= 3:
-            logger.error(
-                f"🚨 HealthMonitor: DESABILITANDO FONTE '{source.upper()}' temporariamente devido a falhas consecutivas!"
-            )
+    def report_failure(self, source: str, error: str) -> None:
+        """Reporta uma falha de busca ao circuit breaker da fonte.
 
-            if self.orchestrator and hasattr(self.orchestrator, "searchers"):
-                searcher = self.orchestrator.searchers.get(source)
-                if searcher:
-                    searcher.enabled = False
+        Ao atingir o limiar de falhas consecutivas, o circuito abre (OPEN) e a
+        fonte é desabilitada até `recovery_timeout` expirar, quando uma
+        tentativa de teste (HALF_OPEN) é liberada automaticamente.
+        """
+        breaker = self._breaker(source)
+        was_open = breaker.state == CircuitState.OPEN
+
+        breaker.record_failure(error)
+
+        logger.warning(
+            f"HealthMonitor: falha relatada na fonte '{source}'. "
+            f"Contador: {breaker.failure_count}/{breaker.failure_threshold}. Erro: {error}"
+        )
+
+        if breaker.state == CircuitState.OPEN and not was_open:
+            logger.error(
+                f"🚨 HealthMonitor: circuito ABERTO para fonte '{source.upper()}' "
+                f"após {breaker.failure_count} falhas consecutivas — desabilitando temporariamente."
+            )
+            self._set_searcher_enabled(source, False)
+
+    def report_success(self, source: str) -> None:
+        """Reporta uma busca bem-sucedida ao circuit breaker da fonte.
+
+        Fecha o circuito (CLOSED) se a fonte estava em HALF_OPEN testando
+        recuperação, reabilitando-a automaticamente.
+        """
+        breaker = self._breaker(source)
+        was_half_open = breaker.state == CircuitState.HALF_OPEN
+
+        breaker.record_success()
+
+        if was_half_open and breaker.state == CircuitState.CLOSED:
+            logger.info(
+                f"✅ HealthMonitor: fonte '{source}' recuperada — circuito fechado, reabilitando."
+            )
+            self._set_searcher_enabled(source, True)
+
+    def _set_searcher_enabled(self, source: str, enabled: bool) -> None:
+        if self.orchestrator and hasattr(self.orchestrator, "searchers"):
+            searcher = self.orchestrator.searchers.get(source)
+            if searcher:
+                searcher.enabled = enabled
 
     def get_active_sources(self) -> list[str]:
-        """Retorna os nomes de fontes de busca que estão ativas e não desabilitadas."""
+        """Retorna os nomes de fontes de busca que podem ser tentadas agora.
+
+        Uma fonte está ativa se seu circuit breaker está CLOSED, ou HALF_OPEN
+        liberando uma tentativa de teste (o breaker gerencia a transição
+        automática OPEN → HALF_OPEN quando `recovery_timeout` expira).
+        """
         if self.orchestrator and hasattr(self.orchestrator, "searchers"):
-            return [
-                name
-                for name, searcher in self.orchestrator.searchers.items()
-                if searcher.enabled
+            names = list(self.orchestrator.searchers.keys())
+        else:
+            names = [
+                "hackernews",
+                "github",
+                "reddit",
+                "arxiv",
+                "producthunt",
+                "awesome",
+                "web",
+                "firecrawl",
             ]
 
-        # Fallback se orchestrator não estiver disponível
-        all_sources = [
-            "hackernews",
-            "github",
-            "reddit",
-            "arxiv",
-            "producthunt",
-            "awesome",
-            "web",
-            "firecrawl",
-        ]
-        return [s for s in all_sources if self.failure_counts.get(s, 0) < 3]
+        active = []
+        for name in names:
+            breaker = self._breaker(name)
+            allowed = breaker.allow_request()
+            self._set_searcher_enabled(name, allowed)
+            if allowed:
+                active.append(name)
+        return active
+
+    def _active_source_breaker_metrics(self) -> dict[str, dict]:
+        """Métricas de todos os circuit breakers de fonte já criados até agora."""
+        return CircuitBreakerRegistry.metrics_all()
+
+    def get_circuit_breaker_status(self, source: str) -> dict:
+        """Retorna as métricas detalhadas do circuit breaker de uma fonte específica."""
+        return self._breaker(source).metrics

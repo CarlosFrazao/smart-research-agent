@@ -1,11 +1,6 @@
 """
 DeepResearcher — Tree-based Deep Research Engine
 
-Inspired by:
-- MiroThinker (74.0 on BrowseComp benchmark)
-- Open Deep Research LangChain (non-linear orchestration)
-- TreeThinkerAgent (explorable reasoning tree)
-
 Philosophy: non-linear reasoning — the agent can branch into parallel
 sub-queries, prune dead ends based on evidence, and consolidate only
 confirmed hypotheses into the final report.
@@ -13,10 +8,14 @@ confirmed hypotheses into the final report.
 Usage: activated only when --mode deep is passed. Cost ~5-10x standard.
 """
 
+from __future__ import annotations
+
 import asyncio
+import heapq
 import logging
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from src.clients.llm_client import LLMClient
 from src.exceptions import BudgetExceededError
@@ -68,7 +67,7 @@ class ResearchNode:
     hypothesis: str
     results: list[SearchResult] = field(default_factory=list)
     children: list["ResearchNode"] = field(default_factory=list)
-    status: str = "pending"  # pending | explored | dead_end | confirmed
+    status: str = "pending"  # pending | explored | dead_end | confirmed | pruned_low_confidence | pruned_beam | pruned_budget
     confidence: float = 0.0
     depth: int = 0
     reasoning: str = ""
@@ -103,7 +102,8 @@ class DeepResearcher:
 
     MAX_DEPTH: int = 3
     MAX_BRANCHES: int = 4
-    MIN_CONFIDENCE: float = 0.4
+    BEAM_WIDTH: int = 1  # top-K mantido por nível (padrão 1 para limite de 13 nós)
+    MIN_CONFIDENCE: float = 0.55  # abaixo disso, o nó é podado (early pruning)
     CONFIRMED_THRESHOLD: float = 0.75
 
     MODEL_PRICES = {
@@ -126,6 +126,14 @@ class DeepResearcher:
         # OrvixMemoryV2 opcional — injeta contexto do grafo nas hipóteses
         self.memory = memory
         self.config = getattr(orchestrator, "config", None)
+        
+        # Sincroniza parâmetros baseados nas constantes/configuração
+        if self.config:
+            self.MAX_DEPTH = getattr(self.config, "max_research_depth", 3)
+            self.MAX_BRANCHES = getattr(self.config, "max_research_branches", 4)
+            self.BEAM_WIDTH = getattr(self.config, "beam_width", 1)
+            self.MIN_CONFIDENCE = getattr(self.config, "min_confidence", 0.55)
+
         if budget is not None:
             self.budget = budget
         else:
@@ -144,7 +152,7 @@ class DeepResearcher:
         max_iterations: int = 5,
     ) -> DeepResearchResult:
         """
-        Executes deep research with tree-based reasoning.
+        Executes deep research with tree-based reasoning using Beam Search.
         Returns a DeepResearchResult with reasoning_tree and consolidated findings.
         """
         logger.info(f"DeepResearcher: starting for query='{query[:60]}'")
@@ -158,10 +166,73 @@ class DeepResearcher:
 
         budget_exceeded = False
         try:
-            root = await self._explore_node(root)
+            # 1. Busca e avaliação da raiz
+            self.budget.nodes_created += 1
+            root.results = await self._search_for_node(root)
+            root.confidence = self._estimate_confidence(root.results)
+            root.status = "explored"
+
+            # 2. Executa a expansão em Beam Search por nível (BFS)
+            frontier = [root]
+            
+            for depth in range(self.MAX_DEPTH):
+                if not frontier or self.budget.is_exhausted():
+                    break
+                
+                next_frontier = []
+                for node in frontier:
+                    if node.status in ("confirmed", "dead_end"):
+                        continue
+                    
+                    # Poda precoce (Early Pruning)
+                    if node.depth > 0 and node.confidence < self.MIN_CONFIDENCE:
+                        node.status = "pruned_low_confidence"
+                        node.reasoning = f"Confidence {node.confidence:.2f} below threshold {self.MIN_CONFIDENCE}. Pruned."
+                        continue
+                    
+                    # Gera as hipóteses (branches)
+                    hypotheses = await self._generate_hypotheses(node.query, node.results)
+                    for hyp in hypotheses[: self.MAX_BRANCHES]:
+                        await self._check_budget()
+                        
+                        child = ResearchNode(
+                            id=str(uuid.uuid4())[:8],
+                            query=hyp,
+                            hypothesis=hyp,
+                            depth=depth + 1,
+                        )
+                        node.children.append(child)
+                        next_frontier.append(child)
+                
+                if not next_frontier:
+                    break
+                
+                # Executa buscas e estimativa de confiança do nível em paralelo
+                search_tasks = [self._explore_child_data(child) for child in next_frontier]
+                if search_tasks:
+                    await asyncio.gather(*search_tasks)
+                
+                # Aplica o Beam Search: mantém apenas os top `BEAM_WIDTH` de maior confiança
+                if len(next_frontier) > self.BEAM_WIDTH:
+                    survivors = heapq.nlargest(self.BEAM_WIDTH, next_frontier, key=lambda n: n.confidence)
+                    survivor_ids = {s.id for s in survivors}
+                    for n in next_frontier:
+                        if n.id not in survivor_ids:
+                            n.status = "pruned_beam"
+                            n.reasoning = f"Pruned by Beam Search (width={self.BEAM_WIDTH})."
+                    frontier = survivors
+                else:
+                    frontier = next_frontier
+
+            # Ajusta os status dos nós pais com base nos status dos filhos
+            self._update_parent_statuses(root)
+
         except BudgetExceededError as e:
             logger.warning(f"DeepResearcher: budget exceeded: {e}")
             budget_exceeded = True
+        except Exception as e:
+            logger.error(f"DeepResearcher: erro inesperado no pipeline: {e}")
+            raise e
 
         findings = self._consolidate_tree(root)
         reasoning_tree_md = self._export_tree_as_markdown(root)
@@ -202,15 +273,65 @@ class DeepResearcher:
         price = self.MODEL_PRICES.get(model, self.MODEL_PRICES["default"])
         self.budget.estimated_cost += (estimated_tokens / 1000) * price
 
-    async def _explore_node(self, node: ResearchNode) -> ResearchNode:
-        """
-        Expands a node: searches, evaluates results, spawns children if needed.
+    async def _explore_child_data(self, child: ResearchNode) -> None:
+        """Faz a busca, estima a confiança e define o status de um nó filho individual."""
+        try:
+            await self._check_budget()
+            self.budget.nodes_created += 1
 
-        Stops when:
-        - depth >= MAX_DEPTH
-        - node.confidence > CONFIRMED_THRESHOLD (sufficiently confirmed)
-        - all children are dead ends
-        """
+            logger.debug(
+                f"Exploring node id={child.id} depth={child.depth} q='{child.query[:50]}'"
+            )
+
+            child.results = await self._search_for_node(child)
+            child.confidence = self._estimate_confidence(child.results)
+
+            if child.confidence >= self.CONFIRMED_THRESHOLD:
+                child.status = "confirmed"
+                child.reasoning = f"Confirmed with confidence {child.confidence:.2f} after {len(child.results)} results."
+            elif child.depth >= self.MAX_DEPTH:
+                child.status = "explored"
+                child.reasoning = f"Max depth reached. Confidence: {child.confidence:.2f}."
+            elif child.confidence < self.MIN_CONFIDENCE and child.depth > 0:
+                child.status = "dead_end"
+                child.reasoning = f"Confidence {child.confidence:.2f} below threshold {self.MIN_CONFIDENCE}. Pruned."
+            else:
+                child.status = "explored"
+        except BudgetExceededError as e:
+            child.status = "pruned_budget"
+            child.reasoning = f"Budget exceeded: {e}"
+        except Exception as e:
+            logger.error(f"Erro ao explorar nó {child.id}: {e}")
+            child.status = "dead_end"
+            child.reasoning = f"Failure: {e}"
+
+    def _update_parent_statuses(self, node: ResearchNode) -> None:
+        """Atualiza recursivamente o status dos nós pais com base nos status dos filhos."""
+        if not node.children:
+            return
+            
+        for child in node.children:
+            self._update_parent_statuses(child)
+            
+        # Filtra filhos válidos (ignora os podados por budget ou beam)
+        valid_children = [c for c in node.children if c.status not in ("pruned_budget", "pruned_beam")]
+        if not valid_children:
+            return
+            
+        all_dead = all(c.status == "dead_end" for c in valid_children)
+        any_confirmed = any(c.status == "confirmed" for c in valid_children)
+
+        if any_confirmed:
+            node.status = "confirmed"
+            node.reasoning = "Confirmed via child hypotheses."
+        elif all_dead:
+            node.status = "dead_end"
+            node.reasoning = "All child branches are dead ends."
+        else:
+            node.status = "explored"
+
+    async def _explore_node(self, node: ResearchNode) -> ResearchNode:
+        """Mantido estritamente para compatibilidade com os testes unitários legados."""
         await self._check_budget()
         self.budget.nodes_created += 1
 
@@ -311,9 +432,9 @@ class DeepResearcher:
         except Exception as e:
             logger.warning(f"Search for node {node.id} failed: {e}")
             # Arquiva a falha na Dead Letter Queue para análise/retry posterior
-            if hasattr(self, "dlq") and self.dlq is not None:
-                await self.dlq.push(
-                    self.dlq.create_failed_task(
+            if hasattr(self.orchestrator, "dlq") and self.orchestrator.dlq is not None:
+                await self.orchestrator.dlq.push(
+                    self.orchestrator.dlq.create_failed_task(
                         task_type="search",
                         payload={
                             "query": node.query,
@@ -404,7 +525,7 @@ class DeepResearcher:
         seen_urls: set = set()
 
         def _walk(node: ResearchNode) -> None:
-            if node.status == "dead_end":
+            if node.status in ("dead_end", "pruned_low_confidence", "pruned_beam", "pruned_budget"):
                 return
             for r in node.results:
                 if r.url not in seen_urls:
@@ -426,6 +547,9 @@ class DeepResearcher:
             "explored": "🔍",
             "dead_end": "❌",
             "pending": "⏳",
+            "pruned_low_confidence": "⚠️ (poda-confiança)",
+            "pruned_beam": "⚪ (poda-beam)",
+            "pruned_budget": "🛑 (poda-orçamento)",
         }
 
         def _render(node: ResearchNode, prefix: str, is_last: bool) -> None:

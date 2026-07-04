@@ -169,6 +169,92 @@ async def test_auditor_full_pipeline(mock_llm, mock_results):
     assert "Auditoria de Claims" in report.enriched_content
 
 
+# ─── ResearchAuditor × Custo (MEL-6.3) ────────────────────────────────────────
+
+
+def test_max_audit_iterations_default_is_one():
+    """O teto padrão de re-pesquisa deve ser 1 (reduzido de 3)."""
+    from src.research_auditor import MAX_AUDIT_ITERATIONS
+
+    assert MAX_AUDIT_ITERATIONS == 1
+
+
+@pytest.mark.asyncio
+async def test_audit_skips_entirely_for_high_confidence_results(mock_llm):
+    """Fontes com confiança média >= limiar não devem disparar extração/LLM."""
+    high_conf_results = []
+    for i in range(3):
+        r = MagicMock()
+        r.title = f"Fonte {i}"
+        r.description = "Conteúdo já bem verificado."
+        r.confidence_score = 0.97
+        high_conf_results.append(r)
+
+    auditor = ResearchAuditor(llm_client=mock_llm)
+    report = await auditor.audit(
+        report_text="# Relatório\n\nAlgo já muito bem verificado.",
+        existing_results=high_conf_results,
+    )
+
+    assert report.skipped is True
+    assert report.iterations_run == 0
+    assert report.total_claims == 0
+    assert report.enriched_content == "# Relatório\n\nAlgo já muito bem verificado."
+    mock_llm.generate_structured.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_audit_does_not_skip_moderate_confidence(mock_llm, mock_results):
+    """confidence_score=0.85 (fixture padrão) fica abaixo do limiar de skip (0.90)."""
+    auditor = ResearchAuditor(llm_client=mock_llm)
+    report = await auditor.audit(
+        report_text="# Relatório\n\nAlgo com confiança moderada.",
+        existing_results=mock_results,
+        max_iterations=1,
+    )
+    assert report.skipped is False
+    mock_llm.generate_structured.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_audit_stops_gap_research_when_budget_exhausted(mock_llm):
+    """Com orçamento ~zero, a auditoria não deve conseguir re-pesquisar gaps."""
+    auditor = ResearchAuditor(llm_client=mock_llm, audit_budget_usd=0.0)
+
+    fake_orchestrator = MagicMock()
+    fake_orchestrator.source_planner.plan.return_value = MagicMock()
+    fake_orchestrator._parallel_search = AsyncMock(return_value=[])
+    auditor.orchestrator = fake_orchestrator
+
+    report = await auditor.audit(
+        report_text="# Relatório\n\nAlgo não verificado ainda.",
+        existing_results=[],  # sem fontes -> todas as claims viram gap
+        max_iterations=1,
+    )
+
+    assert report.budget_exhausted is True
+    fake_orchestrator._parallel_search.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_audit_records_estimated_cost_from_llm_token_economy():
+    """O custo estimado da extração deve ser contabilizado via TokenEconomy real."""
+    from src.token_economy import TokenEconomy
+
+    llm = MagicMock()
+    llm.token_economy = TokenEconomy(default_model="gpt-4o-mini")
+    llm.generate_structured = AsyncMock(return_value=["Uma claim qualquer verificável."])
+
+    auditor = ResearchAuditor(llm_client=llm)
+    report = await auditor.audit(
+        report_text="# Relatório\n\nUma claim qualquer verificável.",
+        existing_results=[],
+        max_iterations=1,
+    )
+
+    assert report.estimated_cost_usd > 0.0
+
+
 # ─── HealthMonitor ───────────────────────────────────────────────────────────
 
 from src.monitoring.health_monitor import HealthMonitor, ServiceStatus, ServiceCheck
@@ -307,3 +393,114 @@ def test_health_monitor_to_markdown():
     assert "firecrawl" in md
     assert "healthy" in md.lower()
     assert "Health Monitor" in md
+
+
+# ─── HealthMonitor × CircuitBreaker (MEL-6.2) ─────────────────────────────────
+
+from src.utils.circuit_breaker import CircuitBreakerRegistry, CircuitState
+
+
+class _FakeSearcher:
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+
+
+class _FakeOrchestrator:
+    def __init__(self, searchers: dict[str, _FakeSearcher]):
+        self.searchers = searchers
+
+
+@pytest.fixture(autouse=True)
+def _reset_circuit_breaker_registry():
+    """Isola os testes do estado global do CircuitBreakerRegistry."""
+    CircuitBreakerRegistry.reset_all()
+    yield
+    CircuitBreakerRegistry.reset_all()
+
+
+def test_report_failure_opens_circuit_after_threshold_and_disables_source():
+    """3 falhas consecutivas devem abrir o circuito real e desabilitar o searcher."""
+    monitor = HealthMonitor(extra_services=[])
+    searcher = _FakeSearcher(enabled=True)
+    monitor.orchestrator = _FakeOrchestrator({"github": searcher})
+
+    monitor.report_failure("github", "erro 1")
+    monitor.report_failure("github", "erro 2")
+    assert searcher.enabled is True  # ainda não atingiu o limiar
+
+    monitor.report_failure("github", "erro 3")
+    assert searcher.enabled is False
+
+    breaker = CircuitBreakerRegistry.get("github")
+    assert breaker.state == CircuitState.OPEN
+    assert breaker.failure_count == 3
+    assert breaker.last_error == "erro 3"
+    assert breaker.total_failures == 3
+
+
+def test_report_failure_does_not_disable_before_threshold():
+    """Falhas isoladas (abaixo do limiar) não devem desabilitar a fonte."""
+    monitor = HealthMonitor(extra_services=[])
+    searcher = _FakeSearcher(enabled=True)
+    monitor.orchestrator = _FakeOrchestrator({"arxiv": searcher})
+
+    monitor.report_failure("arxiv", "timeout")
+    assert searcher.enabled is True
+    assert CircuitBreakerRegistry.get("arxiv").state == CircuitState.CLOSED
+
+
+def test_report_success_recovers_half_open_circuit_and_reenables_source():
+    """Sucesso em HALF_OPEN deve fechar o circuito e reabilitar a fonte."""
+    monitor = HealthMonitor(extra_services=[])
+    searcher = _FakeSearcher(enabled=True)
+    monitor.orchestrator = _FakeOrchestrator({"reddit": searcher})
+
+    for _ in range(3):
+        monitor.report_failure("reddit", "erro")
+    assert searcher.enabled is False
+
+    breaker = CircuitBreakerRegistry.get("reddit")
+    breaker.state = CircuitState.HALF_OPEN  # simula expiração do recovery_timeout
+
+    monitor.report_success("reddit")
+
+    assert breaker.state == CircuitState.CLOSED
+    assert searcher.enabled is True
+    assert breaker.total_successes == 1
+
+
+def test_get_active_sources_excludes_open_circuits():
+    """Fontes com circuito OPEN não devem aparecer em get_active_sources()."""
+    monitor = HealthMonitor(extra_services=[])
+    healthy = _FakeSearcher(enabled=True)
+    broken = _FakeSearcher(enabled=True)
+    monitor.orchestrator = _FakeOrchestrator(
+        {"hackernews": healthy, "producthunt": broken}
+    )
+
+    for _ in range(3):
+        monitor.report_failure("producthunt", "falhou")
+
+    active = monitor.get_active_sources()
+    assert "hackernews" in active
+    assert "producthunt" not in active
+    assert broken.enabled is False
+
+
+@pytest.mark.asyncio
+async def test_check_all_snapshot_includes_circuit_breaker_metrics():
+    """O snapshot de check_all() deve trazer métricas por-fonte dos circuit breakers."""
+    monitor = HealthMonitor(extra_services=[])
+    monitor.services = []  # sem serviços HTTP para checar neste teste
+    monitor.orchestrator = _FakeOrchestrator({"web": _FakeSearcher()})
+
+    monitor.report_failure("web", "erro de rede")
+    snapshot = await monitor.check_all()
+
+    assert "web" in snapshot.circuit_breakers
+    assert snapshot.circuit_breakers["web"]["failure_count"] == 1
+    assert snapshot.circuit_breakers["web"]["last_error"] == "erro de rede"
+
+    md = snapshot.to_markdown()
+    assert "Circuit Breakers" in md
+    assert "web" in md

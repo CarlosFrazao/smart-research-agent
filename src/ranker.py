@@ -3,6 +3,26 @@
 Fornece a classe `QualityRanker` que pontua resultados brutos de cada
 searcher usando heurísticas por fonte (GitHub, Reddit, HackerNews) e aplica
 penalidades de desinformação via `MisinformationDetector`.
+
+Ranking hibrido
+----------------
+Quando uma `query` e fornecida a `rank()`, o score deixa de ser apenas
+heuristico e passa a combinar tres sinais — nenhum deles envolvendo LLM:
+
+  1. Heuristicas por fonte (as mesmas de sempre: estrelas, upvotes, etc.).
+  2. BM25 — relevancia lexical do titulo/descricao em relacao a query.
+  3. Embeddings — similaridade semantica (via `SemanticReranker` existente).
+
+A combinacao e feita por `src.ranking.hybrid_ranker.HybridRanker`, que
+tambem faz pre-filtering: a etapa cara (embeddings) so roda sobre os
+melhores candidatos por heuristica+BM25, nao sobre a lista inteira — isso
+reduz o volume que chega as etapas de LLM mais caras do pipeline
+(`ConfidenceScorerV2`, `ConflictDetector`, `PeerReviewAgent`, etc.), que
+processam a saida deste ranker.
+
+Quando nenhuma `query` e fornecida (compatibilidade com chamadores
+existentes), o comportamento e identico ao anterior: apenas heuristica por
+fonte + penalidade de desinformacao.
 """
 
 import logging
@@ -12,6 +32,7 @@ from typing import Any
 
 from src.clients.llm_client import LLMClient
 from src.misinformation_detector import MisinformationDetector
+from src.ranking.hybrid_ranker import HybridRanker, SemanticScorer
 from src.types import RankedResult, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -22,12 +43,39 @@ class QualityRanker:
 
     Aplica heurísticas específicas por provedor (GitHub, Reddit, HackerNews)
     e penalidades de desinformação detectadas pelo `MisinformationDetector`.
+    Quando uma query e informada, enriquece o ranking com BM25 + embeddings
+    via `HybridRanker` (ver `src/ranking/hybrid_ranker.py`).
     """
 
-    def __init__(self, llm_client: LLMClient = None, config: dict[str, Any] = None):
+    def __init__(
+        self,
+        llm_client: LLMClient = None,
+        config: dict[str, Any] = None,
+        semantic_scorer: SemanticScorer | None = None,
+    ):
         self.llm = llm_client
         self.config = config or {}
         self.detector = MisinformationDetector()
+        # Injetavel para testes/reuso; se None, um `SemanticReranker` proprio
+        # e criado sob demanda (carregamento do modelo continua lazy — ver
+        # `SemanticReranker._ensure_model` — entao nao ha custo se `rank()`
+        # nunca for chamado com `query`).
+        self._semantic_scorer = semantic_scorer
+        self._hybrid_ranker: HybridRanker | None = None
+
+    def _get_hybrid_ranker(self) -> HybridRanker:
+        if self._hybrid_ranker is None:
+            scorer = self._semantic_scorer
+            if scorer is None:
+                from src.search.semantic_reranker import SemanticReranker
+
+                scorer = SemanticReranker()
+            self._hybrid_ranker = HybridRanker(
+                semantic_scorer=scorer,
+                pre_filter_top_n=self.config.get("pre_filter_top_n", 50),
+                weights=self.config.get("hybrid_weights"),
+            )
+        return self._hybrid_ranker
 
     def _recency_score(self, date_str: str) -> float:
         """Converte uma string de data em score de recencia (5.0-20.0).
@@ -153,34 +201,79 @@ class QualityRanker:
         """
         return 50.0
 
-    async def rank(self, results: list[SearchResult]) -> list[RankedResult]:
+    def _heuristic_score(self, result: SearchResult) -> float:
+        """Despacha para a heuristica especifica da fonte do resultado."""
+        if result.source == "github":
+            return self._github_score(result)
+        if result.source == "reddit":
+            return self._reddit_score(result)
+        if result.source == "hackernews":
+            return self._hn_score(result)
+        return self._generic_score(result)
+
+    async def rank(
+        self, results: list[SearchResult], query: str | None = None
+    ) -> list[RankedResult]:
         """Ranqueia uma lista de resultados de busca por score de qualidade.
 
         Aplica heuristica especifica por fonte e penalidade de desinformacao
         quando a URL e detectada como suspeita pelo `MisinformationDetector`.
+        Se `query` for informada, o score base heuristico e combinado com
+        BM25 e embeddings via `HybridRanker` antes da penalidade de
+        desinformacao ser aplicada — sem nenhuma chamada a LLM.
 
         Args:
             results: Lista de `SearchResult` brutos de qualquer searcher.
+            query: Query original do usuario. Quando omitida, o
+                comportamento e identico ao ranking puramente heuristico
+                (compatibilidade retroativa com chamadores existentes).
 
         Returns:
             list[RankedResult]: Lista de resultados enriquecidos com score e
                 breakdown de pontuacao, ordenada por score descendente.
         """
-        ranked = []
-        for result in results:
-            if result.source == "github":
-                score = self._github_score(result)
-            elif result.source == "reddit":
-                score = self._reddit_score(result)
-            elif result.source == "hackernews":
-                score = self._hn_score(result)
-            else:
-                score = self._generic_score(result)
+        if not results:
+            return []
 
+        heuristic_scores = [self._heuristic_score(r) for r in results]
+
+        if query:
+            try:
+                hybrid = self._get_hybrid_ranker()
+                hybrid_scored = await hybrid.rank(
+                    results, query=query, heuristic_scores=heuristic_scores
+                )
+                base_entries = [
+                    (
+                        hr.result,
+                        hr.final_score,
+                        {
+                            "heuristic_score": hr.heuristic_score,
+                            "bm25_score": hr.bm25_score,
+                            "embedding_score": hr.embedding_score,
+                        },
+                    )
+                    for hr in hybrid_scored
+                ]
+            except Exception as e:
+                logger.warning(
+                    f"QualityRanker: hybrid ranking falhou ({e}); "
+                    "usando apenas heuristica por fonte."
+                )
+                base_entries = [
+                    (r, s, {"heuristic_score": s})
+                    for r, s in zip(results, heuristic_scores)
+                ]
+        else:
+            base_entries = [
+                (r, s, {"heuristic_score": s})
+                for r, s in zip(results, heuristic_scores)
+            ]
+
+        ranked = []
+        for result, base_score, breakdown in base_entries:
             is_flagged, penalty, reason = self.detector.check_url(result.url)
-            final_score = score
-            if is_flagged:
-                final_score = round(score * penalty, 2)
+            final_score = round(base_score * penalty, 2) if is_flagged else base_score
 
             ranked.append(
                 RankedResult(
@@ -193,7 +286,8 @@ class QualityRanker:
                     fetched_at=result.fetched_at,
                     score=final_score,
                     score_breakdown={
-                        "base_score": score,
+                        **breakdown,
+                        "base_score": base_score,
                         "misinformation_penalty": penalty if is_flagged else 1.0,
                         "misinformation_reason": reason if is_flagged else "",
                     },

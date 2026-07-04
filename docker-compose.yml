@@ -1,14 +1,69 @@
-version: '3.8'
+# ═══════════════════════════════════════════════════════════════════════════
+# Smart Research Agent (SRA) — docker-compose.yml
+# ═══════════════════════════════════════════════════════════════════════════
+# PERFIS DISPONÍVEIS (docker compose --profile <nome> up -d)
+#
+#   (nenhum)    → apenas o SRA. Todas as integrações (Redis, ChromaDB, Neo4j,
+#                 Firecrawl, SearXNG) são opcionais no código (fallback
+#                 automático para memória/instância efêmera quando ausentes),
+#                 então o serviço sobe sozinho sem quebrar.
+#   dev         → SRA + SearXNG (stack mínima para desenvolvimento local).
+#                 Use ./start-dev.sh para subir com um único comando.
+#   chromadb    → adiciona ChromaDB (busca híbrida / vetorial persistente).
+#   neo4j       → adiciona Neo4j (grafo de conhecimento persistente).
+#   redis       → adiciona Redis (SmartCache TTL e broker do Celery).
+#   firecrawl   → adiciona Firecrawl self-hosted (scraping).
+#   full        → sobe TODOS os serviços auxiliares (equivalente ao stack
+#                 completo original). Combine perfis livremente, ex.:
+#                 docker compose --profile dev --profile redis up -d
+#
+# Todas as variáveis de conexão usam o padrão ${VAR:-default-local}, portanto
+# valores definidos no seu .env sempre têm prioridade sobre os defaults dos
+# serviços locais abaixo (ex.: para apontar para uma stack Firecrawl/SearXNG
+# externa já existente, basta definir FIRECRAWL_BASE_URL/SEARXNG_URL no .env).
+# ═══════════════════════════════════════════════════════════════════════════
+
+x-restart-policy: &restart-policy
+  restart: unless-stopped
+
+x-small-resources: &small-resources
+  deploy:
+    resources:
+      limits:
+        cpus: '0.5'
+        memory: 256M
+
+x-medium-resources: &medium-resources
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 512M
 
 services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Núcleo — sempre ativo, independente do perfil escolhido
+  # ─────────────────────────────────────────────────────────────────────────
   smart-research-agent:
+    <<: [*restart-policy, *medium-resources]
     build: .
+    container_name: sra-app
     env_file: .env
     environment:
-      - FIRECRAWL_BASE_URL=http://firecrawl-api-new:3002
-      - CHROMADB_HOST=chromadb
-      - CHROMADB_PORT=8000
-      - SEARXNG_URL=http://firecrawl-searxng:8080
+      # Scraping web (Firecrawl). Sem o perfil `firecrawl` ativo, o SRA usa
+      # a cascata de fallback de scraping (Steel/Spider/Jina) automaticamente.
+      - FIRECRAWL_BASE_URL=${FIRECRAWL_BASE_URL:-http://firecrawl:3002}
+      # Busca web (SearXNG). Necessário apenas se o perfil `dev`/`full` estiver ativo.
+      - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}
+      # Busca híbrida / vetorial (ChromaDB). Sem o perfil `chromadb`, cai
+      # automaticamente para um cliente efêmero em memória (HealthMonitor).
+      - CHROMADB_HOST=${CHROMADB_HOST:-chromadb}
+      - CHROMADB_PORT=${CHROMADB_PORT:-8000}
+      # Grafo de conhecimento persistente (Neo4j). Opcional — perfil `neo4j`.
+      - NEO4J_URI=${NEO4J_URI:-}
+      # Cache distribuído / broker Celery (Redis). Opcional — perfil `redis`.
+      - REDIS_URL=${REDIS_URL:-}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-}
     ports:
       - "3458:3458"
     volumes:
@@ -23,49 +78,107 @@ services:
       - ./test_sources.py:/app/test_sources.py
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - default
-      - firecrawl_net
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3458/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # Perfil "dev" — stack mínima de desenvolvimento (SRA + SearXNG)
+  # ─────────────────────────────────────────────────────────────────────────
+  searxng:
+    <<: [*restart-policy, *small-resources]
+    image: searxng/searxng:latest
+    container_name: sra-searxng
+    profiles: ["dev", "full"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - UWSGI_WORKERS=2
+      - UWSGI_THREADS=2
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Perfis opcionais — cada serviço isolado no seu próprio perfil (+ "full")
+  # ─────────────────────────────────────────────────────────────────────────
   chromadb:
+    <<: *restart-policy
     image: chromadb/chroma:latest
     container_name: sra-chromadb
+    profiles: ["chromadb", "full"]
     ports:
       - "3024:8000"
     volumes:
-      - ./chroma_data:/chroma/data
+      - chroma_data:/chroma/data
     environment:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma/data
-    networks:
-      - default
-      - firecrawl_net
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
-    restart: unless-stopped
     deploy:
       resources:
         limits:
           cpus: '1.0'
           memory: 1024M
 
+  neo4j:
+    <<: *restart-policy
+    image: neo4j:5.18-community
+    container_name: sra-neo4j
+    profiles: ["neo4j", "full"]
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-password123}
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2048M
+
+  redis:
+    <<: [*restart-policy, *small-resources]
+    image: redis:7.2-alpine
+    container_name: sra-redis
+    profiles: ["redis", "full"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   firecrawl:
+    <<: *restart-policy
     image: ghcr.io/firecrawl/firecrawl:latest
+    container_name: sra-firecrawl
+    profiles: ["firecrawl", "full"]
     ports:
       - "3002:3002"
     environment:
@@ -75,68 +188,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-    restart: unless-stopped
     deploy:
       resources:
         limits:
           cpus: '1.5'
           memory: 1536M
-    profiles:
-      - with-firecrawl
-
-  neo4j:
-    image: neo4j:5.18-community
-    container_name: sra-neo4j
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    environment:
-      - NEO4J_AUTH=neo4j/password123
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-    networks:
-      - default
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474/ || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1.5'
-          memory: 2048M
-
-  redis:
-    image: redis:7.2-alpine
-    container_name: sra-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - default
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-
-networks:
-  firecrawl_net:
-    external: true
-    name: firecrawl_backend
 
 volumes:
   neo4j_data:
   neo4j_logs:
   redis_data:
+  chroma_data:

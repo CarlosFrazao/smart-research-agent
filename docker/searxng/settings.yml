@@ -1,0 +1,21 @@
+# Configuração mínima do SearXNG para uso local do Smart Research Agent.
+# Herda TODOS os defaults oficiais (use_default_settings) e sobrescreve
+# apenas o necessário: habilitar o formato JSON (consumido pelo
+# src/search/searxng_searcher.py) e definir uma secret_key própria.
+#
+# Referência: https://docs.searxng.org/admin/settings/settings.html#use-default-settings
+
+use_default_settings: true
+
+general:
+  instance_name: "SRA Local SearXNG (dev)"
+
+server:
+  # Troque por um valor aleatório em produção: openssl rand -hex 16
+  secret_key: "sra-dev-local-only-change-me"
+  limiter: false
+
+search:
+  formats:
+    - html
+    - json

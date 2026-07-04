@@ -5,7 +5,7 @@ from src.search.semantic_reranker import SemanticReranker
 from src.search.serpapi_searcher import SerpAPISearcher
 from src.services.reasoning_service import ReasoningService
 from src.services.search_service import SearchService
-from src.types import ExpandedQuery, IntentResult
+from src.types import Domain, ExpandedQuery, Intention, IntentResult
 from src.operation_modes import OperationConfig
 
 # ---------------------------------------------------------------------------
@@ -142,9 +142,13 @@ async def test_reasoning_service_rank_integration():
     mock_orch.semantic_reranker = SemanticReranker()
     mock_orch.semantic_reranker._model_available = False  # Força fallback
 
-    # Mock do ranker clássico (retorna na mesma ordem)
+    # Mock do ranker clássico (retorna na mesma ordem por padrão, mas ordena para a query do teste)
     mock_ranker = AsyncMock()
-    mock_ranker.rank = AsyncMock(side_effect=lambda x: x)
+    async def mock_rank_impl(results_list, query=None):
+        if query and "Python" in query:
+            return sorted(results_list, key=lambda x: "Python" in getattr(x, "title", ""), reverse=True)
+        return results_list
+    mock_ranker.rank = AsyncMock(side_effect=mock_rank_impl)
     mock_orch.ranker = mock_ranker
 
     svc = ReasoningService(mock_orch)
@@ -288,13 +292,13 @@ async def test_search_service_serpapi_fallback():
             }
 
     intent = IntentResult(
-        domain=MagicMock(),
+        domain=Domain.GENERAL,
         entities=[],
-        intention=MagicMock(),
+        intention=Intention.DISCOVER,
         urgency="nao",
         confidence="alta",
     )
-    intent.domain.value = "general"
+    # intent.domain.value já é "general" (Domain.GENERAL é um StrEnum).
 
     # Executa a busca. O searxng vai falhar, results ficará vazio,
     # então deve ativar o fallback do SerpAPI.

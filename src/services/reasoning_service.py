@@ -80,35 +80,30 @@ class ReasoningService:
         """Expande a query delegando ao `QueryExpander`."""
         return await self.query_expander.expand(query, intent)
 
+    async def analyze_and_expand(
+        self, query: str, context_query: str | None = None
+    ) -> tuple[Any, list[Any]]:
+        """
+        Analisa a intenção e expande as consultas de forma consolidada em uma única chamada.
+        Delega ao `IntentAnalyzer.analyze_and_expand()`.
+        """
+        return await self.intent_analyzer.analyze_and_expand(
+            query, context_query=context_query
+        )
+
     async def rank(self, results: list[Any], query: str | None = None) -> list[Any]:
         """
-        Ranqueia os resultados pelo score de qualidade clássico (ranker).
-        Se `query` for informado, aplica re-ranking semântico em seguida via SemanticReranker.
+        Ranqueia os resultados combinando heuristica por fonte + BM25 +
+        embeddings (ranking hibrido, sem LLM) via `QualityRanker.rank()`.
+
+        Quando `query` e informado, o proprio `QualityRanker` delega ao
+        `HybridRanker` (ver `src/ranking/hybrid_ranker.py`), que ja inclui o
+        re-ranking semantico via `SemanticReranker`. Por isso nao ha mais um
+        passo separado de re-ranking aqui: chamar o modelo de embeddings
+        duas vezes (uma dentro do ranking hibrido, outra aqui) dobraria o
+        custo dessa etapa sem nenhum ganho de qualidade.
         """
-        ranked = await self.ranker.rank(results)
-        if query and hasattr(self.orch, "semantic_reranker"):
-            try:
-                # Converte objetos SearchResult para dict para o reranker
-                as_dicts = [
-                    r.__dict__ if hasattr(r, "__dict__") else dict(r) for r in ranked
-                ]
-                reranked_dicts = await self.orch.semantic_reranker.rerank(
-                    query, as_dicts
-                )
-                # Recria a ordem na lista original (preserva objetos originais, apenas reordena)
-                url_to_obj = {
-                    (r.url if hasattr(r, "url") else r.get("url", "")): r
-                    for r in ranked
-                }
-                ranked = [
-                    url_to_obj.get(d.get("url", ""), ranked[i])
-                    for i, d in enumerate(reranked_dicts)
-                ]
-            except Exception as e:
-                logger.warning(
-                    f"ReasoningService.rank: SemanticReranker falhou ({e}), mantendo ranking original"
-                )
-        return ranked
+        return await self.ranker.rank(results, query=query)
 
     async def calculate_overall_confidence(self, results: list[Any]) -> float:
         """

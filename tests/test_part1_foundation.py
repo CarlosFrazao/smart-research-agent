@@ -12,7 +12,9 @@ def test_types_import():
     assert Intention.DISCOVER == "discover"
 
 
-def test_config_import():
+def test_config_import(monkeypatch):
+    monkeypatch.delenv("MAX_RESULTS_PER_SOURCE", raising=False)
+    monkeypatch.delenv("max_results_per_source", raising=False)
     from src.config import Config, LLMProvider
 
     config = Config(_env_file=None)

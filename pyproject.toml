@@ -23,6 +23,7 @@ dependencies = [
     "mcp>=1.0",
     "chromadb>=0.5.0",
     "kuzu>=0.11.0",
+    "watchdog>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -43,12 +44,20 @@ scheduler = [
 sentiment = [
     "vaderSentiment>=3.3.2", # Análise de sentimentos e viés
 ]
+tracing = [
+    "opentelemetry-api>=1.24.0",
+    "opentelemetry-sdk>=1.24.0",
+    "opentelemetry-exporter-otlp>=1.24.0",
+]
 all = [
     "reportlab>=4.0",
     "python-docx>=1.1",
     "python-pptx>=0.6.23",
     "apscheduler>=3.10.0",
     "vaderSentiment>=3.3.2",
+    "opentelemetry-api>=1.24.0",
+    "opentelemetry-sdk>=1.24.0",
+    "opentelemetry-exporter-otlp>=1.24.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "aioresponses>=0.7",

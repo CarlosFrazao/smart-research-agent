@@ -95,9 +95,10 @@ class SmartModelRouter:
     """
 
     def __init__(self, openrouter_api_key: str | None = None):
-        self._openrouter_key = openrouter_api_key or os.environ.get(
-            "OPENROUTER_API_KEY", ""
-        )
+        if openrouter_api_key is not None:
+            self._openrouter_key = openrouter_api_key
+        else:
+            self._openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
 
     def route(
         self,

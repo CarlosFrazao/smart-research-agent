@@ -58,9 +58,11 @@ class FeedbackRanker:
                     f"FeedbackRanker: '{r.title[:40]}' {r.combined_score} → {new_score} (delta={delta:+.1f})"
                 )
 
-            from dataclasses import replace
-
-            adjusted.append(replace(r, combined_score=new_score))
+            # `SynthesizedResult` agora é um `pydantic.BaseModel` (não mais
+            # `@dataclass`), então `dataclasses.replace()` não se aplica.
+            # `model_copy(update=...)` é o equivalente Pydantic: cópia rasa
+            # imutável do objeto original com os campos indicados sobrescritos.
+            adjusted.append(r.model_copy(update={"combined_score": new_score}))
 
         adjusted.sort(key=lambda x: x.combined_score, reverse=True)
         return adjusted

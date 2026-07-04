@@ -5,11 +5,14 @@ combinando sumário executivo gerado por LLM, análise de fontes, tendências,
 sentimento, comparações e timeline cronológica.
 """
 
+import asyncio
+import hashlib
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
 
+from src.cache import Cache
 from src.clients.llm_client import LLMClient
 from src.comparator import Comparator
 from src.sentiment_analyzer import SentimentAnalyzer
@@ -17,6 +20,37 @@ from src.temporal_analyzer import TemporalAnalyzer
 from src.types import ReportFormat, ResearchMetadata, SynthesizedResult
 
 logger = logging.getLogger(__name__)
+
+# TTL do cache de secoes LLM (resumo/recomendacao/tendencias) do relatorio.
+# Cobre reexecucoes/reexportacoes (md+pdf+docx) do mesmo conjunto de resultados
+# dentro de uma mesma sessao de pesquisa, sem gastar chamadas de LLM extras.
+_SECTIONS_CACHE_TTL_SECONDS = 1800  # 30 minutos
+
+# Schema JSON para a chamada consolidada das 3 secoes narrativas do relatorio.
+_SECTIONS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "executive_summary": {
+            "type": "string",
+            "description": "Resumo executivo de 3-5 frases sobre os achados principais, em PT-BR.",
+        },
+        "recommendation": {
+            "type": "string",
+            "description": (
+                "Recomendacao final estruturada em PT-BR: (1) recomendacao principal "
+                "com dado concreto, (2) alternativa, (3) proximos passos (max. 3)."
+            ),
+        },
+        "trends": {
+            "type": "string",
+            "description": (
+                "2-3 tendencias tecnologicas em PT-BR, cada uma citando pelo menos "
+                "um projeto concreto como evidencia."
+            ),
+        },
+    },
+    "required": ["executive_summary", "recommendation", "trends"],
+}
 
 
 class ReportGenerator:
@@ -26,11 +60,15 @@ class ReportGenerator:
     tendências (via LLM) em um único documento Markdown coeso e exportável.
     """
 
-    def __init__(self, llm_client: LLMClient):
+    def __init__(self, llm_client: LLMClient, cache: Cache | None = None):
         self.llm = llm_client
         self.temporal_analyzer = TemporalAnalyzer()
         self.sentiment_analyzer = SentimentAnalyzer()
         self.comparator = Comparator()
+        # Cache das 3 secoes narrativas (resumo/recomendacao/tendencias).
+        # Aceita um Cache compartilhado (ex: injetado pelo Orchestrator) ou
+        # cria um proprio com os defaults do projeto (./.cache, sem Redis).
+        self.cache = cache or Cache()
 
     async def generate(
         self,
@@ -48,11 +86,10 @@ class ReportGenerator:
         Returns:
             str: Relatório completo em formato Markdown.
         """
-        executive_summary = await self._generate_executive_summary(
-            query, results, metadata
-        )
-        recommendation = await self._generate_recommendation(query, results)
-        trends = await self._generate_trends(results)
+        sections = await self._generate_report_sections(query, results, metadata)
+        executive_summary = sections["executive_summary"]
+        recommendation = sections["recommendation"]
+        trends = sections["trends"]
         timeline_section = self.temporal_analyzer.generate_timeline_section(results)
         sentiment_section = self.sentiment_analyzer.generate_sentiment_section(results)
         comparison_section = self.comparator.generate_comparison_section(query, results)
@@ -138,6 +175,193 @@ class ReportGenerator:
             enriched_sections.append(section)
 
         return "\n## ".join(enriched_sections)
+
+    def _sections_cache_key(
+        self,
+        query: str,
+        results: list[SynthesizedResult],
+        metadata: ResearchMetadata,
+    ) -> str:
+        """Gera uma chave de cache determinística para as 3 secoes narrativas.
+
+        A chave depende da query, do dominio/total de resultados e de uma
+        "impressao digital" dos top-8 resultados (titulo, score, fontes e
+        qualidade de evidencia). Isso garante cache-hit em reexecucoes ou
+        reexportacoes (md/pdf/docx) do mesmo conjunto de resultados sem
+        depender de identidade de objeto.
+        """
+        fingerprint_parts = [
+            query.strip().lower(),
+            str(metadata.domain),
+            str(metadata.total_results),
+        ]
+        for r in results[:8]:
+            quality = getattr(r, "evidence_quality", "unknown")
+            fingerprint_parts.append(
+                f"{r.title}|{r.combined_score}|{quality}|{','.join(sorted(s for s in r.sources if s))}"
+            )
+        fingerprint = "||".join(fingerprint_parts)
+        digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+        return f"report_sections:{digest}"
+
+    async def _generate_report_sections(
+        self,
+        query: str,
+        results: list[SynthesizedResult],
+        metadata: ResearchMetadata,
+    ) -> dict[str, str]:
+        """Obtem as 3 secoes narrativas do relatorio (resumo, recomendacao, tendencias).
+
+        Estrategia (do mais para o menos eficiente):
+          1. Cache — reaproveita secoes ja geradas para o mesmo conjunto de resultados.
+          2. Chamada consolidada — 1 unica chamada LLM com schema JSON estruturado.
+          3. Fallback paralelo — se a consolidada falhar (JSON invalido, erro de
+             API, dados insuficientes), executa as 3 chamadas originais em
+             paralelo via `asyncio.gather()`, cada uma com seu proprio fallback
+             textual individual (comportamento identico ao anterior).
+
+        Args:
+            query: Query original do usuario.
+            results: Resultados sintetizados para contexto do LLM.
+            metadata: Metadados da sessao de pesquisa.
+
+        Returns:
+            dict com as chaves "executive_summary", "recommendation" e "trends".
+        """
+
+        async def _parallel_fallback() -> dict[str, str]:
+            executive_summary, recommendation, trends = await asyncio.gather(
+                self._generate_executive_summary(query, results, metadata),
+                self._generate_recommendation(query, results),
+                self._generate_trends(results),
+            )
+            return {
+                "executive_summary": executive_summary,
+                "recommendation": recommendation,
+                "trends": trends,
+            }
+
+        # Casos degenerados (sem resultados ou poucos demais para tendencias
+        # confiaveis) usam diretamente o caminho paralelo: os metodos originais
+        # ja tem seus proprios guard-clauses para esses casos (ex: "Poucos dados
+        # para analise de tendencias"), e o volume de dados nao justifica cache.
+        if not results or len(results) < 3:
+            return await _parallel_fallback()
+
+        cache_key = self._sections_cache_key(query, results, metadata)
+        try:
+            cached = await self.cache.get(cache_key)
+        except Exception as e:
+            logger.warning(f"ReportGenerator: falha ao consultar cache de secoes: {e}")
+            cached = None
+        if cached and all(cached.get(k) for k in ("executive_summary", "recommendation", "trends")):
+            logger.info("ReportGenerator: secoes narrativas recuperadas do cache.")
+            return cached
+
+        try:
+            sections = await self._generate_sections_consolidated(query, results, metadata)
+        except Exception as e:
+            logger.warning(
+                f"ReportGenerator: chamada consolidada falhou ({e}); "
+                "usando fallback paralelo com prompts individuais."
+            )
+            sections = await _parallel_fallback()
+
+        try:
+            await self.cache.set(
+                cache_key,
+                sections,
+                ttl_seconds=_SECTIONS_CACHE_TTL_SECONDS,
+                source_type="report_sections",
+            )
+        except Exception as e:
+            logger.warning(f"ReportGenerator: falha ao gravar cache de secoes: {e}")
+
+        return sections
+
+    async def _generate_sections_consolidated(
+        self,
+        query: str,
+        results: list[SynthesizedResult],
+        metadata: ResearchMetadata,
+    ) -> dict[str, str]:
+        """Gera resumo executivo, recomendacao e tendencias em 1 unica chamada LLM.
+
+        Consolida os 3 prompts originais em um so, solicitando resposta em
+        JSON estruturado via `LLMClient.generate_structured`. Substitui 3
+        round-trips sequenciais (ou paralelos) por apenas 1.
+
+        Raises:
+            Exception: se a chamada LLM falhar ou o JSON retornado nao tiver
+                todas as secoes preenchidas — o chamador deve tratar isso e
+                cair no fallback paralelo com os prompts individuais.
+        """
+        top_lines_list = []
+        for i, r in enumerate(results[:8]):
+            quality = getattr(r, "evidence_quality", "unknown")
+            confidence_tag = (
+                "[ALTA CONFIANÇA]"
+                if quality == "verified"
+                else "[MÉDIA]"
+                if quality == "cited"
+                else "[BAIXA — VERIFICAR]"
+            )
+            top_lines_list.append(
+                f"{i+1}. {confidence_tag} {r.title or '(sem título)'} "
+                f"({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n"
+                f"   Descricao: {(r.description or '')[:200]}\n"
+                f"   Destaques: {', '.join(h for h in r.highlights if h)}\n"
+                f"   Metricas: {r.metrics}"
+            )
+        top_lines = "\n".join(top_lines_list)
+
+        confidence_note = (
+            f"Confiança geral da pesquisa: {metadata.overall_confidence:.0%}"
+            if metadata.overall_confidence > 0
+            else ""
+        )
+        warnings_note = (
+            f"Advertências: {'; '.join(w for w in metadata.low_confidence_warnings[:3] if w)}"
+            if metadata.low_confidence_warnings
+            else ""
+        )
+
+        prompt = (
+            "Você é um analista técnico sênior e consultor de tecnologia. Escreva em Português do Brasil.\n"
+            "Com base nos dados de pesquisa abaixo, gere as TRÊS seções narrativas de um relatório técnico.\n\n"
+            "Regras gerais: use dados concretos (stars, datas, linguagens) quando disponíveis. "
+            "Admita limitações quando a confiança for baixa. Não invente informações. "
+            "Priorize fontes marcadas com [ALTA CONFIANÇA] e trate com cautela as marcadas com [BAIXA — VERIFICAR].\n\n"
+            f"Query: {query}\n"
+            f"Domínio: {metadata.domain}\n"
+            f"Fontes pesquisadas: {', '.join(s for s in metadata.sources if s)}\n"
+            f"Resultados encontrados: {metadata.total_results}\n"
+            f"Iterações: {metadata.iterations}\n"
+            f"{confidence_note}\n"
+            f"{warnings_note}\n\n"
+            f"Projetos encontrados (ordenados por relevância):\n{top_lines}\n\n"
+            "Gere os três campos a seguir, cada um em Português do Brasil:\n"
+            "1. executive_summary — 3 a 5 frases sobre os achados principais.\n"
+            "2. recommendation — estrutura obrigatória: (a) Recomendação principal, citando um "
+            "projeto e um dado concreto que a justifique; (b) Alternativa e quando escolhê-la; "
+            "(c) Próximos passos (máximo 3 ações específicas e acionáveis). Dê preferência clara "
+            "a projetos [ALTA CONFIANÇA] e evite recomendar itens [BAIXA — VERIFICAR] como opção primária.\n"
+            "3. trends — 2 a 3 tendências tecnológicas, cada uma citando pelo menos um projeto "
+            "concreto como evidência. Não extrapole além dos dados fornecidos."
+        )
+
+        data = await self.llm.generate_structured(prompt, _SECTIONS_SCHEMA, temperature=0.35)
+
+        sections = {
+            "executive_summary": str(data.get("executive_summary") or "").strip(),
+            "recommendation": str(data.get("recommendation") or "").strip(),
+            "trends": str(data.get("trends") or "").strip(),
+        }
+        if not all(sections.values()):
+            raise ValueError(
+                "Chamada consolidada retornou uma ou mais secoes vazias/ausentes."
+            )
+        return sections
 
     async def _generate_executive_summary(
         self,

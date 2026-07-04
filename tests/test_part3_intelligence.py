@@ -146,6 +146,116 @@ async def test_query_expander_fallback_has_original(mock_llm_client, sample_inte
     assert "crm open source" in queries
 
 
+# ─── IntentAnalyzer.analyze_and_expand (consolidacao 2→1 chamada LLM) ─────────
+
+
+def _mock_combined_response(n_queries: int = 8, **intent_overrides):
+    payload = {
+        "domain": "ai_ml",
+        "entities": ["Claude"],
+        "intention": "learn",
+        "urgency": "nao",
+        "confidence": "alta",
+        "queries": [
+            {
+                "query": f"expanded query {i}",
+                "type": "synonym",
+                "priority": "alta",
+                "rationale": "test",
+            }
+            for i in range(n_queries)
+        ],
+    }
+    payload.update(intent_overrides)
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_analyze_and_expand_single_call_heuristic_confident(mock_llm_client):
+    """Quando a heuristica ja e confiante, apenas 1 chamada LLM deve ocorrer
+    (somente para expansao — os campos de intencao nao sao solicitados)."""
+    mock_llm_client.generate_structured = AsyncMock(
+        return_value=_mock_combined_response()
+    )
+    from src.intent_analyzer import IntentAnalyzer
+
+    analyzer = IntentAnalyzer(mock_llm_client)
+    intent, expanded = await analyzer.analyze_and_expand("n8n vs Zapier vs Make")
+
+    assert mock_llm_client.generate_structured.call_count == 1
+    assert intent.intention == Intention.COMPARE  # heuristica, nao sobrescrita
+    assert len(expanded) == 8
+    # Schema da unica chamada nao deveria exigir campos de intencao
+    _, schema = mock_llm_client.generate_structured.call_args.args
+    assert "domain" not in schema["properties"]
+
+
+@pytest.mark.asyncio
+async def test_analyze_and_expand_single_call_heuristic_unconfident(mock_llm_client):
+    """Quando a heuristica NAO e confiante, intent + expansion sao resolvidos
+    em 1 unica chamada combinada (antes eram 2 chamadas sequenciais)."""
+    mock_llm_client.generate_structured = AsyncMock(
+        return_value=_mock_combined_response()
+    )
+    from src.intent_analyzer import IntentAnalyzer
+
+    analyzer = IntentAnalyzer(mock_llm_client)
+    intent, expanded = await analyzer.analyze_and_expand(
+        "coisa bem generica sem nenhum sinal claro"
+    )
+
+    assert mock_llm_client.generate_structured.call_count == 1
+    assert intent.domain == Domain.AI_ML
+    assert intent.confidence == "alta"
+    assert len(expanded) == 8
+    _, schema = mock_llm_client.generate_structured.call_args.args
+    assert "domain" in schema["properties"]  # intencao pedida na mesma chamada
+
+
+@pytest.mark.asyncio
+async def test_analyze_and_expand_cache_hit_skips_intent_reclassification(
+    mock_llm_client,
+):
+    """Para uma query subsequente muito similar, o cache de intencao evita
+    pedir a classificacao de intencao de novo — a chamada LLM (ainda
+    necessaria para expandir a nova query) so pede `queries`."""
+    mock_llm_client.generate_structured = AsyncMock(
+        return_value=_mock_combined_response()
+    )
+    from src.intent_analyzer import IntentAnalyzer
+
+    analyzer = IntentAnalyzer(mock_llm_client)
+    intent1, _ = await analyzer.analyze_and_expand(
+        "coisa bem generica sem nenhum sinal claro"
+    )
+    intent2, _ = await analyzer.analyze_and_expand(
+        "coisa bem generica sem nenhum sinal claro hoje"
+    )
+
+    assert mock_llm_client.generate_structured.call_count == 2
+    # A segunda chamada reaproveita a intencao do cache (nao pede domain/etc.)
+    _, second_schema = mock_llm_client.generate_structured.call_args_list[1].args
+    assert list(second_schema["properties"].keys()) == ["queries"]
+    assert intent2 == intent1
+
+
+@pytest.mark.asyncio
+async def test_analyze_and_expand_fallback_on_llm_failure(mock_llm_client):
+    """Se a chamada combinada falhar, cai para heuristica + expansao
+    deterministica local, sem propagar excecao."""
+    mock_llm_client.generate_structured = AsyncMock(
+        side_effect=Exception("LLM offline")
+    )
+    from src.intent_analyzer import IntentAnalyzer
+
+    analyzer = IntentAnalyzer(mock_llm_client)
+    intent, expanded = await analyzer.analyze_and_expand("crm open source")
+
+    assert intent.domain == Domain.SAAS_B2B
+    assert len(expanded) >= 4
+    assert all(isinstance(q, ExpandedQuery) for q in expanded)
+
+
 # ─── Source Planner ───────────────────────────────────────────────────────────
 
 

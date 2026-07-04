@@ -1,4 +1,17 @@
-"""Utilitarios de configuracao de logging estruturado com suporte a JSON e niveis de log dinamicos."""
+"""Utilitarios de configuracao de logging estruturado com suporte a JSON e niveis de log dinamicos.
+
+Todos os logs emitidos por este modulo (via `setup_logger`, `setup_logging` ou
+`structured_logger`) carregam automaticamente o `correlation_id` da requisicao/
+pesquisa atual — e, quando o tracing distribuido estiver habilitado (ver
+`src.monitoring.tracing`), tambem `trace_id`/`span_id` do span ativo. Isso
+permite correlacionar uma linha de log com o span exato do pipeline (etapa de
+busca, chamada LLM, etc.) que a gerou, sem que nenhum call-site precise mudar.
+
+A integracao com `src.monitoring.tracing` é sempre feita via import tardio e
+protegida por try/except: se o modulo de tracing nao estiver disponivel por
+qualquer motivo, o logging continua funcionando normalmente, apenas sem os
+campos de correlacao (mesma filosofia de fallback do resto do projeto).
+"""
 
 from __future__ import annotations
 
@@ -19,6 +32,42 @@ if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
     except Exception:
         pass
+
+
+def _current_trace_fields() -> dict[str, str]:
+    """Coleta correlation_id/trace_id/span_id do contexto atual.
+
+    Import tardio e protegido: `src.monitoring.tracing` nunca é uma dependência
+    obrigatória para que o logging funcione.
+    """
+    fields: dict[str, str] = {}
+    try:
+        from src.monitoring.tracing import get_correlation_id, get_current_trace_context
+
+        correlation_id = get_correlation_id()
+        if correlation_id:
+            fields["correlation_id"] = correlation_id
+        fields.update(get_current_trace_context())
+    except Exception:
+        pass
+    return fields
+
+
+class CorrelationIdFilter(logging.Filter):
+    """Filtro que injeta `correlation_id`/`trace_id`/`span_id` em todo `LogRecord`.
+
+    Usa `-` como valor padrão quando não há contexto de correlação ativo, para
+    que a string de formato (`%(correlation_id)s`) nunca falhe por atributo
+    ausente (ex: logs emitidos fora de uma requisição/pesquisa, como no boot
+    da aplicação).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        fields = _current_trace_fields()
+        record.correlation_id = fields.get("correlation_id", "-")
+        record.trace_id = fields.get("trace_id", "-")
+        record.span_id = fields.get("span_id", "-")
+        return True
 
 
 class ColoredFormatter(logging.Formatter):
@@ -44,8 +93,9 @@ def setup_logger(name: str = "smart_research", level: str = "INFO") -> logging.L
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
         handler.setLevel(logging.DEBUG)
+        handler.addFilter(CorrelationIdFilter())
         formatter = ColoredFormatter(
-            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            "%(asctime)s [%(levelname)s] %(name)s [corr=%(correlation_id)s]: %(message)s",
             datefmt="%H:%M:%S",
         )
         handler.setFormatter(formatter)
@@ -63,6 +113,7 @@ class StructuredLogger:
     def _write_log(self, data: dict):
         try:
             data["timestamp"] = datetime.now().isoformat()
+            data.update(_current_trace_fields())
             with open(self.log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
         except Exception:
@@ -98,6 +149,12 @@ class StructuredLogger:
 structured_logger = StructuredLogger()
 
 
+def _bind_trace_context(logger, method_name, event_dict):
+    """Processor structlog que injeta correlation_id/trace_id/span_id no evento."""
+    event_dict.update(_current_trace_fields())
+    return event_dict
+
+
 def setup_logging(
     level: str = "INFO",
     json_output: bool = True,
@@ -115,6 +172,7 @@ def setup_logging(
 
         shared_processors = [
             structlog.contextvars.merge_contextvars,
+            _bind_trace_context,
             structlog.processors.add_log_level,
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
@@ -139,25 +197,26 @@ def setup_logging(
         )
 
         # Redireciona logs tradicionais do Python para o structlog
+        root_handler = logging.StreamHandler(sys.stdout)
+        root_handler.addFilter(CorrelationIdFilter())
         logging.basicConfig(
-            format="%(message)s", stream=sys.stdout, level=numeric_level
+            format="%(message)s",
+            level=numeric_level,
+            handlers=[root_handler],
+            force=True,
         )
 
     except ImportError:
         # Fallback se structlog não estiver no virtualenv
-        log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        if log_file:
-            logging.basicConfig(
-                level=numeric_level,
-                format=log_format,
-                filename=log_file,
-                filemode="a",
-                encoding="utf-8",
-            )
-        else:
-            logging.basicConfig(
-                level=numeric_level, format=log_format, stream=sys.stdout
-            )
+        log_format = "%(asctime)s [%(levelname)s] %(name)s [corr=%(correlation_id)s]: %(message)s"
+        handler = (
+            logging.FileHandler(log_file, encoding="utf-8")
+            if log_file
+            else logging.StreamHandler(sys.stdout)
+        )
+        handler.addFilter(CorrelationIdFilter())
+        handler.setFormatter(logging.Formatter(log_format))
+        logging.basicConfig(level=numeric_level, handlers=[handler], force=True)
         logger = logging.getLogger(__name__)
         logger.warning(
             "structlog não está instalado. Usando fallback do logging padrão."

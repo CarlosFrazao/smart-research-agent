@@ -19,9 +19,48 @@ import asyncio
 import json
 import logging
 from enum import StrEnum
-from typing import Any
+from typing import Any, TypeVar
+
+from pydantic import BaseModel, ValidationError
+from src.utils.retry import RetryConfig
+from src.monitoring.tracing import trace_llm_call
 
 logger = logging.getLogger(__name__)
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
+class LLMClientError(RuntimeError):
+    """Erro genérico do cliente LLM (após esgotar retries)."""
+    pass
+
+
+class OutputValidationError(LLMClientError):
+    """A resposta do modelo não pôde ser validada contra o Pydantic schema."""
+    pass
+
+
+def _retryable_exceptions_for(provider: "LLMProvider") -> tuple[type[BaseException], ...]:
+    if provider in (LLMProvider.OPENAI, LLMProvider.OPENROUTER, LLMProvider.OLLAMA):
+        try:
+            from openai import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
+            return (APITimeoutError, APIConnectionError, RateLimitError, InternalServerError)
+        except ImportError:
+            return (TimeoutError, ConnectionError)
+    elif provider == LLMProvider.ANTHROPIC:
+        try:
+            from anthropic import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
+            return (APITimeoutError, APIConnectionError, RateLimitError, InternalServerError)
+        except ImportError:
+            return (TimeoutError, ConnectionError)
+    elif provider == LLMProvider.GROQ:
+        try:
+            from groq import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
+            return (APITimeoutError, APIConnectionError, RateLimitError, InternalServerError)
+        except ImportError:
+            return (TimeoutError, ConnectionError)
+    else:
+        return (TimeoutError, ConnectionError)
 
 # ── Retry com backoff exponencial antes de acionar failover ───────────────────
 RATE_LIMIT_MAX_RETRIES: int = 3
@@ -94,6 +133,13 @@ class LLMClient:
         from src.token_economy import TokenEconomy
 
         self.token_economy = TokenEconomy(default_model=self.model)
+        self.max_repair_attempts = 1
+        self._retry_config = RetryConfig(
+            max_attempts=4,
+            initial_wait_seconds=1.0,
+            max_wait_seconds=15.0,
+            retry_on=_retryable_exceptions_for(self.provider),
+        )
 
     def _init_providers_safely(self) -> None:
         import importlib
@@ -179,41 +225,62 @@ class LLMClient:
     async def generate(
         self, prompt: str, temperature: float = 0.3, max_tokens: int = 4000
     ) -> str:
-        """Tenta o provider atual com retry de backoff; em caso de rate-limit persistente, aciona failover."""
+        """Tenta o provider atual com retry de backoff; em caso de rate-limit persistente, aciona failover.
+
+        Assinatura mantida idêntica à original por compatibilidade com callers
+        existentes (report_generator, knowledge_graph, debate_orchestrator,
+        etc.) e com testes que mockam `generate` diretamente. Quando chamada
+        através de `complete()`, esta chamada já ocorre aninhada dentro de um
+        span `trace_llm_call` com o `task_type` correto (ver `complete()`);
+        aqui é criado apenas um span genérico, cobrindo também chamadas diretas.
+        """
         last_exc: Exception | None = None
         wait = RATE_LIMIT_INITIAL_WAIT_S
 
-        for attempt in range(1, RATE_LIMIT_MAX_RETRIES + 1):
-            try:
-                return await self._generate_raw(prompt, temperature, max_tokens)
-            except Exception as exc:
-                if _is_daily_quota(exc):
-                    logger.warning(
-                        f"[QuotaDiária] {self.provider.value} esgotou cota diária. "
-                        "Acionando cadeia de failover imediatamente..."
-                    )
-                    break
-                elif _is_rate_limit(exc):
-                    last_exc = exc
-                    if attempt < RATE_LIMIT_MAX_RETRIES:
+        async with trace_llm_call(self.provider.value, self.model, "generic") as span:
+            for attempt in range(1, RATE_LIMIT_MAX_RETRIES + 1):
+                try:
+                    result = await self._generate_raw(prompt, temperature, max_tokens)
+                    if span is not None:
+                        try:
+                            span.set_attribute("sra.llm.attempt", attempt)
+                            span.set_attribute("gen_ai.response.length", len(result))
+                        except Exception:
+                            pass
+                    return result
+                except Exception as exc:
+                    if _is_daily_quota(exc):
                         logger.warning(
-                            f"[RateLimit] {self.provider.value} — tentativa {attempt}/{RATE_LIMIT_MAX_RETRIES}. "
-                            f"Aguardando {wait:.0f}s antes de retry..."
+                            f"[QuotaDiária] {self.provider.value} esgotou cota diária. "
+                            "Acionando cadeia de failover imediatamente..."
                         )
-                        await asyncio.sleep(wait)
-                        wait *= 2
+                        break
+                    elif _is_rate_limit(exc):
+                        last_exc = exc
+                        if attempt < RATE_LIMIT_MAX_RETRIES:
+                            logger.warning(
+                                f"[RateLimit] {self.provider.value} — tentativa {attempt}/{RATE_LIMIT_MAX_RETRIES}. "
+                                f"Aguardando {wait:.0f}s antes de retry..."
+                            )
+                            await asyncio.sleep(wait)
+                            wait *= 2
+                        else:
+                            logger.warning(
+                                f"[Failover] {self.provider.value} esgotou {RATE_LIMIT_MAX_RETRIES} tentativas. "
+                                "Acionando cadeia de failover..."
+                            )
                     else:
-                        logger.warning(
-                            f"[Failover] {self.provider.value} esgotou {RATE_LIMIT_MAX_RETRIES} tentativas. "
-                            "Acionando cadeia de failover..."
-                        )
-                else:
-                    raise
+                        raise
 
-        # Todos os retries esgotados — acionar failover
-        return await self._failover_generate(
-            prompt, temperature, max_tokens, skip=self.provider
-        )
+            # Todos os retries esgotados — acionar failover
+            if span is not None:
+                try:
+                    span.set_attribute("sra.llm.failover_triggered", True)
+                except Exception:
+                    pass
+            return await self._failover_generate(
+                prompt, temperature, max_tokens, skip=self.provider
+            )
 
     async def _generate_raw(
         self, prompt: str, temperature: float, max_tokens: int
@@ -238,6 +305,7 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=30.0,
             )
             return response.choices[0].message.content
 
@@ -249,6 +317,7 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=30.0,
             )
             return response.choices[0].message.content
 
@@ -294,9 +363,12 @@ class LLMClient:
             try:
                 provider_enum = LLMProvider(provider_name)
                 logger.info(f"[Failover] Tentando provider: {provider_name}")
-                result = await self._call_provider(
-                    provider_enum, cfg, prompt, temperature, max_tokens
-                )
+                async with trace_llm_call(
+                    provider_name, cfg.get("model", "?"), task_type="failover"
+                ):
+                    result = await self._call_provider(
+                        provider_enum, cfg, prompt, temperature, max_tokens
+                    )
                 logger.info(f"[Failover] Sucesso com provider: {provider_name}")
                 return result
             except Exception as exc:
@@ -344,6 +416,7 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=30.0,
             )
             return resp.choices[0].message.content
 
@@ -357,6 +430,7 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=30.0,
             )
             return resp.choices[0].message.content
 
@@ -400,6 +474,172 @@ class LLMClient:
         response = response.strip()
 
         return json.loads(response)
+
+    # ── Geração estruturada nativa Pydantic (com Tenacity e Reparo) ──────────
+
+    async def complete_structured(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ModelT],
+        temperature: float = 0.2,
+        max_tokens: int = 2048,
+    ) -> ModelT:
+        """Chamada estruturada de alto nível que retorna uma instância validada de `response_model`."""
+        from src.utils.retry import with_retry
+
+        retrying_call = with_retry(self._retry_config)(self._call_provider_structured)
+
+        last_error: ValidationError | None = None
+        for repair_attempt in range(self.max_repair_attempts + 1):
+            prompt = user_prompt
+            if last_error is not None:
+                prompt = (
+                    f"{user_prompt}\n\n"
+                    f"A resposta anterior não bateu com o schema esperado. "
+                    f"Erro de validação: {last_error}\n"
+                    f"Corrija e responda novamente seguindo exatamente o schema."
+                )
+
+            try:
+                async with trace_llm_call(self.provider.value, self.model, f"structured_{response_model.__name__.lower()}"):
+                    raw_json = await retrying_call(
+                        system_prompt=system_prompt,
+                        user_prompt=prompt,
+                        response_model=response_model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
+                return response_model.model_validate_json(raw_json)
+            except ValidationError as exc:
+                last_error = exc
+                logger.warning(
+                    f"structured_output_validation_failed attempt={repair_attempt + 1}/{self.max_repair_attempts + 1} error={exc}"
+                )
+            except Exception as exc:
+                logger.error(f"Erro na chamada estruturada do provider: {exc}")
+                raise LLMClientError(f"Erro na chamada estruturada: {exc}") from exc
+
+        raise OutputValidationError(
+            f"Não foi possível validar a saída do modelo contra "
+            f"{response_model.__name__} após {self.max_repair_attempts + 1} tentativa(s). "
+            f"Último erro: {last_error}"
+        )
+
+    async def _call_provider_structured(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ModelT],
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """Faz a chamada crua ao provider ativo usando structured outputs nativos."""
+        if self.provider in (LLMProvider.OPENAI, LLMProvider.OPENROUTER, LLMProvider.OLLAMA):
+            return await self._call_openai_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
+        elif self.provider == LLMProvider.ANTHROPIC:
+            return await self._call_anthropic_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
+        elif self.provider == LLMProvider.GEMINI:
+            return await self._call_gemini_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
+        elif self.provider == LLMProvider.GROQ:
+            return await self._call_groq_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
+        else:
+            json_prompt = (
+                f"{system_prompt}\n\n{user_prompt}"
+                + "\n\nResponda APENAS em JSON valido seguindo este schema: "
+                + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+                + "\nNao inclua markdown, apenas JSON puro."
+            )
+            raw = await self.generate(json_prompt, temperature=temperature, max_tokens=max_tokens)
+            raw = raw.strip()
+            for fence in ("```json", "```"):
+                if raw.startswith(fence):
+                    raw = raw[len(fence) :]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            return raw.strip()
+
+    async def _call_openai_structured(
+        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
+        temperature: float, max_tokens: int,
+    ) -> str:
+        completion = await self._client.beta.chat.completions.parse(
+            model=self.model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format=response_model,
+        )
+        choice = completion.choices[0]
+        if getattr(choice.message, "refusal", None):
+            raise LLMClientError(f"Modelo recusou a resposta: {choice.message.refusal}")
+        return choice.message.content
+
+    async def _call_anthropic_structured(
+        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
+        temperature: float, max_tokens: int,
+    ) -> str:
+        tool_name = f"emit_{response_model.__name__.lower()}"
+        message = await self._client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=[
+                {
+                    "name": tool_name,
+                    "description": f"Emite a resposta estruturada conforme o schema {response_model.__name__}.",
+                    "input_schema": response_model.model_json_schema(),
+                }
+            ],
+            tool_choice={"type": "tool", "name": tool_name},
+        )
+        for block in message.content:
+            if block.type == "tool_use" and block.name == tool_name:
+                return json.dumps(block.input)
+        raise LLMClientError("Anthropic não retornou um tool_use bloco com a resposta estruturada esperada.")
+
+    async def _call_gemini_structured(
+        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
+        temperature: float, max_tokens: int,
+    ) -> str:
+        from google.genai import types as genai_types
+        combined_prompt = f"{system_prompt}\n\n{user_prompt}"
+        response = await self._client.aio.models.generate_content(
+            model=self.model,
+            contents=combined_prompt,
+            config=genai_types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=response_model,
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            ),
+        )
+        return response.text or ""
+
+    async def _call_groq_structured(
+        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
+        temperature: float, max_tokens: int,
+    ) -> str:
+        json_prompt = (
+            f"{system_prompt}\n\n{user_prompt}"
+            + "\n\nResponda APENAS em JSON valido seguindo este schema: "
+            + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+        )
+        resp = await self._client.chat.completions.create(
+            model=self.model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": json_prompt}],
+            response_format={"type": "json_object"},
+        )
+        return resp.choices[0].message.content
 
     # ── Completion de alto nível (com SmartModelRouter) ───────────────────────
 
@@ -446,9 +686,15 @@ class LLMClient:
         original_model = self.model
         self.model = target_model
         try:
-            response = await self.generate(
-                truncated_prompt, temperature=temperature, max_tokens=max_tokens
-            )
+            # Span externo com o task_type real da etapa do pipeline (intent,
+            # synthesis, report, etc.), aninhando o span genérico criado
+            # internamente por `generate()` (que cobre tentativas/backoff).
+            async with trace_llm_call(self.provider.value, target_model, task_type):
+                response = await self.generate(
+                    truncated_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
         finally:
             self.model = original_model
         logger.debug(

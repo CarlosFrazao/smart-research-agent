@@ -247,13 +247,21 @@ class TestSmartCache:
     @pytest.mark.asyncio
     async def test_ttl_strategies_applied(self):
         cache = SmartCache()
-        # github deve ter TTL de 3600 (1h), news 900
+        # TTL adaptativo por fonte: github=24h, reddit=1h, news=15min
         await cache.set("g1", "val", source_type="github")
+        await cache.set("r1", "val_r", source_type="reddit")
         await cache.set("n1", "val2", source_type="news")
         from datetime import datetime, timezone
 
         g_expires = datetime.fromisoformat(cache.memory["g1"]["expires"])
+        r_expires = datetime.fromisoformat(cache.memory["r1"]["expires"])
         n_expires = datetime.fromisoformat(cache.memory["n1"]["expires"])
         now = datetime.now(timezone.utc)
-        assert (g_expires - now).seconds > 3500
-        assert (n_expires - now).seconds > 880 and (n_expires - now).seconds < 910
+        # Usar total_seconds() — .seconds trunca a componente de dias e
+        # sub-reportaria TTLs >= 24h (ex: 86400s vira .seconds == 0).
+        g_delta = (g_expires - now).total_seconds()
+        r_delta = (r_expires - now).total_seconds()
+        n_delta = (n_expires - now).total_seconds()
+        assert g_delta > 86300  # ~24h
+        assert r_delta > 3500 and r_delta < 3700  # ~1h
+        assert n_delta > 880 and n_delta < 910  # ~15min
