@@ -174,3 +174,68 @@ def test_kg_export_ttl_and_json(temp_memory):
     assert js["links"][0]["source"] == "Tesla"
     assert js["links"][0]["target"] == "BYD"
     assert js["links"][0]["type"] == "competes_with"
+
+
+def test_kg_algorithms(temp_memory):
+    kg = temp_memory.kg
+
+    # Setup a chain and triangle: Python -> developed_by -> Guido -> lives_in -> Netherlands
+    kg.add_triple(Triple("Python", "develops", "Guido", 0.95, "test"))
+    kg.add_triple(Triple("Guido", "located_in", "Netherlands", 0.85, "test"))
+    kg.add_triple(Triple("Python", "located_in", "Netherlands", 0.90, "test"))
+
+    # 1. Shortest path
+    path = kg.find_shortest_path("Python", "Netherlands")
+    assert path == ["Python", "Guido", "Netherlands"] or path == [
+        "Python",
+        "Netherlands",
+    ]
+
+    # 2. Communities (Louvain)
+    # Let's add a second distinct cluster: JavaScript -> competes_with -> TypeScript -> is_a -> WebLanguage
+    kg.add_triple(Triple("JavaScript", "competes_with", "TypeScript", 0.90, "test"))
+    kg.add_triple(Triple("JavaScript", "is_a", "WebLanguage", 0.95, "test"))
+    kg.add_triple(Triple("TypeScript", "is_a", "WebLanguage", 0.95, "test"))
+
+    communities = kg.detect_communities()
+    assert len(communities) >= 2
+
+    # Assert nodes are grouped
+    # Check that Python and Guido are in the same community
+    python_comm = next(c for c in communities if "Python" in c)
+    assert "Guido" in python_comm
+
+    js_comm = next(c for c in communities if "JavaScript" in c)
+    assert "TypeScript" in js_comm
+    assert "Python" not in js_comm
+
+    # 3. Knowledge gaps
+    # Add a low confidence bridge between the Python community and the JS community
+    kg.add_triple(
+        Triple("TypeScript", "competes_with", "Python", 0.50, "test")
+    )  # low confidence bridge
+    kg.add_triple(Triple("SingleNode", "is_a", "Concept", 0.90, "test"))
+
+    gaps = kg.detect_knowledge_gaps()
+    assert len(gaps) > 0
+
+    # Assert isolated node is detected
+    assert any(
+        g.get("type") == "isolated_node" and g.get("entity") == "SingleNode"
+        for g in gaps
+    )
+    # Assert low confidence bridge is detected (conf = 0.5 < 0.7)
+    assert any(
+        g.get("type") == "low_confidence_bridge"
+        and (
+            (
+                g.get("source_entity") == "TypeScript"
+                and g.get("target_entity") == "Python"
+            )
+            or (
+                g.get("source_entity") == "Python"
+                and g.get("target_entity") == "TypeScript"
+            )
+        )
+        for g in gaps
+    )

@@ -192,8 +192,7 @@ class SemanticKnowledgeGraph:
                 triple.subject, triple.relation, is_subject=True
             )
             self.kuzu_conn.execute(
-                "MERGE (s:SemanticEntity {name: $name}) "
-                "ON CREATE SET s.type = $type",
+                "MERGE (s:SemanticEntity {name: $name}) ON CREATE SET s.type = $type",
                 {"name": triple.subject, "type": sub_type},
             )
 
@@ -202,8 +201,7 @@ class SemanticKnowledgeGraph:
                 triple.object, triple.relation, is_subject=False
             )
             self.kuzu_conn.execute(
-                "MERGE (o:SemanticEntity {name: $name}) "
-                "ON CREATE SET o.type = $type",
+                "MERGE (o:SemanticEntity {name: $name}) ON CREATE SET o.type = $type",
                 {"name": triple.object, "type": obj_type},
             )
 
@@ -319,6 +317,149 @@ class SemanticKnowledgeGraph:
         except Exception as e:
             logger.warning(f"KG: get_related_entities falhou: {e}")
         return entities
+
+    def find_shortest_path(self, start_node: str, end_node: str) -> list[str]:
+        """
+        Encontra o caminho mais curto de entidades entre start_node e end_node
+        usando NetworkX baseado no grafo persistido no KuzuDB.
+        """
+        import networkx as nx
+
+        if not self.kuzu_conn:
+            return []
+
+        # Constrói o grafo NetworkX a partir das arestas cadastradas
+        triples = self.query_graph()
+        G = nx.Graph()
+        for t in triples:
+            G.add_edge(t.subject, t.object)
+
+        if start_node not in G or end_node not in G:
+            logger.debug(
+                f"KG: Nós '{start_node}' ou '{end_node}' não estão presentes no grafo."
+            )
+            return []
+
+        try:
+            path = nx.shortest_path(G, source=start_node, target=end_node)
+            return list(path)
+        except nx.NetworkXNoPath:
+            logger.debug(
+                f"KG: Nenhum caminho encontrado entre '{start_node}' e '{end_node}'."
+            )
+            return []
+        except Exception as e:
+            logger.warning(f"KG: Erro ao calcular shortest_path: {e}")
+            return []
+
+    def detect_communities(self) -> list[list[str]]:
+        """
+        Detecta comunidades de entidades fortemente conectadas no grafo
+        usando o algoritmo de Louvain (NetworkX).
+        """
+        import networkx as nx
+        from networkx.algorithms.community import louvain_communities
+
+        if not self.kuzu_conn:
+            return []
+
+        triples = self.query_graph()
+        if not triples:
+            return []
+
+        G = nx.Graph()
+        for t in triples:
+            G.add_edge(t.subject, t.object)
+
+        try:
+            # Louvain detecta partições que maximizam a modularidade
+            communities = louvain_communities(G)
+            return [list(c) for c in communities]
+        except Exception as e:
+            logger.warning(f"KG: Falha na detecção de comunidades Louvain: {e}")
+            return []
+
+    def detect_knowledge_gaps(self) -> list[dict[str, Any]]:
+        """
+        Analisa a estrutura do grafo para identificar gaps de conhecimento.
+        Gaps são classificados como:
+        - "isolated_node": Entidades com grau <= 1 (desconectadas ou de fonte única).
+        - "low_confidence_bridge": Relações entre comunidades com confiança < 0.70.
+        - "disconnected_component": Sub-grafos isolados que não se conectam ao resto do grafo.
+        """
+        import networkx as nx
+        from networkx.algorithms.community import louvain_communities
+
+        if not self.kuzu_conn:
+            return []
+
+        triples = self.query_graph()
+        if not triples:
+            return []
+
+        G = nx.Graph()
+        for t in triples:
+            G.add_edge(
+                t.subject, t.object, relation=t.relation, confidence=t.confidence
+            )
+
+        gaps = []
+
+        # 1. Detecta nós isolados ou de baixa conectividade (grau <= 1)
+        for node, degree in G.degree():
+            if degree <= 1:
+                gaps.append(
+                    {
+                        "type": "isolated_node",
+                        "entity": node,
+                        "reason": f"A entidade '{node}' possui apenas {degree} conexão(ões). Necessita de mais contexto ou fontes complementares.",
+                    }
+                )
+
+        # 2. Detecta componentes conectados isolados (disconnected components)
+        components = list(nx.connected_components(G))
+        if len(components) > 1:
+            # Ordena por tamanho decrescente para achar o componente gigante
+            components.sort(key=len, reverse=True)
+            giant_component = components[0]
+            for comp in components[1:]:
+                comp_list = list(comp)
+                gaps.append(
+                    {
+                        "type": "disconnected_component",
+                        "entities": comp_list,
+                        "reason": f"O grupo de entidades {comp_list} está isolado do componente de busca principal: {list(giant_component)[:5]}...",
+                    }
+                )
+
+        # 3. Detecta arestas de baixa confiança conectando comunidades
+        try:
+            communities = louvain_communities(G)
+            community_map = {}
+            for i, comm in enumerate(communities):
+                for node in comm:
+                    community_map[node] = i
+
+            # Varre as arestas do grafo
+            for u, v, data in G.edges(data=True):
+                # Se a aresta conecta comunidades distintas
+                if community_map.get(u) != community_map.get(v):
+                    conf = data.get("confidence", 1.0)
+                    if conf < 0.70:
+                        gaps.append(
+                            {
+                                "type": "low_confidence_bridge",
+                                "source_entity": u,
+                                "target_entity": v,
+                                "relation": data.get("relation", "RELATION"),
+                                "confidence": conf,
+                                "reason": f"A ponte entre comunidades ({u}) -[{data.get('relation')}]-> ({v}) possui baixa confiança ({conf:.0%}).",
+                            }
+                        )
+        except Exception as e:
+            logger.warning(f"KG: Erro ao analisar gaps com Louvain: {e}")
+
+        return gaps
 
     # ── Exportação ────────────────────────────────────────────────────────────
 
