@@ -150,6 +150,7 @@ class Orchestrator:
         query: str,
         formats: list[Any] | None = None,
         progress_callback: Optional[ProgressCallback] = None,
+        session_id: str = "default_session",
     ) -> str:
         """Executa o pipeline completo de pesquisa e retorna o relatorio Markdown.
 
@@ -162,6 +163,7 @@ class Orchestrator:
             formats: Formatos de exportacao adicionais alem do Markdown padrao
                 (ex: `[ReportFormat.PDF]`). Opcional.
             progress_callback: Callback opcional de progresso (ver SSE/streaming).
+            session_id: ID unico da sessao para rastreamento / HITL.
 
         Returns:
             str: Relatorio completo em formato Markdown.
@@ -171,6 +173,13 @@ class Orchestrator:
             f"Iniciando pesquisa: '{query}' [modo: {self.operation_mode.name}] "
             f"[correlation_id={correlation_id}]"
         )
+        if getattr(self.operation_mode, "enable_debate", False):
+            from datetime import datetime
+
+            return await self.reasoning.run_debate_mode(
+                query, datetime.now(), formats=formats
+            )
+
         await self._report_progress(progress_callback, 0, "Iniciando pesquisa")
         async with trace_async_span(
             "research.pipeline",
@@ -182,6 +191,7 @@ class Orchestrator:
             context = PipelineContext(query=query, formats=formats)
             context.extras["progress_callback"] = progress_callback
             context.extras["orchestrator"] = self
+            context.extras["session_id"] = session_id
             try:
                 context = await self._pipeline.run(context)
             finally:
@@ -214,7 +224,9 @@ class Orchestrator:
         """Retrocompatibilidade: delega para `SearchService.execute`."""
         return await self.search.execute(queries, plan, intent)
 
-    async def _search_task(self, searcher: Any, source_name: str, query: str, domain: str):
+    async def _search_task(
+        self, searcher: Any, source_name: str, query: str, domain: str
+    ):
         """Retrocompatibilidade: delega para `SearchService._search_task`."""
         return await self.search._search_task(searcher, source_name, query, domain)
 

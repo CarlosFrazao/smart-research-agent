@@ -105,6 +105,9 @@ def get_orchestrator(config: Config | None = None) -> Orchestrator:
         if config is None:
             config = Config()
         _orchestrator = Orchestrator(config)
+        from src.hitl_manager import HITLManager
+        if not hasattr(_orchestrator, "hitl_manager"):
+            _orchestrator.hitl_manager = HITLManager()
     return _orchestrator
 
 
@@ -147,9 +150,19 @@ def create_app(config: Config | None = None) -> FastAPI:
     container = DependencyContainer()
     container.register_instance("config", cfg)
 
+    # Registra HITLManager como singleton primeiro
+    from src.hitl_manager import HITLManager
+    hitl = HITLManager()
+    container.register_instance("hitl_manager", hitl)
+
     # Registra fábricas lazy para compatibilidade DI sem resolver no import
+    def _create_orchestrator():
+        orc = get_orchestrator(cfg)
+        orc.hitl_manager = hitl
+        return orc
+
     container.register_factory(
-        "orchestrator", lambda: get_orchestrator(cfg), Lifecycle.SINGLETON
+        "orchestrator", _create_orchestrator, Lifecycle.SINGLETON
     )
     container.register_factory(
         "deep_researcher", lambda: get_deep_researcher(), Lifecycle.SINGLETON
@@ -157,11 +170,6 @@ def create_app(config: Config | None = None) -> FastAPI:
     container.register_factory(
         "confidence_scorer", lambda: get_confidence_scorer(cfg), Lifecycle.SINGLETON
     )
-
-    # Registra HITLManager como singleton
-    from src.hitl_manager import HITLManager
-
-    container.register_instance("hitl_manager", HITLManager())
 
     app.state.container = container
 
@@ -397,7 +405,7 @@ def _register_rest_endpoints(app: FastAPI) -> None:
             session_data = await _get_or_create_research(session_id)
             _current_research.set(session_data)
 
-            report = await container.orchestrator.research(query)
+            report = await container.orchestrator.research(query, session_id=session_id)
 
             session_data["last_query"] = query
             session_data["last_report"] = report

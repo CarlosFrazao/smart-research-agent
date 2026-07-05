@@ -57,7 +57,7 @@ import hashlib
 import inspect
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 try:
@@ -246,13 +246,19 @@ class ExpandStage:
         # Planeja fontes se não houver um source_plan no contexto
         if intent is not None:
             from src.types import ExpandedQuery
+
             sanitized_queries = []
             for q in context.expanded_queries:
                 if isinstance(q, ExpandedQuery):
                     sanitized_queries.append(q)
                 elif isinstance(q, str):
                     sanitized_queries.append(
-                        ExpandedQuery(query=q, type="fallback", priority="media", rationale="fallback")
+                        ExpandedQuery(
+                            query=q,
+                            type="fallback",
+                            priority="media",
+                            rationale="fallback",
+                        )
                     )
                 elif isinstance(q, dict):
                     sanitized_queries.append(
@@ -267,8 +273,153 @@ class ExpandStage:
 
             if getattr(context, "source_plan", None) is None:
                 from src.source_planner import SourcePlanner
+
                 planner = SourcePlanner()
                 context.source_plan = planner.plan(intent, context.expanded_queries)
+
+            # --- INICIO DO BLOCANTE HUMAN-IN-THE-LOOP (HITL) ---
+            orchestrator = context.extras.get("orchestrator")
+            session_id = context.extras.get("session_id", "default_session")
+            hitl_manager = (
+                getattr(orchestrator, "hitl_manager", None) if orchestrator else None
+            )
+
+            # Por padrão, HITL está habilitado a não ser que explicitamente desabilitado na config
+            hitl_enabled = True
+            if orchestrator and hasattr(orchestrator, "config"):
+                hitl_enabled = getattr(orchestrator.config, "hitl_enabled", True)
+
+            if hitl_manager and hitl_enabled:
+                # Prepara os dados para solicitação de aprovação
+                # Serializa o plano e a lista de queries expandidas
+                serialized_queries = [
+                    {
+                        "query": q.query,
+                        "type": q.type,
+                        "priority": q.priority,
+                        "rationale": q.rationale,
+                    }
+                    if hasattr(q, "query")
+                    else {
+                        "query": str(q),
+                        "type": "expanded",
+                        "priority": "alta",
+                        "rationale": "",
+                    }
+                    for q in context.expanded_queries
+                ]
+
+                serialized_plan = {}
+                if context.source_plan and hasattr(context.source_plan, "sources"):
+                    serialized_plan = {
+                        "sources": {
+                            src: [
+                                {
+                                    "query": q.query,
+                                    "type": q.type,
+                                    "priority": q.priority,
+                                    "rationale": q.rationale,
+                                }
+                                if hasattr(q, "query")
+                                else {
+                                    "query": str(q),
+                                    "type": "expanded",
+                                    "priority": "alta",
+                                    "rationale": "",
+                                }
+                                for q in q_list
+                            ]
+                            for src, q_list in context.source_plan.sources.items()
+                        },
+                        "primary": getattr(context.source_plan, "primary", []),
+                        "secondary": getattr(context.source_plan, "secondary", []),
+                    }
+
+                hitl_data = {
+                    "queries": serialized_queries,
+                    "source_plan": serialized_plan,
+                }
+
+                logger.info(
+                    f"[HITL] Pausando pipeline para aprovação humana na sessão '{session_id}'..."
+                )
+                approved_data = await hitl_manager.request_approval(
+                    session_id=session_id,
+                    request_type="source_plan",
+                    data=hitl_data,
+                    timeout=300.0,  # Timeout de 5 minutos
+                )
+
+                # Reconstrói queries expandidas e plano a partir do feedback do usuário
+                if approved_data and isinstance(approved_data, dict):
+                    logger.info(
+                        f"[HITL] Retomando pipeline na sessão '{session_id}' com dados aprovados."
+                    )
+                    from src.types import ExpandedQuery, SourcePlan
+
+                    # 1. Reconstrói queries
+                    edited_queries = approved_data.get("queries")
+                    if edited_queries is not None:
+                        new_queries = []
+                        for eq in edited_queries:
+                            if isinstance(eq, str):
+                                new_queries.append(
+                                    ExpandedQuery(
+                                        query=eq,
+                                        type="user_approved",
+                                        priority="alta",
+                                        rationale="Aprovado pelo usuário",
+                                    )
+                                )
+                            elif isinstance(eq, dict):
+                                new_queries.append(
+                                    ExpandedQuery(
+                                        query=eq.get("query", ""),
+                                        type=eq.get("type", "user_approved"),
+                                        priority=eq.get("priority", "alta"),
+                                        rationale=eq.get(
+                                            "rationale", "Aprovado pelo usuário"
+                                        ),
+                                    )
+                                )
+                        context.expanded_queries = new_queries
+
+                    # 2. Reconstrói plano
+                    edited_plan = approved_data.get("source_plan")
+                    if edited_plan is not None:
+                        sources_dict = {}
+                        if "sources" in edited_plan:
+                            for src, q_list in edited_plan["sources"].items():
+                                expanded_q_list = []
+                                for q in q_list:
+                                    if isinstance(q, str):
+                                        expanded_q_list.append(
+                                            ExpandedQuery(
+                                                query=q,
+                                                type="user_approved",
+                                                priority="alta",
+                                                rationale="Aprovado pelo usuário",
+                                            )
+                                        )
+                                    elif isinstance(q, dict):
+                                        expanded_q_list.append(
+                                            ExpandedQuery(
+                                                query=q.get("query", ""),
+                                                type=q.get("type", "user_approved"),
+                                                priority=q.get("priority", "alta"),
+                                                rationale=q.get(
+                                                    "rationale", "Aprovado pelo usuário"
+                                                ),
+                                            )
+                                        )
+                                sources_dict[src] = expanded_q_list
+
+                        context.source_plan = SourcePlan(
+                            sources=sources_dict,
+                            primary=edited_plan.get("primary", []),
+                            secondary=edited_plan.get("secondary", []),
+                        )
+            # --- FIM DO BLOCANTE HUMAN-IN-THE-LOOP (HITL) ---
 
         return context
 
@@ -366,15 +517,15 @@ class ExpandStage:
         try:
             signature = inspect.signature(expander.expand)
             accepted = {
-                name
-                for name in candidate_kwargs
-                if name in signature.parameters
+                name for name in candidate_kwargs if name in signature.parameters
             }
         except (TypeError, ValueError):
             # builtin/C-extension sem assinatura inspecionável: tenta sem kwargs extras
             accepted = set()
 
-        kwargs = {k: v for k, v in candidate_kwargs.items() if k in accepted and v is not None}
+        kwargs = {
+            k: v for k, v in candidate_kwargs.items() if k in accepted and v is not None
+        }
 
         result = expander.expand(query, **kwargs)
         return await _maybe_await(result)
@@ -422,7 +573,11 @@ class ExpandStage:
             elif isinstance(item, dict):
                 text = item.get("query") or item.get("text") or ""
             else:
-                text = getattr(item, "query", None) or getattr(item, "text", None) or str(item)
+                text = (
+                    getattr(item, "query", None)
+                    or getattr(item, "text", None)
+                    or str(item)
+                )
             text = text.strip()
             if text and text not in queries:
                 queries.append(text)
