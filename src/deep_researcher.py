@@ -15,11 +15,11 @@ import heapq
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 
 from src.clients.llm_client import LLMClient
 from src.exceptions import BudgetExceededError
-from src.types import SearchResult
+from src.token_economy import TokenEconomy
+from src.types import SearchResult, ExpandedQuery, IntentResult, Domain, Intention
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,7 @@ class ResearchNode:
     confidence: float = 0.0
     depth: int = 0
     reasoning: str = ""
+    angle: str = "general"  # confirmative | contrasting | alternative | general
 
 
 @dataclass
@@ -126,7 +127,7 @@ class DeepResearcher:
         # OrvixMemoryV2 opcional — injeta contexto do grafo nas hipóteses
         self.memory = memory
         self.config = getattr(orchestrator, "config", None)
-        
+
         # Sincroniza parâmetros baseados nas constantes/configuração
         if self.config:
             self.MAX_DEPTH = getattr(self.config, "max_research_depth", 3)
@@ -174,52 +175,75 @@ class DeepResearcher:
 
             # 2. Executa a expansão em Beam Search por nível (BFS)
             frontier = [root]
-            
+
             for depth in range(self.MAX_DEPTH):
                 if not frontier or self.budget.is_exhausted():
                     break
-                
+
                 next_frontier = []
                 for node in frontier:
                     if node.status in ("confirmed", "dead_end"):
                         continue
-                    
+
                     # Poda precoce (Early Pruning)
                     if node.depth > 0 and node.confidence < self.MIN_CONFIDENCE:
                         node.status = "pruned_low_confidence"
                         node.reasoning = f"Confidence {node.confidence:.2f} below threshold {self.MIN_CONFIDENCE}. Pruned."
                         continue
-                    
+
                     # Gera as hipóteses (branches)
-                    hypotheses = await self._generate_hypotheses(node.query, node.results)
-                    for hyp in hypotheses[: self.MAX_BRANCHES]:
+                    hypotheses = await self._generate_hypotheses(
+                        node.query, node.results
+                    )
+                    for raw_hyp in hypotheses[: self.MAX_BRANCHES]:
                         await self._check_budget()
-                        
+
+                        # Extrai o prefixo/ângulo se existir
+                        angle = "general"
+                        hyp = raw_hyp
+                        if ":" in raw_hyp:
+                            parts = raw_hyp.split(":", 1)
+                            possible_angle = parts[0].strip().lower()
+                            if possible_angle in (
+                                "confirmative",
+                                "contrasting",
+                                "alternative",
+                            ):
+                                angle = possible_angle
+                                hyp = parts[1].strip()
+
                         child = ResearchNode(
                             id=str(uuid.uuid4())[:8],
                             query=hyp,
                             hypothesis=hyp,
                             depth=depth + 1,
+                            angle=angle,
                         )
                         node.children.append(child)
                         next_frontier.append(child)
-                
+
                 if not next_frontier:
                     break
-                
+
                 # Executa buscas e estimativa de confiança do nível em paralelo
-                search_tasks = [self._explore_child_data(child) for child in next_frontier]
+                search_tasks = [
+                    self._explore_child_data(child) for child in next_frontier
+                ]
                 if search_tasks:
                     await asyncio.gather(*search_tasks)
-                
+
                 # Aplica o Beam Search: mantém apenas os top `BEAM_WIDTH` de maior confiança
                 if len(next_frontier) > self.BEAM_WIDTH:
-                    survivors = heapq.nlargest(self.BEAM_WIDTH, next_frontier, key=lambda n: n.confidence)
+                    survivors = heapq.nlargest(
+                        self.BEAM_WIDTH, next_frontier, key=lambda n: n.confidence
+                    )
                     survivor_ids = {s.id for s in survivors}
                     for n in next_frontier:
                         if n.id not in survivor_ids:
                             n.status = "pruned_beam"
-                            n.reasoning = f"Pruned by Beam Search (width={self.BEAM_WIDTH})."
+                            n.reasoning = (
+                                f"Pruned by Beam Search (width={self.BEAM_WIDTH})."
+                            )
                     frontier = survivors
                 else:
                     frontier = next_frontier
@@ -264,14 +288,25 @@ class DeepResearcher:
 
     async def _track_llm_call(self, prompt: str) -> None:
         """Incrementa contadores após chamada de LLM."""
-        estimated_tokens = len(prompt) // 4 + 500
-        self.budget.llm_calls += 1
-        self.budget.tokens_used += estimated_tokens
         model = "default"
         if self.config:
             model = getattr(self.config, "model", "default")
-        price = self.MODEL_PRICES.get(model, self.MODEL_PRICES["default"])
-        self.budget.estimated_cost += (estimated_tokens / 1000) * price
+
+        if hasattr(self.llm, "token_economy") and isinstance(
+            self.llm.token_economy, TokenEconomy
+        ):
+            tokens = self.llm.token_economy.count_tokens(prompt, model=model)
+            _, cost = self.llm.token_economy.estimate_cost(
+                prompt, model=model, output_tokens=500
+            )
+        else:
+            tokens = len(prompt) // 4 + 500
+            price = self.MODEL_PRICES.get(model, self.MODEL_PRICES["default"])
+            cost = (tokens / 1000) * price
+
+        self.budget.llm_calls += 1
+        self.budget.tokens_used += tokens
+        self.budget.estimated_cost += cost
 
     async def _explore_child_data(self, child: ResearchNode) -> None:
         """Faz a busca, estima a confiança e define o status de um nó filho individual."""
@@ -291,7 +326,9 @@ class DeepResearcher:
                 child.reasoning = f"Confirmed with confidence {child.confidence:.2f} after {len(child.results)} results."
             elif child.depth >= self.MAX_DEPTH:
                 child.status = "explored"
-                child.reasoning = f"Max depth reached. Confidence: {child.confidence:.2f}."
+                child.reasoning = (
+                    f"Max depth reached. Confidence: {child.confidence:.2f}."
+                )
             elif child.confidence < self.MIN_CONFIDENCE and child.depth > 0:
                 child.status = "dead_end"
                 child.reasoning = f"Confidence {child.confidence:.2f} below threshold {self.MIN_CONFIDENCE}. Pruned."
@@ -309,15 +346,17 @@ class DeepResearcher:
         """Atualiza recursivamente o status dos nós pais com base nos status dos filhos."""
         if not node.children:
             return
-            
+
         for child in node.children:
             self._update_parent_statuses(child)
-            
+
         # Filtra filhos válidos (ignora os podados por budget ou beam)
-        valid_children = [c for c in node.children if c.status not in ("pruned_budget", "pruned_beam")]
+        valid_children = [
+            c for c in node.children if c.status not in ("pruned_budget", "pruned_beam")
+        ]
         if not valid_children:
             return
-            
+
         all_dead = all(c.status == "dead_end" for c in valid_children)
         any_confirmed = any(c.status == "confirmed" for c in valid_children)
 
@@ -360,12 +399,22 @@ class DeepResearcher:
         hypotheses = await self._generate_hypotheses(node.query, node.results)
 
         child_tasks = []
-        for hyp in hypotheses[: self.MAX_BRANCHES]:
+        for raw_hyp in hypotheses[: self.MAX_BRANCHES]:
+            angle = "general"
+            hyp = raw_hyp
+            if ":" in raw_hyp:
+                parts = raw_hyp.split(":", 1)
+                possible_angle = parts[0].strip().lower()
+                if possible_angle in ("confirmative", "contrasting", "alternative"):
+                    angle = possible_angle
+                    hyp = parts[1].strip()
+
             child = ResearchNode(
                 id=str(uuid.uuid4())[:8],
                 query=hyp,
                 hypothesis=hyp,
                 depth=node.depth + 1,
+                angle=angle,
             )
             child_tasks.append(self._explore_node(child))
 
@@ -397,27 +446,19 @@ class DeepResearcher:
 
         try:
             expanded_queries = [
-                type(
-                    "ExpandedQuery",
-                    (),
-                    {
-                        "query": node.query,
-                        "type": "deep_research",
-                        "priority": "alta",
-                        "rationale": f"deep research node depth={node.depth}",
-                    },
-                )()
+                ExpandedQuery(
+                    query=node.query,
+                    type="deep_research",
+                    priority="alta",
+                    rationale=f"deep research node depth={node.depth}",
+                )
             ]
-            intent = type(
-                "IntentResult",
-                (),
-                {
-                    "domain": type("Domain", (), {"value": "general"})(),
-                    "intention": type("Intention", (), {"value": "discover"})(),
-                    "urgency": "nao",
-                    "confidence": "alta",
-                },
-            )()
+            intent = IntentResult(
+                domain=Domain.GENERAL,
+                intention=Intention.DISCOVER,
+                urgency="nao",
+                confidence="alta",
+            )
             source_plan = self.orchestrator.source_planner.plan(
                 intent, expanded_queries
             )
@@ -487,9 +528,11 @@ class DeepResearcher:
             f"Results found so far:\n{context_snippets or '(none yet)'}"
             f"{memory_section}\n\n"
             f"Generate {self.MAX_BRANCHES} distinct, specific, testable hypotheses or sub-queries "
-            f"that would help answer the original query from different angles.\n"
+            f"representing competing or diverging angles (such as confirmative proof, contrasting/critical views, and alternative paradigms) "
+            f"that would help answer the original query from different perspectives.\n"
             f"Return ONLY a JSON array of strings, e.g.:\n"
-            f'["hypothesis 1", "hypothesis 2", "hypothesis 3", "hypothesis 4"]\n'
+            f'["confirmative: hypothesis 1", "contrasting: hypothesis 2", "alternative: hypothesis 3", "hypothesis 4"]\n'
+            f"Prefix each hypothesis with its angle (confirmative:, contrasting:, or alternative:) if applicable."
             f"Each hypothesis should be a search query, not a sentence."
         )
 
@@ -525,7 +568,12 @@ class DeepResearcher:
         seen_urls: set = set()
 
         def _walk(node: ResearchNode) -> None:
-            if node.status in ("dead_end", "pruned_low_confidence", "pruned_beam", "pruned_budget"):
+            if node.status in (
+                "dead_end",
+                "pruned_low_confidence",
+                "pruned_beam",
+                "pruned_budget",
+            ):
                 return
             for r in node.results:
                 if r.url not in seen_urls:
@@ -542,6 +590,23 @@ class DeepResearcher:
         """Exports the reasoning tree as readable markdown."""
         lines: list[str] = ["## Reasoning Tree", ""]
 
+        # Injeta um resumo das hipóteses concorrentes
+        lines.append("### Competing Hypotheses Summary")
+        lines.append("| Hypothesis / Sub-query | Angle | Status | Confidence |")
+        lines.append("|---|---|---|---|")
+
+        def _collect_table_rows(node: ResearchNode):
+            if node.depth > 0:
+                status_str = node.status.replace("_", " ").capitalize()
+                lines.append(
+                    f"| {node.hypothesis[:60]} | {node.angle.capitalize()} | {status_str} | {node.confidence:.2%} |"
+                )
+            for child in node.children:
+                _collect_table_rows(child)
+
+        _collect_table_rows(root)
+        lines.append("")
+
         status_icons = {
             "confirmed": "✅",
             "explored": "🔍",
@@ -552,12 +617,20 @@ class DeepResearcher:
             "pruned_budget": "🛑 (poda-orçamento)",
         }
 
+        angle_icons = {
+            "confirmative": "👍",
+            "contrasting": "👎",
+            "alternative": "💡",
+            "general": "🔍",
+        }
+
         def _render(node: ResearchNode, prefix: str, is_last: bool) -> None:
             connector = "└── " if is_last else "├── "
             icon = status_icons.get(node.status, "❓")
+            angle_icon = angle_icons.get(node.angle, "🔍")
             label = node.hypothesis[:80] if node.hypothesis else node.query[:80]
             conf = f"[conf={node.confidence:.2f}]" if node.confidence > 0 else ""
-            lines.append(f"{prefix}{connector}{icon} {label} {conf}")
+            lines.append(f"{prefix}{connector}{icon} {angle_icon} {label} {conf}")
 
             if node.reasoning:
                 detail_prefix = prefix + ("    " if is_last else "│   ")
