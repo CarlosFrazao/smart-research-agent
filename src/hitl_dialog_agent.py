@@ -37,13 +37,16 @@ logger = logging.getLogger("hitl_dialog_agent")
 
 # ─── Enums e Constantes ────────────────────────────────────────────────────────
 
+
 class DialogType(StrEnum):
     """Tipo de interrupção de diálogo que o agente pode gerar."""
+
     SCOPE_CLARIFICATION = "scope_clarification"
     PIVOT_DECISION = "pivot_decision"
     SOURCE_VETO = "source_veto"
     DEPTH_CONTROL = "depth_control"
     ALERT_CRITICAL_FINDING = "alert_critical_finding"
+
 
 # Score mínimo de urgência para interromper automaticamente o pipeline
 URGENCY_THRESHOLD_AUTO_INTERRUPT = 0.75
@@ -53,9 +56,11 @@ DEFAULT_DIALOG_TIMEOUT = 180.0  # 3 minutos
 
 # ─── Data Contracts ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class DialogTurn:
     """Um turno de diálogo entre o agente e o usuário."""
+
     dialog_id: str
     session_id: str
     dialog_type: DialogType
@@ -84,16 +89,20 @@ class DialogTurn:
 @dataclass
 class DialogDecision:
     """Decisão interpretada pelo agente a partir da resposta do usuário."""
+
     dialog_id: str
-    action: str         # Ação concreta a ser tomada pelo pipeline
+    action: str  # Ação concreta a ser tomada pelo pipeline
     parameters: dict[str, Any] = field(default_factory=dict)
     confidence: float = 1.0
-    auto_resolved: bool = False  # True se foi resolvido por timeout ou fallback automático
+    auto_resolved: bool = (
+        False  # True se foi resolvido por timeout ou fallback automático
+    )
 
 
 @dataclass
 class HITLDialogReport:
     """Relatório de todas as interações de diálogo em uma sessão de pesquisa."""
+
     session_id: str
     dialogs: list[DialogTurn] = field(default_factory=list)
     decisions: list[DialogDecision] = field(default_factory=list)
@@ -114,6 +123,7 @@ class HITLDialogReport:
 
 
 # ─── Agente Principal ──────────────────────────────────────────────────────────
+
 
 class HITLDialogAgent:
     """Agente de diálogo interativo e contextual para alinhamento HITL no pipeline SRA.
@@ -210,6 +220,7 @@ class HITLDialogAgent:
     ) -> DialogTurn:
         """Cria um DialogTurn com pergunta contextual formulada pelo LLM ou por template."""
         import uuid
+
         dialog_id = f"dialog_{uuid.uuid4().hex[:8]}"
 
         question, options = await self._generate_question_and_options(
@@ -238,27 +249,47 @@ class HITLDialogAgent:
                 f"O escopo da pesquisa divergiu em múltiplas direções. "
                 f"Achado intermediário: '{content[:200]}'. "
                 "Qual direção prefere aprofundar?",
-                ["Manter o foco original", "Expandir para incluir o novo ângulo", "Criar pesquisa separada para o novo ângulo"],
+                [
+                    "Manter o foco original",
+                    "Expandir para incluir o novo ângulo",
+                    "Criar pesquisa separada para o novo ângulo",
+                ],
             ),
             DialogType.PIVOT_DECISION: (
                 f"Um achado contradiz a hipótese inicial. Evidência: '{content[:200]}'. "
                 "Como deseja proceder?",
-                ["Incluir a contradição no relatório", "Ignorar e manter hipótese original", "Aprofundar a investigação da contradição"],
+                [
+                    "Incluir a contradição no relatório",
+                    "Ignorar e manter hipótese original",
+                    "Aprofundar a investigação da contradição",
+                ],
             ),
             DialogType.SOURCE_VETO: (
                 f"Fonte com credibilidade questionável detectada: '{content[:200]}'. "
                 "Como proceder?",
-                ["Incluir com ressalva explícita", "Excluir da pesquisa", "Buscar fontes alternativas que corroborem"],
+                [
+                    "Incluir com ressalva explícita",
+                    "Excluir da pesquisa",
+                    "Buscar fontes alternativas que corroborem",
+                ],
             ),
             DialogType.DEPTH_CONTROL: (
                 f"O orçamento de tokens está próximo do limite. Contexto atual: '{content[:200]}'. "
                 "Como proceder?",
-                ["Encerrar e gerar relatório com o que temos", "Aprofundar somente no subtema mais relevante", "Continuar e aceitar custo adicional"],
+                [
+                    "Encerrar e gerar relatório com o que temos",
+                    "Aprofundar somente no subtema mais relevante",
+                    "Continuar e aceitar custo adicional",
+                ],
             ),
             DialogType.ALERT_CRITICAL_FINDING: (
                 f"🚨 ALERTA CRÍTICO: '{content[:200]}'. "
                 "Este achado exige sua atenção imediata. Como proceder?",
-                ["Priorizar este ponto no relatório", "Incluir como seção de alerta urgente", "Solicitar análise mais detalhada antes de continuar"],
+                [
+                    "Priorizar este ponto no relatório",
+                    "Incluir como seção de alerta urgente",
+                    "Solicitar análise mais detalhada antes de continuar",
+                ],
             ),
         }
 
@@ -285,7 +316,10 @@ class HITLDialogAgent:
                 logger.debug(f"[HITLDialog] Falha no LLM ao gerar pergunta: {e}")
 
         # Fallback para template fixo
-        return templates.get(dialog_type, (f"Revisão necessária: {content[:200]}", ["Continuar", "Pausar"]))
+        return templates.get(
+            dialog_type,
+            (f"Revisão necessária: {content[:200]}", ["Continuar", "Pausar"]),
+        )
 
     async def await_user_decision(
         self,
@@ -302,7 +336,9 @@ class HITLDialogAgent:
             DialogDecision com a ação a ser tomada pelo pipeline.
         """
         if self._hitl is None:
-            logger.warning("[HITLDialog] HITLManager não disponível. Auto-resolvendo diálogo.")
+            logger.warning(
+                "[HITLDialog] HITLManager não disponível. Auto-resolvendo diálogo."
+            )
             return self._auto_resolve(dialog, reason="hitl_manager_unavailable")
 
         try:
@@ -320,7 +356,9 @@ class HITLDialogAgent:
                 data=data_for_approval,
                 timeout=timeout,
             )
-            dialog.user_response = str(response) if response != data_for_approval else None
+            dialog.user_response = (
+                str(response) if response != data_for_approval else None
+            )
             dialog.answered_at = time.time()
 
             if dialog.user_response is None or response == data_for_approval:
@@ -340,12 +378,21 @@ class HITLDialogAgent:
         """Interpreta a resposta do usuário e converte em uma ação concreta para o pipeline."""
         response_lower = response.lower().strip()
         action = "continue"  # Default seguro
-        params: dict[str, Any] = {"user_response": response, "dialog_type": dialog.dialog_type.value}
+        params: dict[str, Any] = {
+            "user_response": response,
+            "dialog_type": dialog.dialog_type.value,
+        }
 
         if dialog.dialog_type == DialogType.PIVOT_DECISION:
-            if "contradição" in response_lower or "investigar" in response_lower or "aprofundar" in response_lower:
+            if (
+                "contradição" in response_lower
+                or "investigar" in response_lower
+                or "aprofundar" in response_lower
+            ):
                 action = "pivot_to_contradiction"
-                params["additional_query"] = f"evidência contradição: {dialog.context[:100]}"
+                params["additional_query"] = (
+                    f"evidência contradição: {dialog.context[:100]}"
+                )
             elif "ignorar" in response_lower or "manter" in response_lower:
                 action = "maintain_original_scope"
             else:
@@ -410,9 +457,13 @@ class HITLDialogAgent:
 
     def get_report(self, session_id: str) -> HITLDialogReport:
         """Retorna o relatório de interações de diálogo para uma sessão específica."""
-        session_dialogs = [d for d in self._dialog_history if d.session_id == session_id]
+        session_dialogs = [
+            d for d in self._dialog_history if d.session_id == session_id
+        ]
         total_wait = sum(
-            d.wait_time_seconds for d in session_dialogs if d.wait_time_seconds is not None
+            d.wait_time_seconds
+            for d in session_dialogs
+            if d.wait_time_seconds is not None
         )
         auto_resolved = sum(1 for d in session_dialogs if d.was_timeout)
         return HITLDialogReport(

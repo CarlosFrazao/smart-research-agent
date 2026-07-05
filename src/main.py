@@ -276,9 +276,11 @@ async def main():
             pass
 
     from src.config import Config
+
     config = Config()
 
     from src.utils.logging import setup_logging
+
     setup_logging(level=config.log_level, json_output=True)
 
     parser = create_parser()

@@ -274,7 +274,9 @@ class HybridRanker:
             raise ValueError("Mismatched lengths between results and heuristic_scores")
 
         # 1. BM25 scoring
-        corpus = [self._tokenize(f"{r.title or ''} {r.description or ''}") for r in results]
+        corpus = [
+            self._tokenize(f"{r.title or ''} {r.description or ''}") for r in results
+        ]
         bm25 = BM25(corpus)
         query_tokens = self._tokenize(query)
         bm25_scores = bm25.scores_for_query(query_tokens)
@@ -287,33 +289,37 @@ class HybridRanker:
         candidates = []
         for i, r in enumerate(results):
             pf_score = normalized_heuristics[i] + normalized_bm25[i]
-            candidates.append({
-                "index": i,
-                "result": r,
-                "pf_score": pf_score,
-                "bm25_score": bm25_scores[i],
-                "normalized_bm25": normalized_bm25[i],
-                "heuristic_score": heuristic_scores[i],
-                "normalized_heuristic": normalized_heuristics[i],
-                "embedding_score": None
-            })
+            candidates.append(
+                {
+                    "index": i,
+                    "result": r,
+                    "pf_score": pf_score,
+                    "bm25_score": bm25_scores[i],
+                    "normalized_bm25": normalized_bm25[i],
+                    "heuristic_score": heuristic_scores[i],
+                    "normalized_heuristic": normalized_heuristics[i],
+                    "embedding_score": None,
+                }
+            )
 
         # Ordenar pelo pre-filter score para selecionar top_n
         candidates.sort(key=lambda c: c["pf_score"], reverse=True)
 
         # Chamar semantic scorer apenas para os top_n candidatos
-        top_candidates = candidates[:self.pre_filter_top_n]
+        top_candidates = candidates[: self.pre_filter_top_n]
         if self.semantic_scorer is not None and top_candidates:
             results_to_rerank = []
             for c in top_candidates:
                 r = c["result"]
-                results_to_rerank.append({
-                    "title": r.title,
-                    "description": r.description,
-                    "url": r.url,
-                    "source": r.source,
-                    "metrics": r.metrics
-                })
+                results_to_rerank.append(
+                    {
+                        "title": r.title,
+                        "description": r.description,
+                        "url": r.url,
+                        "source": r.source,
+                        "metrics": r.metrics,
+                    }
+                )
             try:
                 reranked = await self.semantic_scorer.rerank(query, results_to_rerank)
                 for c, rr in zip(top_candidates, reranked):
@@ -321,7 +327,9 @@ class HybridRanker:
                     if isinstance(rr, dict):
                         c["embedding_score"] = rr.get("_semantic_score")
                     else:
-                        c["embedding_score"] = getattr(rr, "_semantic_score", getattr(rr, "embedding_score", None))
+                        c["embedding_score"] = getattr(
+                            rr, "_semantic_score", getattr(rr, "embedding_score", None)
+                        )
             except Exception as e:
                 logger.warning(f"Semantic scorer failed in compatibility mode: {e}")
 
@@ -348,13 +356,15 @@ class HybridRanker:
             # final_score é ponderado em escala 0-1, convertemos para range 0-100 para condizer com heuristic_scores
             # mas garante que o valor absoluto não ultrapasse o teto
             final_scaled = final_score * 100.0
-            output.append(HybridRankResultCompat(
-                result=c["result"],
-                final_score=final_scaled,
-                heuristic_score=c["heuristic_score"],
-                bm25_score=c["bm25_score"],
-                embedding_score=e_s
-            ))
+            output.append(
+                HybridRankResultCompat(
+                    result=c["result"],
+                    final_score=final_scaled,
+                    heuristic_score=c["heuristic_score"],
+                    bm25_score=c["bm25_score"],
+                    embedding_score=e_s,
+                )
+            )
 
         output.sort(key=lambda o: o.final_score, reverse=True)
         return output
@@ -856,6 +866,7 @@ class BM25:
 
         # Document frequencies for terms
         from collections import Counter
+
         self.doc_freqs = Counter()
         for doc in corpus:
             for term in set(doc):
@@ -869,6 +880,7 @@ class BM25:
     def scores_for_query(self, query: list[str]) -> list[float]:
         scores = []
         from collections import Counter
+
         for doc in self.corpus:
             score = 0.0
             doc_len = len(doc)
@@ -878,7 +890,9 @@ class BM25:
                     term_tf = tf[term]
                     idf_val = self.idf.get(term, 0.0)
                     numerator = term_tf * (self.k1 + 1)
-                    denominator = term_tf + self.k1 * (1 - self.b + self.b * (doc_len / max(1, self.avg_doc_len)))
+                    denominator = term_tf + self.k1 * (
+                        1 - self.b + self.b * (doc_len / max(1, self.avg_doc_len))
+                    )
                     score += idf_val * (numerator / denominator)
             scores.append(score)
         return scores
@@ -893,7 +907,14 @@ class SemanticScorer:
 class HybridRankResultCompat:
     """Objeto retornado pelo modo de compatibilidade do HybridRanker."""
 
-    def __init__(self, result: SearchResult, final_score: float, heuristic_score: float, bm25_score: float, embedding_score: Optional[float]):
+    def __init__(
+        self,
+        result: SearchResult,
+        final_score: float,
+        heuristic_score: float,
+        bm25_score: float,
+        embedding_score: Optional[float],
+    ):
         self.result = result
         self.final_score = final_score
         self.heuristic_score = heuristic_score
@@ -910,6 +931,7 @@ class HybridRankResult(HybridRankResultCompat):
 def _tokenize(text: str) -> list[str]:
     """Tokenização simples (minúsculas, remove pontuação)."""
     import re
+
     text = text.lower()
     text = re.sub(r"[^\w\s]", " ", text)
     return [t for t in text.split() if len(t) > 1]

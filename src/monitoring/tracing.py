@@ -688,12 +688,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     """Middleware Starlette para injetar e propagar Correlation ID (X-Request-ID)."""
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         header_name = "X-Request-ID"
-        correlation_id = request.headers.get(header_name) or request.headers.get("X-Correlation-ID")
+        correlation_id = request.headers.get(header_name) or request.headers.get(
+            "X-Correlation-ID"
+        )
         if not correlation_id:
             correlation_id = str(uuid.uuid4())
 

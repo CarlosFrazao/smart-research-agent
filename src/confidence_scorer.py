@@ -131,6 +131,7 @@ class ConfidenceScorer:
     @property
     def current_year(self) -> int:
         from datetime import UTC, datetime
+
         return datetime.now(UTC).year
 
     @property

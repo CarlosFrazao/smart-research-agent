@@ -312,7 +312,9 @@ class LLMClient:
 
             self._client = openai.AsyncOpenAI(
                 api_key=self.config.get("api_key"),
-                base_url=self.config.get("base_url", "https://models.inference.ai.azure.com"),
+                base_url=self.config.get(
+                    "base_url", "https://models.inference.ai.azure.com"
+                ),
                 http_client=httpx.AsyncClient(http2=False),
             )
             self.model = self.config.get("model", "gpt-4o-mini")
@@ -440,7 +442,10 @@ class LLMClient:
                     response = await asyncio.wait_for(coro, timeout=30.0)
                     return response.text or ""
             except Exception as exc:
-                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)) and self._rotate_key():
+                if (
+                    not isinstance(exc, (TypeError, ValueError, NameError, KeyError))
+                    and self._rotate_key()
+                ):
                     continue
                 raise
         return ""
@@ -457,7 +462,14 @@ class LLMClient:
           openrouter → gemini → groq → ollama
         Pula o provider que já falhou (skip).
         """
-        chain: list[str] = ["openrouter", "gemini", "groq", "deepseek", "github_models", "ollama"]
+        chain: list[str] = [
+            "openrouter",
+            "gemini",
+            "groq",
+            "deepseek",
+            "github_models",
+            "ollama",
+        ]
 
         for provider_name in chain:
             if provider_name == skip.value:
@@ -519,7 +531,10 @@ class LLMClient:
                     provider, cfg_copy, prompt, temperature, max_tokens
                 )
             except Exception as exc:
-                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)) and len(keys) > 1:
+                if (
+                    not isinstance(exc, (TypeError, ValueError, NameError, KeyError))
+                    and len(keys) > 1
+                ):
                     logger.warning(
                         f"[RotaçãoChaves] Falha na chave {idx + 1}/{len(keys)} do fallback '{provider.value}': {exc}."
                     )
@@ -730,25 +745,43 @@ class LLMClient:
                     LLMProvider.OLLAMA,
                 ):
                     return await self._call_openai_structured(
-                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                        system_prompt,
+                        user_prompt,
+                        response_model,
+                        temperature,
+                        max_tokens,
                     )
                 elif self.provider == LLMProvider.ANTHROPIC:
                     return await self._call_anthropic_structured(
-                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                        system_prompt,
+                        user_prompt,
+                        response_model,
+                        temperature,
+                        max_tokens,
                     )
                 elif self.provider == LLMProvider.GEMINI:
                     return await self._call_gemini_structured(
-                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                        system_prompt,
+                        user_prompt,
+                        response_model,
+                        temperature,
+                        max_tokens,
                     )
                 elif self.provider == LLMProvider.GROQ:
                     return await self._call_groq_structured(
-                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                        system_prompt,
+                        user_prompt,
+                        response_model,
+                        temperature,
+                        max_tokens,
                     )
                 else:
                     json_prompt = (
                         f"{system_prompt}\n\n{user_prompt}"
                         + "\n\nResponda APENAS em JSON valido seguindo este schema: "
-                        + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+                        + json.dumps(
+                            response_model.model_json_schema(), ensure_ascii=False
+                        )
                         + "\nNao inclua markdown, apenas JSON puro."
                     )
                     raw = await self.generate(
@@ -762,7 +795,10 @@ class LLMClient:
                         raw = raw[:-3]
                     return raw.strip()
             except Exception as exc:
-                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)) and self._rotate_key():
+                if (
+                    not isinstance(exc, (TypeError, ValueError, NameError, KeyError))
+                    and self._rotate_key()
+                ):
                     continue
                 raise
         return ""

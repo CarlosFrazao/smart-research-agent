@@ -466,7 +466,9 @@ class Container:
         """Permite acessar serviços registrados diretamente como atributos do container."""
         if self.is_registered(name) or name in self._aliases:
             return self.resolve(name)
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        )
 
     # ── Helpers internos ────────────────────────────────────────────────────
 

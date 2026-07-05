@@ -218,6 +218,7 @@ class IntentAnalyzer:
             str: ``"sim"`` se a query indica urgencia ou recencia, ``"nao"`` caso contrario.
         """
         from datetime import UTC, datetime
+
         curr_year = datetime.now(UTC).year
         urgent = [
             str(curr_year),

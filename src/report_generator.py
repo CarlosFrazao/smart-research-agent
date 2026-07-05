@@ -72,12 +72,46 @@ class ReportGenerator:
 
     def _is_query_english(self, query: str) -> bool:
         """Heurística simples para detectar se a query do usuário está em inglês."""
-        en_words = {"vs", "how", "what", "best", "comparison", "tool", "library", "alternative", 
-                    "framework", "open-source", "open source", "client", "server", "api", "vs.",
-                    "compare", "why", "with", "benchmark", "versus"}
-        pt_words = {"como", "qual", "melhor", "comparacao", "ferramenta", "biblioteca", "alternativa",
-                    "para", "com", "por", "que", "uma", "um", "sobre", "entre"}
-        
+        en_words = {
+            "vs",
+            "how",
+            "what",
+            "best",
+            "comparison",
+            "tool",
+            "library",
+            "alternative",
+            "framework",
+            "open-source",
+            "open source",
+            "client",
+            "server",
+            "api",
+            "vs.",
+            "compare",
+            "why",
+            "with",
+            "benchmark",
+            "versus",
+        }
+        pt_words = {
+            "como",
+            "qual",
+            "melhor",
+            "comparacao",
+            "ferramenta",
+            "biblioteca",
+            "alternativa",
+            "para",
+            "com",
+            "por",
+            "que",
+            "uma",
+            "um",
+            "sobre",
+            "entre",
+        }
+
         words = set(query.lower().split())
         if words & en_words:
             if not (words & pt_words):
@@ -170,7 +204,11 @@ class ReportGenerator:
                             "- Elaborate on the transport architecture (HTTP, WebSockets, stdio) commonly employed.\n"
                             "- Detail dependencies and ecosystems involved (e.g. tokio, async-trait in Rust, fastmcp in Python)."
                         )
-                    elif "Community Discussion" in header or "Discussao" in header or "Discussão" in header:
+                    elif (
+                        "Community Discussion" in header
+                        or "Discussao" in header
+                        or "Discussão" in header
+                    ):
                         prompt += (
                             "- Synthesize the overall reception of this type of technology by the developer community.\n"
                             "- Discuss main bottlenecks discussed (learning curve, data security in LLMs).\n"
@@ -201,7 +239,11 @@ class ReportGenerator:
                             "- Discorra sobre a arquitetura de transporte (HTTP, WebSockets, stdio) comumente empregada.\n"
                             "- Detalhe as dependências e ecossistemas envolvidos (ex: tokio, async-trait no Rust, fastmcp no Python)."
                         )
-                    elif "Discussao da Comunidade" in header or "Discussão" in header or "Discussao" in header:
+                    elif (
+                        "Discussao da Comunidade" in header
+                        or "Discussão" in header
+                        or "Discussao" in header
+                    ):
                         prompt += (
                             "- Sintetize a recepção geral desse tipo de tecnologia pela comunidade de desenvolvedores.\n"
                             "- Fale sobre os principais gargalos discutidos (curva de aprendizado, segurança de dados em LLMs).\n"
@@ -227,8 +269,8 @@ class ReportGenerator:
                 except Exception as e:
                     section = f"{header}\n\n" + (
                         "No additional details could be loaded for this section."
-                        if is_english else
-                        "Não foi possível carregar detalhes adicionais para esta seção."
+                        if is_english
+                        else "Não foi possível carregar detalhes adicionais para esta seção."
                     )
                     logger.warning(f"Falha ao enriquecer seção '{header}': {e}")
 
@@ -396,22 +438,24 @@ class ReportGenerator:
             "properties": {
                 "executive_summary": {
                     "type": "string",
-                    "description": "Executive summary of 3-5 sentences about the main findings, in English." if is_english else "Resumo executivo de 3-5 frases sobre os achados principais, em PT-BR.",
+                    "description": "Executive summary of 3-5 sentences about the main findings, in English."
+                    if is_english
+                    else "Resumo executivo de 3-5 frases sobre os achados principais, em PT-BR.",
                 },
                 "recommendation": {
                     "type": "string",
                     "description": (
                         "Final recommendation structured in English: (1) main recommendation with concrete data, (2) alternative, (3) next steps (max 3)."
-                        if is_english else
-                        "Recomendacao final estruturada em PT-BR: (1) recomendacao principal com dado concreto, (2) alternativa, (3) proximos passos (max. 3)."
+                        if is_english
+                        else "Recomendacao final estruturada em PT-BR: (1) recomendacao principal com dado concreto, (2) alternativa, (3) proximos passos (max. 3)."
                     ),
                 },
                 "trends": {
                     "type": "string",
                     "description": (
                         "2-3 technological trends in English, each citing at least one concrete project as evidence."
-                        if is_english else
-                        "2-3 tendencias tecnologicas em PT-BR, cada uma citando pelo menos um projeto concreto como evidencia."
+                        if is_english
+                        else "2-3 tendencias tecnologicas em PT-BR, cada uma citando pelo menos um projeto concreto como evidencia."
                     ),
                 },
             },
@@ -467,9 +511,7 @@ class ReportGenerator:
                 "concreto como evidência. Não extrapole além dos dados fornecidos."
             )
 
-        data = await self.llm.generate_structured(
-            prompt, schema, temperature=0.35
-        )
+        data = await self.llm.generate_structured(prompt, schema, temperature=0.35)
 
         sections = {
             "executive_summary": str(data.get("executive_summary") or "").strip(),
@@ -571,7 +613,11 @@ class ReportGenerator:
         """Gera uma recomendacao estrategica baseada nos resultados da pesquisa."""
         is_english = self._is_query_english(query)
         if not results:
-            return "No projects found for recommendation." if is_english else "Nenhum projeto encontrado para recomendacao."
+            return (
+                "No projects found for recommendation."
+                if is_english
+                else "Nenhum projeto encontrado para recomendacao."
+            )
         top_lines_list = []
         for i, r in enumerate(results[:5]):
             quality = getattr(r, "evidence_quality", "unknown")
@@ -623,11 +669,17 @@ class ReportGenerator:
                 return f"We recommend **{top.title}** as the primary option. {top.description[:200]}..."
             return f"Recomendamos **{top.title}** como principal opcao. {top.description[:200]}..."
 
-    async def _generate_trends(self, results: list[SynthesizedResult], query: str | None = None) -> str:
+    async def _generate_trends(
+        self, results: list[SynthesizedResult], query: str | None = None
+    ) -> str:
         """Identifica tendencias tecnologicas a partir dos resultados de pesquisa."""
         is_english = query is not None and self._is_query_english(query)
         if len(results) < 3:
-            return "Few data points for trends analysis." if is_english else "Poucos dados para analise de tendencias."
+            return (
+                "Few data points for trends analysis."
+                if is_english
+                else "Poucos dados para analise de tendencias."
+            )
         project_lines = "\n".join(
             f"- {r.title or '(sem título)'}: {(r.description or '')[:150]}..."
             for r in results[:8]
@@ -652,7 +704,11 @@ class ReportGenerator:
             return await self.llm.generate(prompt, temperature=0.4, max_tokens=400)
         except Exception as e:
             logger.warning(f"LLM trends falhou: {e}")
-            return "Trends analysis not available." if is_english else "Analise de tendencias nao disponivel."
+            return (
+                "Trends analysis not available."
+                if is_english
+                else "Analise de tendencias nao disponivel."
+            )
 
     def _assemble_report(
         self,
@@ -683,7 +739,12 @@ class ReportGenerator:
         lines.extend(self._build_sources(results, is_english=is_english))
         lines.extend(
             self._build_analysis(
-                results, trends, recommendation, sentiment_section, metadata, is_english=is_english
+                results,
+                trends,
+                recommendation,
+                sentiment_section,
+                metadata,
+                is_english=is_english,
             )
         )
 
@@ -756,7 +817,9 @@ class ReportGenerator:
             ]
         return lines
 
-    def _build_sources(self, results: list[SynthesizedResult], is_english: bool = False) -> list[str]:
+    def _build_sources(
+        self, results: list[SynthesizedResult], is_english: bool = False
+    ) -> list[str]:
         """Constroi o bloco detalhado de projetos e ferramentas encontradas."""
         if is_english:
             lines = [
@@ -783,9 +846,10 @@ class ReportGenerator:
                 metric_parts.append(f"Updated: {str(r.metrics['updated_at'])[:10]}")
 
             metrics_str = " | ".join(metric_parts)
-            highlights_str = (
-                "\n".join(f"- {h}" for h in r.highlights if h)
-                or ("- No specific highlights" if is_english else "- Nenhum destaque especifico")
+            highlights_str = "\n".join(f"- {h}" for h in r.highlights if h) or (
+                "- No specific highlights"
+                if is_english
+                else "- Nenhum destaque especifico"
             )
             desc_text = (r.description or "")[:300] + (
                 "..." if len(r.description or "") > 300 else ""
@@ -823,13 +887,18 @@ class ReportGenerator:
                     "unknown": "❓ Desconhecido",
                 }
             verdict_display = verdict_icons.get(verdict, verdict)
-            quality_display = quality_badges.get(evidence_quality := getattr(r, "evidence_quality", "unknown"), evidence_quality)
+            quality_display = quality_badges.get(
+                evidence_quality := getattr(r, "evidence_quality", "unknown"),
+                evidence_quality,
+            )
 
             is_single_source = len(r.sources) <= 1
             if is_english:
                 source_warning = " | ⚠️ **Single Source**" if is_single_source else ""
             else:
-                source_warning = " | ⚠️ **Fonte Única (Single Source)**" if is_single_source else ""
+                source_warning = (
+                    " | ⚠️ **Fonte Única (Single Source)**" if is_single_source else ""
+                )
 
             flags = getattr(r, "hallucination_flags", []) or []
             flags_display = ""
@@ -879,7 +948,7 @@ class ReportGenerator:
                     )
             if tldr:
                 entry_lines.append(f"> {tldr}")
-                
+
             if is_english:
                 entry_lines += [
                     f"- **Description:** {desc_text}",
@@ -1166,9 +1235,14 @@ class ReportGenerator:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         import re
         import unicodedata
-        normalized = unicodedata.normalize('NFKD', query).encode('ascii', 'ignore').decode('ascii')
-        slug = re.sub(r'[^a-z0-9\-]+', '-', normalized.lower())
-        slug = re.sub(r'-+', '-', slug).strip('-')[:50]
+
+        normalized = (
+            unicodedata.normalize("NFKD", query)
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+        slug = re.sub(r"[^a-z0-9\-]+", "-", normalized.lower())
+        slug = re.sub(r"-+", "-", slug).strip("-")[:50]
         if not slug:
             slug = "report"
         base_name = datetime.now().strftime("%Y-%m-%d") + f"-{slug}"

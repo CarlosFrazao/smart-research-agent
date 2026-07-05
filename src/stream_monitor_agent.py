@@ -46,16 +46,18 @@ EVENT_TTL = 3600  # 1 hora
 
 # ─── Data Contracts ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class StreamEvent:
     """Evento capturado de uma fonte de monitoramento em tempo real."""
-    source_type: str          # "rss", "github_release", "arxiv", "webhook"
+
+    source_type: str  # "rss", "github_release", "arxiv", "webhook"
     source_url: str
     title: str
     url: str
     summary: str = ""
     published_at: float = field(default_factory=time.time)
-    event_hash: str = ""      # Hash para deduplicação
+    event_hash: str = ""  # Hash para deduplicação
     topic_tags: list[str] = field(default_factory=list)
     relevance_score: float = 0.0  # 0.0-1.0 (calculado por similaridade semântica)
 
@@ -79,6 +81,7 @@ class StreamEvent:
 @dataclass
 class MonitoringFeed:
     """Feed de monitoramento configurado."""
+
     name: str
     url: str
     source_type: str  # "rss", "github", "arxiv", "webhook"
@@ -88,9 +91,11 @@ class MonitoringFeed:
     last_polled_at: float = 0.0
     events_collected: int = 0
 
+
 @dataclass
 class StreamMonitorReport:
     """Relatório de atividade do monitor em tempo real."""
+
     active_feeds: int = 0
     total_events_collected: int = 0
     deduplicated_events: int = 0
@@ -100,6 +105,7 @@ class StreamMonitorReport:
 
 # ─── Parsers de Feed ──────────────────────────────────────────────────────────
 
+
 async def _parse_rss_feed(url: str, topics: list[str]) -> list[StreamEvent]:
     """Faz polling e parseia um feed RSS/Atom, retornando eventos novos."""
     events: list[StreamEvent] = []
@@ -108,9 +114,13 @@ async def _parse_rss_feed(url: str, topics: list[str]) -> list[StreamEvent]:
         import aiohttp
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
                 if resp.status != 200:
-                    logger.warning(f"[StreamMonitor] RSS {url} retornou HTTP {resp.status}")
+                    logger.warning(
+                        f"[StreamMonitor] RSS {url} retornou HTTP {resp.status}"
+                    )
                     return events
                 content = await resp.text()
 
@@ -127,10 +137,11 @@ async def _parse_rss_feed(url: str, topics: list[str]) -> list[StreamEvent]:
 
             title = title_el.text if title_el is not None and title_el.text else ""
             link = (
-                (link_el.text or link_el.get("href", ""))
-                if link_el is not None else ""
+                (link_el.text or link_el.get("href", "")) if link_el is not None else ""
             )
-            summary = summary_el.text if summary_el is not None and summary_el.text else ""
+            summary = (
+                summary_el.text if summary_el is not None and summary_el.text else ""
+            )
 
             if title and link:
                 events.append(
@@ -144,7 +155,9 @@ async def _parse_rss_feed(url: str, topics: list[str]) -> list[StreamEvent]:
                     )
                 )
     except ImportError:
-        logger.warning("[StreamMonitor] aiohttp não disponível. Polling RSS desabilitado.")
+        logger.warning(
+            "[StreamMonitor] aiohttp não disponível. Polling RSS desabilitado."
+        )
     except Exception as e:
         logger.warning(f"[StreamMonitor] Erro ao parsear RSS {url}: {e}")
     return events
@@ -160,11 +173,14 @@ async def _parse_github_releases(repo: str, topics: list[str]) -> list[StreamEve
     events: list[StreamEvent] = []
     try:
         import aiohttp
+
         api_url = f"https://api.github.com/repos/{repo}/releases?per_page=5"
 
         async with aiohttp.ClientSession() as session:
             headers = {"Accept": "application/vnd.github.v3+json"}
-            async with session.get(api_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with session.get(
+                api_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
                 if resp.status != 200:
                     return events
                 data = await resp.json()
@@ -181,13 +197,18 @@ async def _parse_github_releases(repo: str, topics: list[str]) -> list[StreamEve
                 )
             )
     except ImportError:
-        logger.warning("[StreamMonitor] aiohttp não disponível. GitHub polling desabilitado.")
+        logger.warning(
+            "[StreamMonitor] aiohttp não disponível. GitHub polling desabilitado."
+        )
     except Exception as e:
-        logger.warning(f"[StreamMonitor] Erro ao consultar GitHub releases para {repo}: {e}")
+        logger.warning(
+            f"[StreamMonitor] Erro ao consultar GitHub releases para {repo}: {e}"
+        )
     return events
 
 
 # ─── Agente Principal ──────────────────────────────────────────────────────────
+
 
 class StreamMonitorAgent:
     """Agente de monitoramento contínuo de fontes em tempo real para o SRA.
@@ -320,7 +341,9 @@ class StreamMonitorAgent:
             self._events = self._events[-MAX_EVENTS_BUFFER:]
 
         if added > 0:
-            logger.info(f"[StreamMonitor] {feed.name}: {added} novos eventos coletados.")
+            logger.info(
+                f"[StreamMonitor] {feed.name}: {added} novos eventos coletados."
+            )
 
     def get_recent_events(
         self,
@@ -341,7 +364,8 @@ class StreamMonitorAgent:
 
         if topic_filter:
             active = [
-                e for e in active
+                e
+                for e in active
                 if any(topic_filter.lower() in tag.lower() for tag in e.topic_tags)
             ]
 

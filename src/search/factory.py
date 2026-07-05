@@ -155,9 +155,15 @@ class SearcherFactory:
         searchers["youtube"] = youtube
 
         # Playwright
-        if getattr(orchestrator.config, "playwright_enabled", False) and PlaywrightSearcher is not None:
+        if (
+            getattr(orchestrator.config, "playwright_enabled", False)
+            and PlaywrightSearcher is not None
+        ):
             proxy_url = None
-            if getattr(orchestrator.config, "residential_proxy_provider", None) and ResidentialProxyProvider is not None:
+            if (
+                getattr(orchestrator.config, "residential_proxy_provider", None)
+                and ResidentialProxyProvider is not None
+            ):
                 try:
                     prov = ResidentialProxyProvider(
                         provider=orchestrator.config.residential_proxy_provider,

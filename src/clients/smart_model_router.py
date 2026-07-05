@@ -162,7 +162,9 @@ class SmartModelRouter:
             model_id = model_map[tier]
             if tier in ("sonnet", "opus"):
                 code_keywords = r"\b(code|python|java|c#|cpp|rust|html|css|js|ts|query|sql|api|rest|graphql|docker|git|develop|program|script|bug|error|exception)\w*\b"
-                if re.search(code_keywords, query.lower()) or _COMPLEXITY_RE.search(query):
+                if re.search(code_keywords, query.lower()) or _COMPLEXITY_RE.search(
+                    query
+                ):
                     model_id = "qwen2.5-coder:3b"
         else:
             model_map = _ANTHROPIC_MODELS

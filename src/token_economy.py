@@ -71,14 +71,14 @@ def _is_cjk(char: str) -> bool:
     """Retorna True se o caractere pertence aos blocos Unicode de CJK."""
     code = ord(char)
     return (
-        0x3000 <= code <= 0x303F or  # CJK Symbols and Punctuation
-        0x3040 <= code <= 0x309F or  # Hiragana
-        0x30A0 <= code <= 0x30FF or  # Katakana
-        0x31F0 <= code <= 0x31FF or  # Katakana Phonetic Extensions
-        0x3400 <= code <= 0x4DBF or  # CJK Unified Ideographs Extension A
-        0x4E00 <= code <= 0x9FFF or  # CJK Unified Ideographs
-        0xF900 <= code <= 0xFAFF or  # CJK Compatibility Ideographs
-        0xFF00 <= code <= 0xFFEF     # Halfwidth and Fullwidth Forms
+        0x3000 <= code <= 0x303F  # CJK Symbols and Punctuation
+        or 0x3040 <= code <= 0x309F  # Hiragana
+        or 0x30A0 <= code <= 0x30FF  # Katakana
+        or 0x31F0 <= code <= 0x31FF  # Katakana Phonetic Extensions
+        or 0x3400 <= code <= 0x4DBF  # CJK Unified Ideographs Extension A
+        or 0x4E00 <= code <= 0x9FFF  # CJK Unified Ideographs
+        or 0xF900 <= code <= 0xFAFF  # CJK Compatibility Ideographs
+        or 0xFF00 <= code <= 0xFFEF  # Halfwidth and Fullwidth Forms
     )
 
 

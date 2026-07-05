@@ -25,7 +25,7 @@ st.markdown(
     """
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
-        
+
         html, body, [class*="css"] {
             font-family: 'Outfit', sans-serif;
         }
@@ -80,12 +80,12 @@ st.markdown(
             text-transform: uppercase;
         }
         .status-idle { background-color: #e2e8f0; color: #4a5568; }
-        .status-active { 
-            background-color: #c6f6d5; 
-            color: #22543d; 
+        .status-active {
+            background-color: #c6f6d5;
+            color: #22543d;
             animation: pulse 2s infinite;
         }
-        
+
         @keyframes pulse {
             0% { opacity: 0.7; }
             50% { opacity: 1; }

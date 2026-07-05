@@ -217,4 +217,3 @@ async def test_proxy_manager_best_proxy_latency():
     best_vps = manager.get_best_proxy("github.com")
     assert best_vps is not None
     assert best_vps.ip == "3.3.3.3"
-

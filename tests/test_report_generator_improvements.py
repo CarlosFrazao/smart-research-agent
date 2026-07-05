@@ -12,7 +12,7 @@ from src.types import ResearchMetadata, SynthesizedResult
 async def test_is_query_english():
     llm = MagicMock()
     gen = ReportGenerator(llm)
-    
+
     assert gen._is_query_english("best Python framework vs Go") is True
     assert gen._is_query_english("how to build a client server api") is True
     assert gen._is_query_english("melhor framework de python") is False
@@ -33,11 +33,11 @@ async def test_generate_empty_results():
         overall_confidence=0.5,
         low_confidence_warnings=[]
     )
-    
+
     # Query em Português
     report_pt = await gen.generate("como fazer bolo", [], metadata)
     assert "Nenhum resultado relevante foi encontrado" in report_pt
-    
+
     # Query em Inglês
     metadata.query = "how to bake cake"
     report_en = await gen.generate("how to bake cake", [], metadata)
@@ -48,15 +48,15 @@ async def test_generate_empty_results():
 async def test_save_report_slugification():
     llm = MagicMock()
     gen = ReportGenerator(llm)
-    
+
     import tempfile
     import os
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         # Query com caracteres muito especiais proibidos no Windows
         query = "What is the best ORM for python/node.js? (Part 1) *cool*"
         md_path = gen.save_report("Test Content", query, output_dir=tmpdir)
-        
+
         # O nome do arquivo deve ser sanitizado e seguro
         basename = os.path.basename(md_path)
         assert "/" not in basename
@@ -65,7 +65,7 @@ async def test_save_report_slugification():
         assert "(" not in basename
         assert ")" not in basename
         assert "what-is-the-best-orm-for-python-node-js-part-1-coo" in basename
-        
+
         # Teste de query vazia/símbolos que geraria slug vazio
         query_empty = "??? !!!"
         md_path_empty = gen.save_report("Test Content", query_empty, output_dir=tmpdir)
@@ -82,9 +82,9 @@ async def test_url_deduplication_and_headers_localization():
         "recommendation": "English recommendation main: tool A, alt: tool B, steps: test it.",
         "trends": "English trend 1, trend 2."
     })
-    
+
     gen = ReportGenerator(llm)
-    
+
     results = [
         SynthesizedResult(
             entity="Tool A",
@@ -109,7 +109,7 @@ async def test_url_deduplication_and_headers_localization():
             metrics={"stars": 500}
         )
     ]
-    
+
     metadata = ResearchMetadata(
         query="best python tools vs javascript",
         timestamp=datetime.now(),
@@ -120,17 +120,17 @@ async def test_url_deduplication_and_headers_localization():
         overall_confidence=0.9,
         low_confidence_warnings=[]
     )
-    
+
     # Query em inglês
     report = await gen.generate("best python tools vs javascript", results, metadata)
-    
+
     # 1. Verificar títulos estruturais em inglês
     assert "## 1. Executive Summary" in report
     assert "## 2. Discovered Projects / Tools" in report
     assert "## 3. Side-by-Side Comparison" in report
     assert "## 4. Identified Technologies / Stacks" in report
     assert "## 8. Links and References" in report
-    
+
     # 2. Verificar a deduplicação de URLs (https://duplicate.com deve aparecer apenas uma vez nas referências)
     references_section = report.split("## 8. Links and References")[1]
     assert references_section.count("[https://duplicate.com]") == 1
@@ -158,4 +158,3 @@ def test_config_improvements():
     assert path.is_absolute()
     assert "reports" in cfg4.memory_db_path
     assert ".research_memory.db" in cfg4.memory_db_path
-

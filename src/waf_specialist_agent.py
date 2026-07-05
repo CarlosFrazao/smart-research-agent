@@ -37,13 +37,16 @@ logger = logging.getLogger("waf_specialist_agent")
 
 # ─── Enums e Constantes ────────────────────────────────────────────────────────
 
+
 class BlockLevel(IntEnum):
     """Escala de severidade de bloqueio detectado."""
-    GREEN = 0    # Sem bloqueio
-    YELLOW = 1   # Bloqueio suave (rate limit, 429)
-    ORANGE = 2   # Bloqueio por TLS fingerprint ou cabeçalhos suspeitos
-    RED = 3      # Bloqueio por IP — proxy necessário
-    CRITICAL = 4 # CAPTCHA ou challenge JavaScript
+
+    GREEN = 0  # Sem bloqueio
+    YELLOW = 1  # Bloqueio suave (rate limit, 429)
+    ORANGE = 2  # Bloqueio por TLS fingerprint ou cabeçalhos suspeitos
+    RED = 3  # Bloqueio por IP — proxy necessário
+    CRITICAL = 4  # CAPTCHA ou challenge JavaScript
+
 
 # Status HTTP que indicam possível bloqueio
 BLOCKING_STATUS_CODES = {403, 429, 503, 407}
@@ -72,9 +75,11 @@ USER_AGENTS = [
 
 # ─── Data Contracts ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class BlockingSignal:
     """Sinal de bloqueio detectado em uma requisição."""
+
     url: str
     domain: str
     status_code: int
@@ -83,9 +88,11 @@ class BlockingSignal:
     response_snippet: str = ""
     countermeasure_applied: str = ""
 
+
 @dataclass
 class WAFSpecialistReport:
     """Relatório de atuação do agente em uma sessão de pesquisa."""
+
     total_requests: int = 0
     blocked_requests: int = 0
     countermeasures_applied: int = 0
@@ -112,6 +119,7 @@ class WAFSpecialistReport:
 
 
 # ─── Agente Principal ──────────────────────────────────────────────────────────
+
 
 class WAFSpecialistAgent:
     """Agente de vigilância e evasão de bloqueio para o pipeline de coleta do SRA.
@@ -143,6 +151,7 @@ class WAFSpecialistAgent:
     def _load_proxy_url(self) -> str | None:
         """Carrega URL do proxy residencial da configuração ou variável de ambiente."""
         import os
+
         proxy = os.getenv("SRA_PROXY_URL")
         if self._config and hasattr(self._config, "proxy_url"):
             proxy = getattr(self._config, "proxy_url", proxy)
@@ -151,12 +160,14 @@ class WAFSpecialistAgent:
     def _load_captcha_key(self) -> str | None:
         """Carrega chave de API do serviço de resolução de CAPTCHA."""
         import os
+
         return os.getenv("SRA_CAPTCHA_API_KEY") or os.getenv("CAPSOLVER_API_KEY")
 
     def _extract_domain(self, url: str) -> str:
         """Extrai o domínio raiz de uma URL."""
         try:
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             parts = parsed.netloc.split(".")
             return ".".join(parts[-2:]) if len(parts) >= 2 else parsed.netloc
@@ -243,15 +254,23 @@ class WAFSpecialistAgent:
         body_lower = body.lower()
 
         # Verificar CAPTCHA/challenge JS (mais grave)
-        if any(p in body_lower for p in ["captcha", "challenge-platform", "just a moment"]):
+        if any(
+            p in body_lower for p in ["captcha", "challenge-platform", "just a moment"]
+        ):
             return BlockLevel.CRITICAL
 
         # Verificar proteção WAF conhecida
-        if any(p in body_lower for p in ["cloudflare", "ddos-guard", "datadome", "akamai"]):
+        if any(
+            p in body_lower for p in ["cloudflare", "ddos-guard", "datadome", "akamai"]
+        ):
             return BlockLevel.ORANGE
 
         # Bloqueio por IP (403 explícito ou Access Denied)
-        if status_code == 403 or "access denied" in body_lower or "bot detected" in body_lower:
+        if (
+            status_code == 403
+            or "access denied" in body_lower
+            or "bot detected" in body_lower
+        ):
             return BlockLevel.RED
 
         # Rate limit
@@ -295,7 +314,9 @@ class WAFSpecialistAgent:
 
     async def _apply_rate_limit_backoff(self, signal: BlockingSignal) -> dict[str, Any]:
         """Nível 1: Aguarda com backoff exponencial + rotação de User-Agent."""
-        delay = random.uniform(2.0, 8.0) * self._domain_block_counts.get(signal.domain, 1)
+        delay = random.uniform(2.0, 8.0) * self._domain_block_counts.get(
+            signal.domain, 1
+        )
         delay = min(delay, 60.0)  # Cap em 60s
         logger.info(f"[WAF] Rate limit em {signal.domain}. Aguardando {delay:.1f}s...")
         await asyncio.sleep(delay)
@@ -310,6 +331,7 @@ class WAFSpecialistAgent:
         """Nível 2: Rotação de fingerprint TLS via curl_cffi (se disponível)."""
         try:
             import curl_cffi  # noqa: F401
+
             # curl_cffi disponível — usar JA3 fingerprint de Chrome
             impersonation_targets = ["chrome120", "chrome119", "chrome110", "chrome107"]
             chosen = random.choice(impersonation_targets)
@@ -321,7 +343,9 @@ class WAFSpecialistAgent:
                 "new_headers": self.get_stealth_headers(signal.url),
             }
         except ImportError:
-            logger.warning("[WAF] curl_cffi não disponível. Fallback para rotação de UA.")
+            logger.warning(
+                "[WAF] curl_cffi não disponível. Fallback para rotação de UA."
+            )
             return {
                 "action": "ua_rotation_fallback",
                 "success": True,

@@ -40,9 +40,11 @@ MAX_GAP_QUERIES = 5
 
 # ─── Data Contracts ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class KnowledgeNode:
     """Nó simplificado do Grafo de Conhecimento para análise de densidade."""
+
     node_id: str
     label: str
     node_type: str  # "concept", "entity", "claim", "source"
@@ -50,18 +52,22 @@ class KnowledgeNode:
     community_id: int = -1
     embedding_available: bool = False
 
+
 @dataclass
 class KnowledgeBridge:
     """Ponte semântica fraca entre duas comunidades temáticas."""
+
     community_a: int
     community_b: int
     bridge_node_id: str
     edge_weight: float  # 0.0-1.0
     gap_query_suggestion: str = ""
 
+
 @dataclass
 class GraphGapReport:
     """Relatório de gaps estruturais detectados no Grafo de Conhecimento."""
+
     session_id: str
     total_nodes_analyzed: int = 0
     isolated_nodes: list[KnowledgeNode] = field(default_factory=list)
@@ -89,6 +95,7 @@ class GraphGapReport:
 
 
 # ─── Agente Principal ──────────────────────────────────────────────────────────
+
 
 class GraphExplorerAgent:
     """Agente autônomo de análise de densidade e gaps no Grafo de Conhecimento do SRA.
@@ -129,16 +136,22 @@ class GraphExplorerAgent:
             GraphGapReport com isolated_nodes, weak_bridges e gap_queries prontas.
         """
         report = GraphGapReport(session_id=session_id)
-        logger.info(f"[GraphExplorer] Iniciando traversal do grafo para sessão {session_id}.")
+        logger.info(
+            f"[GraphExplorer] Iniciando traversal do grafo para sessão {session_id}."
+        )
 
         nodes = await self._fetch_nodes(session_id, max_nodes)
         if not nodes:
-            logger.info("[GraphExplorer] Grafo vazio ou não disponível. Retornando relatório vazio.")
+            logger.info(
+                "[GraphExplorer] Grafo vazio ou não disponível. Retornando relatório vazio."
+            )
             return report
 
         report.total_nodes_analyzed = len(nodes)
         report.graph_density = self._calculate_density(nodes)
-        report.community_count = len(set(n.community_id for n in nodes if n.community_id >= 0))
+        report.community_count = len(
+            set(n.community_id for n in nodes if n.community_id >= 0)
+        )
 
         # Detectar nós isolados
         report.isolated_nodes = [
@@ -163,16 +176,22 @@ class GraphExplorerAgent:
         )
         return report
 
-    async def _fetch_nodes(self, session_id: str, max_nodes: int) -> list[KnowledgeNode]:
+    async def _fetch_nodes(
+        self, session_id: str, max_nodes: int
+    ) -> list[KnowledgeNode]:
         """Busca nós do Grafo de Conhecimento para a sessão especificada."""
         if self._kg is None:
-            logger.debug("[GraphExplorer] KnowledgeGraph não conectado. Usando stub vazio.")
+            logger.debug(
+                "[GraphExplorer] KnowledgeGraph não conectado. Usando stub vazio."
+            )
             return []
 
         try:
             # Tenta chamar a interface real do KnowledgeGraph
             if hasattr(self._kg, "get_session_nodes"):
-                raw_nodes = await self._kg.get_session_nodes(session_id, limit=max_nodes)
+                raw_nodes = await self._kg.get_session_nodes(
+                    session_id, limit=max_nodes
+                )
                 return [
                     KnowledgeNode(
                         node_id=n.get("id", ""),
@@ -208,7 +227,9 @@ class GraphExplorerAgent:
         """Calcula a densidade do grafo como proporção de nós bem conectados."""
         if not nodes:
             return 0.0
-        well_connected = sum(1 for n in nodes if n.edge_count >= MIN_EDGE_COUNT_THRESHOLD)
+        well_connected = sum(
+            1 for n in nodes if n.edge_count >= MIN_EDGE_COUNT_THRESHOLD
+        )
         return round(well_connected / len(nodes), 4)
 
     async def _detect_weak_bridges(
@@ -236,7 +257,8 @@ class GraphExplorerAgent:
                     com_b = community_ids[j]
                     # Busca o nó com mais conexões entre as duas comunidades
                     bridge_candidates = [
-                        n for n in nodes
+                        n
+                        for n in nodes
                         if n.community_id in (com_a, com_b) and n.edge_count >= 1
                     ]
                     if not bridge_candidates:
