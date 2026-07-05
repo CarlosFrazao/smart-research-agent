@@ -61,8 +61,9 @@ class AuditClaim:
     confidence: float = 0.0
     status: str = "unverified"  # verified | single_source | low_confidence | gap
     supporting_sources: list[str] = field(default_factory=list)
-    supporting_snippets: list[str] = field(default_factory=list)
     needs_recheck: bool = False
+    evidence_snippets: list[str] = field(default_factory=list)
+    supporting_urls: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -280,163 +281,123 @@ class ResearchAuditor:
         claims: list[AuditClaim],
         results: list[SearchResult],
     ) -> list[AuditClaim]:
-        """Cruza claims com os resultados disponíveis para estimar confiança de forma granular."""
-        if not claims:
-            return claims
-
+        """Cruza cada claim individualmente com as fontes para extrair evidências e URLs."""
         if not results:
             for claim in claims:
                 claim.status = "gap"
                 claim.needs_recheck = True
+                claim.evidence_snippets = []
+                claim.supporting_urls = []
+                claim.supporting_sources = []
             return claims
 
-        # DoS Guard: Limita o corpus a no máximo 6000 caracteres para evitar payload maciço
-        corpus_parts = []
-        current_len = 0
-        for i, r in enumerate(results[:15]):
-            part = f"[{i}] Title: {getattr(r, 'title', '') or ''}\nURL: {getattr(r, 'url', '') or ''}\nSnippet: {(getattr(r, 'description', '') or '')[:400]}\n"
-            if current_len + len(part) > 6000:
-                break
-            corpus_parts.append(part)
-            current_len += len(part)
-        corpus = "\n".join(corpus_parts)
-
-        # DoS Guard: Limita a 10 claims para evitar estouro de tokens
-        claims_to_validate = claims[:10]
-
-        prompt = (
-            "You are a factual validation auditor. Analyze each claim against the provided corpus of search results.\n"
-            "For each claim, determine:\n"
-            "1. Status: 'verified' (fully supported by the corpus), 'single_source' (supported by only 1 source but with high confidence), 'low_confidence' (weakly supported), or 'gap' (no supporting evidence found).\n"
-            "2. Confidence score: a number between 0.0 and 1.0.\n"
-            "3. Supporting snippets: exact sentences or phrases from the corpus that prove the claim.\n"
-            "4. Supporting sources: list of source URLs matching the source indexes from the corpus.\n\n"
-            f"Corpus of Search Results:\n{corpus}\n\n"
-            f"Claims to Validate:\n"
-            + "\n".join(f"- {c.text}" for c in claims_to_validate)
-            + "\n\n"
-            "Return a JSON object where the key is the exact text of each claim, and the value is a JSON object with fields:\n"
-            "- 'status': string ('verified' | 'single_source' | 'low_confidence' | 'gap')\n"
-            "- 'confidence': float\n"
-            "- 'supporting_snippets': array of strings\n"
-            "- 'sources': array of strings (choose matching URLs from the corpus)\n\n"
-            "Return ONLY a valid JSON object."
-        )
-
-        schema = {
-            "type": "object",
-            "additionalProperties": {
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "enum": ["verified", "single_source", "low_confidence", "gap"],
-                    },
-                    "confidence": {"type": "number"},
-                    "supporting_snippets": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                    "sources": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["status", "confidence", "supporting_snippets", "sources"],
-            },
+        stop_words = {
+            "para",
+            "como",
+            "com",
+            "uma",
+            "mais",
+            "este",
+            "que",
+            "dos",
+            "das",
+            "como",
+            "para",
+            "with",
+            "from",
+            "that",
+            "this",
+            "about",
+            "their",
+            "there",
+            "what",
+            "where",
+            "when",
+            "some",
+            "into",
+            "their",
+            "them",
+            "then",
+            "than",
+            "o",
+            "a",
+            "os",
+            "as",
+            "de",
+            "do",
+            "da",
+            "em",
+            "no",
+            "na",
+            "um",
+            "uma",
         }
 
-        llm_success = False
-        validation_data = {}
-        try:
-            # Tenta validação granular via LLM
-            validation_data = await self.llm.generate_structured(
-                prompt, schema, temperature=0.1
-            )
-            if isinstance(validation_data, dict):
-                for claim in claims:
-                    data = validation_data.get(claim.text)
-                    if data:
-                        claim.status = data.get("status", "unverified")
-                        claim.confidence = float(data.get("confidence", 0.0))
-                        claim.supporting_snippets = data.get("supporting_snippets", [])
-                        claim.supporting_sources = data.get("sources", [])
-                        claim.needs_recheck = claim.status in ("low_confidence", "gap")
-                llm_success = True
-        except Exception as e:
-            logger.warning(
-                f"ResearchAuditor: falha na validação via LLM, aplicando fallback heurístico: {e}"
-            )
-
-        # Fallback Heurístico (se o LLM falhar ou para claims excedentes fora do DoS Guard)
         for claim in claims:
-            # Se já validado pelo LLM, pula
-            if llm_success and claim.text in validation_data:
-                continue
+            # Reseta estado de busca para a iteração
+            claim.evidence_snippets = []
+            claim.supporting_urls = []
+            claim.supporting_sources = []
 
-            # Heurística de palavras-chave
-            stop_words = {
-                "para",
-                "como",
-                "com",
-                "uma",
-                "mais",
-                "este",
-                "que",
-                "dos",
-                "das",
-                "como",
-                "para",
-                "with",
-                "from",
-                "that",
-                "this",
-                "about",
-                "their",
-                "there",
-                "what",
-                "where",
-                "when",
-                "some",
-                "into",
-                "their",
-                "them",
-                "then",
-                "than",
-            }
+            # Tokeniza e limpa as palavras-chave da claim para busca
             keywords = [
                 w.strip(".,;:!?()[]\"'")
                 for w in claim.text.split()
                 if len(w) > 2 and w.lower() not in stop_words
             ]
-            matches = sum(1 for kw in keywords if kw.lower() in corpus.lower())
-            coverage = matches / max(len(keywords), 1)
 
-            if coverage >= 0.5:
-                claim.confidence = min(0.9, 0.5 + coverage * 0.5)
+            if not keywords:
+                claim.status = "low_confidence"
+                claim.needs_recheck = True
+                continue
+
+            unique_urls = set()
+            unique_sources = set()
+
+            for r in results:
+                # Evita duplicar a mesma fonte/url para o mesmo claim
+                if r.url in unique_urls or not r.url:
+                    continue
+
+                # Verifica similaridade baseada em palavras-chave no título/descrição
+                title_matches = sum(
+                    1 for kw in keywords if kw.lower() in r.title.lower()
+                )
+                desc_matches = sum(
+                    1 for kw in keywords if kw.lower() in r.description.lower()
+                )
+                total_matches = title_matches + desc_matches
+
+                # Cobertura ponderada
+                coverage = total_matches / (len(keywords) * 2)
+
+                if coverage >= 0.15:
+                    # Encontrou evidência!
+                    unique_urls.add(r.url)
+                    unique_sources.add(r.source)
+
+                    # Extrai o snippet (descrição ou frase contendo matches)
+                    snippet = r.description if r.description else r.title
+                    if len(snippet) > 200:
+                        snippet = snippet[:200] + "..."
+                    claim.evidence_snippets.append(snippet)
+                    claim.supporting_urls.append(r.url)
+                    claim.supporting_sources.append(r.source)
+
+            # Classifica o claim baseado na abundância de fontes distintas
+            num_sources = len(unique_urls)
+            if num_sources >= 2:
+                claim.confidence = min(0.95, 0.6 + num_sources * 0.1)
                 claim.status = "verified"
                 claim.needs_recheck = False
-            elif coverage >= 0.2:
-                claim.confidence = 0.3 + coverage * 0.5
+            elif num_sources == 1:
+                claim.confidence = 0.55
                 claim.status = "single_source"
                 claim.needs_recheck = False
             else:
-                claim.confidence = coverage * 0.3
+                claim.confidence = 0.0
                 claim.status = "low_confidence"
                 claim.needs_recheck = True
-
-            # Extração heurística de fontes e snippets correspondentes
-            matching_urls = []
-            matching_snippets = []
-            for r in results[:15]:
-                desc = getattr(r, "description", "") or ""
-                matched_keywords = sum(
-                    1 for kw in keywords if kw.lower() in desc.lower()
-                )
-                if len(keywords) > 0 and (matched_keywords / len(keywords)) >= 0.2:
-                    if getattr(r, "url", None):
-                        matching_urls.append(r.url)
-                    matching_snippets.append(desc[:200])
-
-            claim.supporting_sources = matching_urls[:2]
-            claim.supporting_snippets = matching_snippets[:2]
 
         return claims
 
@@ -512,8 +473,8 @@ class ResearchAuditor:
 
     def _inject_audit_notes(self, report_text: str, claims: list[AuditClaim]) -> str:
         """
-        Injeta um bloco de resumo de auditoria no final do relatório.
-        Não altera o corpo do relatório para preservar a narrativa original.
+        Injeta um bloco de resumo de auditoria detalhado no final do relatório,
+        apresentando as evidências factuais e links das fontes.
         """
         verified_pct = (
             round(
@@ -523,9 +484,6 @@ class ResearchAuditor:
             else 0
         )
         gaps = [c for c in claims if c.needs_recheck]
-        verified_claims = [
-            c for c in claims if c.status in ("verified", "single_source")
-        ]
 
         lines = [
             "\n\n---\n",
@@ -536,25 +494,32 @@ class ResearchAuditor:
             f"| Claims verificadas | {len([c for c in claims if c.status == 'verified'])} ({verified_pct}%) |",
             f"| Claims de fonte única | {len([c for c in claims if c.status == 'single_source'])} |",
             f"| Claims com gap de evidência | {len(gaps)} |",
+            "\n### 🔍 Detalhamento das Provas Factuais (Claim-by-Claim)\n",
         ]
 
-        if gaps:
-            lines.append("\n### ⚠️ Claims não verificadas / Gaps de Evidência\n")
-            for g in gaps[:10]:
-                lines.append(f"- {g.text[:120]}")
+        for claim in claims:
+            status_symbol = (
+                "✅"
+                if claim.status == "verified"
+                else "🟡"
+                if claim.status == "single_source"
+                else "❌"
+            )
+            lines.append(f"#### {status_symbol} {claim.text}")
+            lines.append(f"- **Status:** {claim.status.replace('_', ' ').capitalize()}")
+            lines.append(f"- **Confiança:** {claim.confidence:.0%}")
 
-        if verified_claims:
-            lines.append("\n### ✅ Evidências Factuais Encontradas (Provas & Fontes)\n")
-            for vc in verified_claims[:5]:
-                lines.append(f"- **Claim:** *{vc.text}*")
-                if vc.supporting_snippets:
-                    lines.append("  - **Provas/Snippets:**")
-                    for snip in vc.supporting_snippets[:2]:
-                        lines.append(f'    - "{snip}"')
-                if vc.supporting_sources:
-                    lines.append("  - **Fontes (URLs):**")
-                    for url in vc.supporting_sources[:2]:
-                        lines.append(f"    - [{url}]({url})")
+            if claim.evidence_snippets:
+                lines.append("- **Evidências Coletadas:**")
+                for snippet, url in zip(
+                    claim.evidence_snippets[:3], claim.supporting_urls[:3]
+                ):
+                    lines.append(f'  - *"{snippet}"* [Fonte]({url})')
+            else:
+                lines.append(
+                    "- *Sem evidências diretas nas fontes atuais. Necessita re-pesquisa.*"
+                )
+            lines.append("")
 
         return report_text + "\n".join(lines)
 
