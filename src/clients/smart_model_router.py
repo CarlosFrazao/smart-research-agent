@@ -49,6 +49,31 @@ _OPENROUTER_MODELS: dict[ModelTier, str] = {
     "opus": "anthropic/claude-opus-4-8",
 }
 
+# IDs de modelo por tier (provider Gemini)
+_GEMINI_MODELS: dict[ModelTier, str] = {
+    "free": "gemini-2.5-flash",
+    "haiku": "gemini-2.5-flash",
+    "sonnet": "gemini-2.5-flash",
+    "opus": "gemini-2.5-pro",
+}
+
+# IDs de modelo por tier (provider Groq)
+_GROQ_MODELS: dict[ModelTier, str] = {
+    "free": "llama-3.3-70b-versatile",
+    "haiku": "llama-3.1-8b-instant",
+    "sonnet": "llama-3.3-70b-versatile",
+    "opus": "llama-3.3-70b-versatile",
+}
+
+# IDs de modelo por tier (provider Ollama)
+_OLLAMA_MODELS: dict[ModelTier, str] = {
+    "free": "llama3.2",
+    "haiku": "llama3.2",
+    "sonnet": "qwen2.5:3b",
+    "opus": "qwen2.5:3b",
+}
+
+
 # Mapa de task_type → score de complexidade
 _TASK_SCORES: dict[str, int] = {
     "intent": 2,
@@ -126,10 +151,23 @@ class SmartModelRouter:
             )
 
         # Demais tiers: usar modelo do provider atual
-        model_map = (
-            _OPENROUTER_MODELS if provider == "openrouter" else _ANTHROPIC_MODELS
-        )
-        model_id = model_map[tier]
+        if provider == "openrouter":
+            model_map = _OPENROUTER_MODELS
+        elif provider == "gemini":
+            model_map = _GEMINI_MODELS
+        elif provider == "groq":
+            model_map = _GROQ_MODELS
+        elif provider == "ollama":
+            model_map = _OLLAMA_MODELS
+            model_id = model_map[tier]
+            if tier in ("sonnet", "opus"):
+                code_keywords = r"\b(code|python|java|c#|cpp|rust|html|css|js|ts|query|sql|api|rest|graphql|docker|git|develop|program|script|bug|error|exception)\w*\b"
+                if re.search(code_keywords, query.lower()) or _COMPLEXITY_RE.search(query):
+                    model_id = "qwen2.5-coder:3b"
+        else:
+            model_map = _ANTHROPIC_MODELS
+            model_id = model_map[tier]
+
         reason = self._build_reason(score, task_type, query, context_tokens, tier)
         logger.debug(f"SmartModelRouter: {reason}")
         return RoutingDecision(tier=tier, model_id=model_id, score=score, reason=reason)

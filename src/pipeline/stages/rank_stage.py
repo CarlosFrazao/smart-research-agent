@@ -61,9 +61,10 @@ import math
 import re
 import time
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 from src.types import RankedResult
+
 try:
     import structlog
 
@@ -298,7 +299,11 @@ class RankStage:
     async def run(self, context: PipelineContext) -> PipelineContext:
         start = time.perf_counter()
         query = context.query
-        candidates = list(getattr(context, "search_results", None) or getattr(context, "raw_results", None) or [])
+        candidates = list(
+            getattr(context, "search_results", None)
+            or getattr(context, "raw_results", None)
+            or []
+        )
         signals_used: list[str] = []
 
         if not candidates:
@@ -339,12 +344,22 @@ class RankStage:
             )
             ranked_results = []
             for i, c in enumerate(candidates):
-                norm_score = 100.0 - (i * (100.0 / len(candidates))) if len(candidates) > 1 else 100.0
+                norm_score = (
+                    100.0 - (i * (100.0 / len(candidates)))
+                    if len(candidates) > 1
+                    else 100.0
+                )
                 if isinstance(c, RankedResult):
                     c.score = norm_score
                     ranked_results.append(c)
                 else:
-                    data = c.model_dump() if hasattr(c, "model_dump") else c if isinstance(c, dict) else {}
+                    data = (
+                        c.model_dump()
+                        if hasattr(c, "model_dump")
+                        else c
+                        if isinstance(c, dict)
+                        else {}
+                    )
                     ranked_results.append(RankedResult(**data, score=norm_score))
             context.ranked_results = ranked_results
             return context
@@ -353,7 +368,10 @@ class RankStage:
     # 1. Pre-filtering por heurísticas
     # ------------------------------------------------------------------ #
     def _prefilter(self, candidates: list[Any]) -> list[Any]:
-        if self._heuristic_scorer is None or len(candidates) <= self._prefilter_min_candidates:
+        if (
+            self._heuristic_scorer is None
+            or len(candidates) <= self._prefilter_min_candidates
+        ):
             return candidates
 
         try:
@@ -397,16 +415,28 @@ class RankStage:
             # nenhum sinal disponível: preserva ordem original mas converte para RankedResult
             ranked_results = []
             for i, c in enumerate(candidates):
-                norm_score = 100.0 - (i * (100.0 / len(candidates))) if len(candidates) > 1 else 100.0
+                norm_score = (
+                    100.0 - (i * (100.0 / len(candidates)))
+                    if len(candidates) > 1
+                    else 100.0
+                )
                 if isinstance(c, RankedResult):
                     c.score = norm_score
                     ranked_results.append(c)
                 else:
-                    data = c.model_dump() if hasattr(c, "model_dump") else c if isinstance(c, dict) else {}
+                    data = (
+                        c.model_dump()
+                        if hasattr(c, "model_dump")
+                        else c
+                        if isinstance(c, dict)
+                        else {}
+                    )
                     ranked_results.append(RankedResult(**data, score=norm_score))
             return ranked_results
 
-        fused_scores = _reciprocal_rank_fusion(ranked_lists, k=self._rrf_k, weights=weights)
+        fused_scores = _reciprocal_rank_fusion(
+            ranked_lists, k=self._rrf_k, weights=weights
+        )
         ordered_indices = sorted(
             fused_scores.keys(), key=lambda i: fused_scores[i], reverse=True
         )
@@ -415,21 +445,31 @@ class RankStage:
         ranked_results = []
         for idx in ordered_indices:
             c = candidates[idx]
-            norm_score = (fused_scores[idx] / max_fused) * 100.0 if max_fused > 0 else 0.0
+            norm_score = (
+                (fused_scores[idx] / max_fused) * 100.0 if max_fused > 0 else 0.0
+            )
             if isinstance(c, RankedResult):
                 c.score = norm_score
                 ranked_results.append(c)
             else:
-                data = c.model_dump() if hasattr(c, "model_dump") else c if isinstance(c, dict) else {}
+                data = (
+                    c.model_dump()
+                    if hasattr(c, "model_dump")
+                    else c
+                    if isinstance(c, dict)
+                    else {}
+                )
                 ranked_result = RankedResult(
                     **data,
                     score=norm_score,
-                    score_breakdown={"rrf_score": fused_scores[idx]}
+                    score_breakdown={"rrf_score": fused_scores[idx]},
                 )
                 ranked_results.append(ranked_result)
         return ranked_results
 
-    async def _safe_bm25_ranks(self, query: str, candidates: list[Any]) -> list[int] | None:
+    async def _safe_bm25_ranks(
+        self, query: str, candidates: list[Any]
+    ) -> list[int] | None:
         try:
             texts = [_extract_text(c) for c in candidates]
             scores = await _maybe_await(self._bm25_index.score(query, texts))
@@ -476,7 +516,9 @@ class RankStage:
     # ------------------------------------------------------------------ #
     # 5. Feedback signals integration
     # ------------------------------------------------------------------ #
-    def _apply_feedback(self, candidates: list[Any], signals_used: list[str]) -> list[Any]:
+    def _apply_feedback(
+        self, candidates: list[Any], signals_used: list[str]
+    ) -> list[Any]:
         if self._feedback_store is None or not candidates:
             return candidates
 

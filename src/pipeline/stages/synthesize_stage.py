@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from src.pipeline.pipeline import PipelineContext, PipelineStage
 from src.synthesizer import Synthesizer
 from src.evidence_graph import EvidenceGraph
-from src.types import RankedResult, SynthesizedResult
+from src.types import RankedResult
 
 logger = logging.getLogger("pipeline.synthesize_stage")
 
@@ -43,11 +43,13 @@ class SynthesizeStage(PipelineStage):
     async def run(self, context: PipelineContext) -> PipelineContext:
         """Executa a consolidação de resultados e constrói o Grafo de Evidências."""
         results: List[RankedResult] = context.ranked_results or []
-        
+
         if context.metadata is None:
             context.metadata = {}
 
-        logger.info(f"SynthesizeStage: iniciando síntese de {len(results)} resultados ranqueados.")
+        logger.info(
+            f"SynthesizeStage: iniciando síntese de {len(results)} resultados ranqueados."
+        )
         start_time = time.monotonic()
 
         # 1. Executa deduplicação e clusterização via Synthesizer

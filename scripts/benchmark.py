@@ -86,6 +86,7 @@ QUERIES_PADRAO: Dict[str, List[str]] = {
 
 # ── Dataclasses ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class BenchmarkResult:
     """Resultado de uma pesquisa individual."""
@@ -166,10 +167,16 @@ class BenchmarkReport:
 
 # ── Cliente HTTP ────────────────────────────────────────────────────────────
 
+
 class SRABenchmarkClient:
     """Cliente HTTP para API do SRA com métricas."""
 
-    def __init__(self, base_url: str, api_key: Optional[str] = None, timeout: float = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: Optional[str] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
@@ -178,8 +185,11 @@ class SRABenchmarkClient:
     async def __aenter__(self):
         try:
             import aiohttp
+
             self.session = aiohttp.ClientSession(
-                headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
+                headers={"Authorization": f"Bearer {self.api_key}"}
+                if self.api_key
+                else {},
                 timeout=aiohttp.ClientTimeout(total=self.timeout),
             )
         except ImportError:
@@ -269,6 +279,7 @@ class SRABenchmarkClient:
 
 # ── Benchmark Runner ──────────────────────────────────────────────────────────
 
+
 class BenchmarkRunner:
     """Orquestra a execução de benchmarks."""
 
@@ -327,7 +338,11 @@ class BenchmarkRunner:
             response = await self.client.research(query, mode)
 
         data = response.get("data", {})
-        metrics = data.get("metrics", {}) if not self.streaming else response.get("metrics", {})
+        metrics = (
+            data.get("metrics", {})
+            if not self.streaming
+            else response.get("metrics", {})
+        )
 
         return BenchmarkResult(
             query=query,
@@ -347,7 +362,12 @@ class BenchmarkRunner:
 
     def _dry_run_result(self, query: str, mode: str) -> BenchmarkResult:
         """Simula resultado para dry-run."""
-        mode_multipliers = {"quick": 0.5, "standard": 1.0, "deep": 2.5, "comprehensive": 4.0}
+        mode_multipliers = {
+            "quick": 0.5,
+            "standard": 1.0,
+            "deep": 2.5,
+            "comprehensive": 4.0,
+        }
         mult = mode_multipliers.get(mode, 1.0)
 
         return BenchmarkResult(
@@ -365,10 +385,35 @@ class BenchmarkRunner:
             report_length=int(2000 * mult),
         )
 
-    def _compute_mode_summary(self, mode: str, results: List[BenchmarkResult]) -> ModeSummary:
+    def _compute_mode_summary(
+        self, mode: str, results: List[BenchmarkResult]
+    ) -> ModeSummary:
         """Computa estatísticas agregadas para um modo."""
         if not results:
-            return ModeSummary(mode=mode, queries_run=0, queries_success=0, queries_failed=0, success_rate=0.0, avg_duration_seconds=0.0, p50_duration=0.0, p95_duration=0.0, p99_duration=0.0, min_duration=0.0, max_duration=0.0, avg_cost_usd=0.0, min_cost_usd=0.0, max_cost_usd=0.0, total_cost_usd=0.0, avg_tokens_total=0.0, avg_tokens_input=0.0, avg_tokens_output=0.0, avg_llm_calls=0.0, avg_search_calls=0.0, avg_report_length=0.0, cost_per_1k_tokens=0.0)
+            return ModeSummary(
+                mode=mode,
+                queries_run=0,
+                queries_success=0,
+                queries_failed=0,
+                success_rate=0.0,
+                avg_duration_seconds=0.0,
+                p50_duration=0.0,
+                p95_duration=0.0,
+                p99_duration=0.0,
+                min_duration=0.0,
+                max_duration=0.0,
+                avg_cost_usd=0.0,
+                min_cost_usd=0.0,
+                max_cost_usd=0.0,
+                total_cost_usd=0.0,
+                avg_tokens_total=0.0,
+                avg_tokens_input=0.0,
+                avg_tokens_output=0.0,
+                avg_llm_calls=0.0,
+                avg_search_calls=0.0,
+                avg_report_length=0.0,
+                cost_per_1k_tokens=0.0,
+            )
 
         durations = [r.duration_seconds for r in results]
         costs = [r.cost_usd for r in results]
@@ -406,7 +451,9 @@ class BenchmarkRunner:
             avg_llm_calls=sum(r.llm_calls for r in results) / len(results),
             avg_search_calls=sum(r.search_calls for r in results) / len(results),
             avg_report_length=sum(r.report_length for r in results) / len(results),
-            cost_per_1k_tokens=(total_cost / total_tokens * 1000) if total_tokens > 0 else 0.0,
+            cost_per_1k_tokens=(total_cost / total_tokens * 1000)
+            if total_tokens > 0
+            else 0.0,
             results=results,
         )
 
@@ -426,7 +473,9 @@ class BenchmarkRunner:
             baseline = json.load(f)
 
         for mode in MODOS_DISPONIVEIS:
-            if mode not in current_report.mode_summaries or mode not in baseline.get("mode_summaries", {}):
+            if mode not in current_report.mode_summaries or mode not in baseline.get(
+                "mode_summaries", {}
+            ):
                 continue
 
             current = current_report.mode_summaries[mode]
@@ -441,19 +490,22 @@ class BenchmarkRunner:
                     delta_percent = (delta / baseline_val) * 100
                     improved = delta < 0 if metric != "avg_tokens_total" else delta < 0
 
-                    comparisons.append(ComparisonResult(
-                        metric=f"{mode}.{metric}",
-                        baseline=baseline_val,
-                        current=current_val,
-                        delta=delta,
-                        delta_percent=delta_percent,
-                        improved=improved,
-                    ))
+                    comparisons.append(
+                        ComparisonResult(
+                            metric=f"{mode}.{metric}",
+                            baseline=baseline_val,
+                            current=current_val,
+                            delta=delta,
+                            delta_percent=delta_percent,
+                            improved=improved,
+                        )
+                    )
 
         return comparisons
 
 
 # ── Report Generators ─────────────────────────────────────────────────────────
+
 
 class ReportGenerator:
     """Gera relatórios em múltiplos formatos."""
@@ -462,7 +514,9 @@ class ReportGenerator:
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def generate_json(self, report: BenchmarkReport, filename: str = "benchmark_report.json") -> str:
+    def generate_json(
+        self, report: BenchmarkReport, filename: str = "benchmark_report.json"
+    ) -> str:
         """Gera relatório JSON."""
         path = self.output_dir / filename
 
@@ -532,30 +586,57 @@ class ReportGenerator:
 
         return str(path)
 
-    def generate_csv(self, report: BenchmarkReport, filename: str = "benchmark_results.csv") -> str:
+    def generate_csv(
+        self, report: BenchmarkReport, filename: str = "benchmark_results.csv"
+    ) -> str:
         """Gera CSV com resultados individuais."""
         path = self.output_dir / filename
 
         with open(path, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                "query", "mode", "success", "duration_seconds", "cost_usd",
-                "tokens_input", "tokens_output", "tokens_total",
-                "llm_calls", "search_calls", "report_length", "error", "timestamp",
-            ])
+            writer.writerow(
+                [
+                    "query",
+                    "mode",
+                    "success",
+                    "duration_seconds",
+                    "cost_usd",
+                    "tokens_input",
+                    "tokens_output",
+                    "tokens_total",
+                    "llm_calls",
+                    "search_calls",
+                    "report_length",
+                    "error",
+                    "timestamp",
+                ]
+            )
 
             for mode, summary in report.mode_summaries.items():
                 for r in summary.results:
-                    writer.writerow([
-                        r.query, r.mode, r.success, r.duration_seconds, r.cost_usd,
-                        r.tokens_input, r.tokens_output, r.tokens_total,
-                        r.llm_calls, r.search_calls, r.report_length,
-                        r.error, r.timestamp,
-                    ])
+                    writer.writerow(
+                        [
+                            r.query,
+                            r.mode,
+                            r.success,
+                            r.duration_seconds,
+                            r.cost_usd,
+                            r.tokens_input,
+                            r.tokens_output,
+                            r.tokens_total,
+                            r.llm_calls,
+                            r.search_calls,
+                            r.report_length,
+                            r.error,
+                            r.timestamp,
+                        ]
+                    )
 
         return str(path)
 
-    def generate_markdown(self, report: BenchmarkReport, filename: str = "benchmark_report.md") -> str:
+    def generate_markdown(
+        self, report: BenchmarkReport, filename: str = "benchmark_report.md"
+    ) -> str:
         """Gera relatório Markdown."""
         path = self.output_dir / filename
 
@@ -568,8 +649,8 @@ class ReportGenerator:
             "",
             "## Resumo",
             "",
-            f"| Métrica | Valor |",
-            f"|---|---|",
+            "| Métrica | Valor |",
+            "|---|---|",
             f"| Total de queries | {report.total_queries} |",
             f"| Sucessos | {report.total_success} |",
             f"| Falhas | {report.total_failed} |",
@@ -582,33 +663,37 @@ class ReportGenerator:
         ]
 
         for mode, summary in report.mode_summaries.items():
-            lines.extend([
-                f"### {mode.upper()}",
-                "",
-                f"| Métrica | Valor |",
-                f"|---|---|",
-                f"| Queries | {summary.queries_run} |",
-                f"| Sucessos | {summary.queries_success} |",
-                f"| Taxa de sucesso | {summary.success_rate * 100:.1f}% |",
-                f"| Duração média | {summary.avg_duration_seconds:.2f}s |",
-                f"| Duração p50 | {summary.p50_duration:.2f}s |",
-                f"| Duração p95 | {summary.p95_duration:.2f}s |",
-                f"| Custo médio | ${summary.avg_cost_usd:.4f} |",
-                f"| Custo mín | ${summary.min_cost_usd:.4f} |",
-                f"| Custo máx | ${summary.max_cost_usd:.4f} |",
-                f"| Tokens médios | {summary.avg_tokens_total:.0f} |",
-                f"| LLM calls médio | {summary.avg_llm_calls:.1f} |",
-                f"| Custo/1K tokens | ${summary.cost_per_1k_tokens:.4f} |",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {mode.upper()}",
+                    "",
+                    "| Métrica | Valor |",
+                    "|---|---|",
+                    f"| Queries | {summary.queries_run} |",
+                    f"| Sucessos | {summary.queries_success} |",
+                    f"| Taxa de sucesso | {summary.success_rate * 100:.1f}% |",
+                    f"| Duração média | {summary.avg_duration_seconds:.2f}s |",
+                    f"| Duração p50 | {summary.p50_duration:.2f}s |",
+                    f"| Duração p95 | {summary.p95_duration:.2f}s |",
+                    f"| Custo médio | ${summary.avg_cost_usd:.4f} |",
+                    f"| Custo mín | ${summary.min_cost_usd:.4f} |",
+                    f"| Custo máx | ${summary.max_cost_usd:.4f} |",
+                    f"| Tokens médios | {summary.avg_tokens_total:.0f} |",
+                    f"| LLM calls médio | {summary.avg_llm_calls:.1f} |",
+                    f"| Custo/1K tokens | ${summary.cost_per_1k_tokens:.4f} |",
+                    "",
+                ]
+            )
 
         if report.comparisons:
-            lines.extend([
-                "## Comparação com Baseline",
-                "",
-                f"| Métrica | Baseline | Atual | Delta | % | Status |",
-                f"|---|---|---|---|---|---|",
-            ])
+            lines.extend(
+                [
+                    "## Comparação com Baseline",
+                    "",
+                    "| Métrica | Baseline | Atual | Delta | % | Status |",
+                    "|---|---|---|---|---|---|",
+                ]
+            )
             for c in report.comparisons:
                 status = "✅ Melhor" if c.improved else "⚠️ Pior"
                 lines.append(
@@ -617,10 +702,12 @@ class ReportGenerator:
                 )
             lines.append("")
 
-        lines.extend([
-            "---",
-            "*Gerado automaticamente pelo SRA Benchmark*",
-        ])
+        lines.extend(
+            [
+                "---",
+                "*Gerado automaticamente pelo SRA Benchmark*",
+            ]
+        )
 
         with open(path, "w") as f:
             f.write("\n".join(lines))
@@ -641,21 +728,26 @@ class ReportGenerator:
         ]
 
         for mode, summary in report.mode_summaries.items():
-            lines.extend([
-                f"| {mode.upper():14s} | {summary.queries_run:2d} queries | "
-                f"{summary.success_rate * 100:5.1f}% ok | ${summary.avg_cost_usd:6.4f} | "
-                f"{summary.avg_duration_seconds:5.1f}s |",
-            ])
+            lines.extend(
+                [
+                    f"| {mode.upper():14s} | {summary.queries_run:2d} queries | "
+                    f"{summary.success_rate * 100:5.1f}% ok | ${summary.avg_cost_usd:6.4f} | "
+                    f"{summary.avg_duration_seconds:5.1f}s |",
+                ]
+            )
 
-        lines.extend([
-            "+--------------------------------------------------------------+",
-            "",
-        ])
+        lines.extend(
+            [
+                "+--------------------------------------------------------------+",
+                "",
+            ]
+        )
 
         return "\n".join(lines)
 
 
 # ── CI/CD Integration ─────────────────────────────────────────────────────────
+
 
 class CICDIntegration:
     """Integração com pipelines CI/CD."""
@@ -688,7 +780,10 @@ class CICDIntegration:
                     )
 
             if "max_duration_seconds" in mode_thresholds:
-                if summary.avg_duration_seconds > mode_thresholds["max_duration_seconds"]:
+                if (
+                    summary.avg_duration_seconds
+                    > mode_thresholds["max_duration_seconds"]
+                ):
                     passed = False
                     violations.append(
                         f"[{mode}] Duração média {summary.avg_duration_seconds:.1f}s excede "
@@ -705,7 +800,9 @@ class CICDIntegration:
 
         return passed, violations
 
-    def generate_github_actions_output(self, report: BenchmarkReport, passed: bool) -> str:
+    def generate_github_actions_output(
+        self, report: BenchmarkReport, passed: bool
+    ) -> str:
         """Gera output no formato esperado por GitHub Actions."""
         lines = [
             "::group::SRA Benchmark Results",
@@ -719,6 +816,7 @@ class CICDIntegration:
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
+
 
 def load_custom_queries(file_path: str) -> Dict[str, List[str]]:
     """Carrega queries customizadas de arquivo JSON."""
@@ -743,19 +841,45 @@ Exemplos:
     )
 
     parser.add_argument("--all", action="store_true", help="Executa todos os modos")
-    parser.add_argument("--modes", nargs="+", choices=MODOS_DISPONIVEIS, help="Modos a executar")
-    parser.add_argument("--queries-per-mode", type=int, default=DEFAULT_QUERIES_PER_MODE, help="Queries por modo")
+    parser.add_argument(
+        "--modes", nargs="+", choices=MODOS_DISPONIVEIS, help="Modos a executar"
+    )
+    parser.add_argument(
+        "--queries-per-mode",
+        type=int,
+        default=DEFAULT_QUERIES_PER_MODE,
+        help="Queries por modo",
+    )
     parser.add_argument("--queries-file", help="Arquivo JSON com queries customizadas")
-    parser.add_argument("--api-url", default=DEFAULT_API_URL, help="URL base da API SRA")
-    parser.add_argument("--api-key", default=os.environ.get("SRA_API_KEY"), help="API key")
-    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Diretório de saída")
-    parser.add_argument("--format", choices=["json", "csv", "markdown", "all"], default="all", help="Formato do relatório")
-    parser.add_argument("--streaming", action="store_true", help="Usa endpoint de streaming SSE")
-    parser.add_argument("--dry-run", action="store_true", help="Simula execução sem chamar APIs")
+    parser.add_argument(
+        "--api-url", default=DEFAULT_API_URL, help="URL base da API SRA"
+    )
+    parser.add_argument(
+        "--api-key", default=os.environ.get("SRA_API_KEY"), help="API key"
+    )
+    parser.add_argument(
+        "--output-dir", default=DEFAULT_OUTPUT_DIR, help="Diretório de saída"
+    )
+    parser.add_argument(
+        "--format",
+        choices=["json", "csv", "markdown", "all"],
+        default="all",
+        help="Formato do relatório",
+    )
+    parser.add_argument(
+        "--streaming", action="store_true", help="Usa endpoint de streaming SSE"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Simula execução sem chamar APIs"
+    )
     parser.add_argument("--compare-with", help="Compara com baseline existente")
-    parser.add_argument("--ci-mode", action="store_true", help="Modo CI/CD com thresholds")
+    parser.add_argument(
+        "--ci-mode", action="store_true", help="Modo CI/CD com thresholds"
+    )
     parser.add_argument("--threshold-file", help="Arquivo JSON com thresholds")
-    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, help="Timeout por requisição")
+    parser.add_argument(
+        "--timeout", type=float, default=DEFAULT_TIMEOUT, help="Timeout por requisição"
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Output verboso")
 
     args = parser.parse_args()
@@ -776,8 +900,7 @@ Exemplos:
 
     # Limita queries
     queries_by_mode = {
-        mode: queries_source.get(mode, [])[:args.queries_per_mode]
-        for mode in modes
+        mode: queries_source.get(mode, [])[: args.queries_per_mode] for mode in modes
     }
 
     print("=" * 70)
@@ -822,7 +945,9 @@ Exemplos:
             report.total_queries += summary.queries_run
             report.total_success += summary.queries_success
             report.total_failed += summary.queries_failed
-            report.total_duration_seconds += sum(r.duration_seconds for r in summary.results)
+            report.total_duration_seconds += sum(
+                r.duration_seconds for r in summary.results
+            )
             report.total_cost_usd += summary.total_cost_usd
 
         # Comparação com baseline

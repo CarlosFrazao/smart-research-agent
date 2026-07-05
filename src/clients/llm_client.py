@@ -32,35 +32,73 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 
 class LLMClientError(RuntimeError):
     """Erro genérico do cliente LLM (após esgotar retries)."""
+
     pass
 
 
 class OutputValidationError(LLMClientError):
     """A resposta do modelo não pôde ser validada contra o Pydantic schema."""
+
     pass
 
 
-def _retryable_exceptions_for(provider: "LLMProvider") -> tuple[type[BaseException], ...]:
+def _retryable_exceptions_for(
+    provider: "LLMProvider",
+) -> tuple[type[BaseException], ...]:
     if provider in (LLMProvider.OPENAI, LLMProvider.OPENROUTER, LLMProvider.OLLAMA):
         try:
-            from openai import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
-            return (APITimeoutError, APIConnectionError, RateLimitError, InternalServerError)
+            from openai import (
+                APIConnectionError,
+                APITimeoutError,
+                RateLimitError,
+                InternalServerError,
+            )
+
+            return (
+                APITimeoutError,
+                APIConnectionError,
+                RateLimitError,
+                InternalServerError,
+            )
         except ImportError:
             return (TimeoutError, ConnectionError)
     elif provider == LLMProvider.ANTHROPIC:
         try:
-            from anthropic import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
-            return (APITimeoutError, APIConnectionError, RateLimitError, InternalServerError)
+            from anthropic import (
+                APIConnectionError,
+                APITimeoutError,
+                RateLimitError,
+                InternalServerError,
+            )
+
+            return (
+                APITimeoutError,
+                APIConnectionError,
+                RateLimitError,
+                InternalServerError,
+            )
         except ImportError:
             return (TimeoutError, ConnectionError)
     elif provider == LLMProvider.GROQ:
         try:
-            from groq import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
-            return (APITimeoutError, APIConnectionError, RateLimitError, InternalServerError)
+            from groq import (
+                APIConnectionError,
+                APITimeoutError,
+                RateLimitError,
+                InternalServerError,
+            )
+
+            return (
+                APITimeoutError,
+                APIConnectionError,
+                RateLimitError,
+                InternalServerError,
+            )
         except ImportError:
             return (TimeoutError, ConnectionError)
     else:
         return (TimeoutError, ConnectionError)
+
 
 # ── Retry com backoff exponencial antes de acionar failover ───────────────────
 RATE_LIMIT_MAX_RETRIES: int = 3
@@ -110,6 +148,8 @@ class LLMProvider(StrEnum):
     OPENROUTER = "openrouter"
     GROQ = "groq"
     OLLAMA = "ollama"
+    DEEPSEEK = "deepseek"
+    GITHUB_MODELS = "github_models"
 
 
 class LLMClient:
@@ -122,12 +162,23 @@ class LLMClient:
         fallback_configs: dict[str, dict[str, Any]] | None = None,
     ):
         self.provider = provider
-        self.config = config
+        self.config = config.copy() if config else {}
         self._client = None
         self.model = ""
         self.model_router = model_router
         # fallback_configs: {"gemini": {...}, "groq": {...}, "openrouter": {...}, "ollama": {...}}
         self._fallback_configs: dict[str, dict[str, Any]] = fallback_configs or {}
+
+        # Inicializa a lista de chaves de API com suporte a rotação dinâmica
+        api_key_raw = self.config.get("api_key") or ""
+        if isinstance(api_key_raw, str) and "," in api_key_raw:
+            self._api_keys = [k.strip() for k in api_key_raw.split(",") if k.strip()]
+        else:
+            self._api_keys = [api_key_raw] if api_key_raw else []
+        self._current_key_idx = 0
+        if self._api_keys:
+            self.config["api_key"] = self._api_keys[0]
+
         self._init_providers_safely()
         self._init_client()
         from src.token_economy import TokenEconomy
@@ -164,6 +215,21 @@ class LLMClient:
             except Exception as e:
                 logger.error(f"Provider {name} falhou: {e}")
 
+    def _rotate_key(self) -> bool:
+        """Rotaciona a chave de API ativa do provedor para a próxima na lista.
+        Retorna True se a rotação ocorreu (há chaves adicionais disponíveis)."""
+        if len(self._api_keys) <= 1:
+            return False
+        self._current_key_idx = (self._current_key_idx + 1) % len(self._api_keys)
+        new_key = self._api_keys[self._current_key_idx]
+        self.config["api_key"] = new_key
+        logger.warning(
+            f"[RotaçãoChaves] Falha na chave anterior. Rotacionando para chave "
+            f"{self._current_key_idx + 1}/{len(self._api_keys)} do provedor '{self.provider.value}'."
+        )
+        self._init_client()
+        return True
+
     # ── Inicialização ─────────────────────────────────────────────────────────
 
     def _init_client(self):
@@ -174,36 +240,48 @@ class LLMClient:
             self.model = self.config.get("model", "claude-sonnet-4-20250514")
 
         elif self.provider == LLMProvider.OPENAI:
+            import httpx
             import openai
 
-            self._client = openai.AsyncOpenAI(api_key=self.config.get("api_key"))
+            self._client = openai.AsyncOpenAI(
+                api_key=self.config.get("api_key"),
+                http_client=httpx.AsyncClient(http2=False),
+            )
             self.model = self.config.get("model", "gpt-4.1")
 
         elif self.provider == LLMProvider.OPENROUTER:
+            import httpx
             import openai
 
             self._client = openai.AsyncOpenAI(
                 api_key=self.config.get("api_key"),
                 base_url="https://openrouter.ai/api/v1",
+                http_client=httpx.AsyncClient(http2=False),
             )
             self.model = self.config.get("model", "google/gemma-4-26b-a4b-it:free")
 
         elif self.provider == LLMProvider.GROQ:
             try:
+                import httpx
                 from groq import AsyncGroq
 
-                self._client = AsyncGroq(api_key=self.config.get("api_key"))
+                self._client = AsyncGroq(
+                    api_key=self.config.get("api_key"),
+                    http_client=httpx.AsyncClient(http2=False),
+                )
             except ImportError:
                 logger.warning("groq SDK não instalado. Groq indisponível.")
                 self._client = None
             self.model = self.config.get("model", "llama-3.3-70b-versatile")
 
         elif self.provider == LLMProvider.OLLAMA:
+            import httpx
             import openai
 
             self._client = openai.AsyncOpenAI(
                 base_url=f"{self.config.get('base_url', 'http://localhost:11434')}/v1",
                 api_key=self.config.get("api_key") or "ollama-local",
+                http_client=httpx.AsyncClient(http2=False),
             )
             self.model = self.config.get("model", "llama3.1")
 
@@ -216,6 +294,28 @@ class LLMClient:
                 logger.warning("google-genai não instalado. Gemini indisponível.")
                 self._client = None
             self.model = self.config.get("model", "gemini-2.5-flash")
+
+        elif self.provider == LLMProvider.DEEPSEEK:
+            import httpx
+            import openai
+
+            self._client = openai.AsyncOpenAI(
+                api_key=self.config.get("api_key"),
+                base_url=self.config.get("base_url", "https://api.deepseek.com/v1"),
+                http_client=httpx.AsyncClient(http2=False),
+            )
+            self.model = self.config.get("model", "deepseek-chat")
+
+        elif self.provider == LLMProvider.GITHUB_MODELS:
+            import httpx
+            import openai
+
+            self._client = openai.AsyncOpenAI(
+                api_key=self.config.get("api_key"),
+                base_url=self.config.get("base_url", "https://models.inference.ai.azure.com"),
+                http_client=httpx.AsyncClient(http2=False),
+            )
+            self.model = self.config.get("model", "gpt-4o-mini")
 
         else:
             raise ValueError(f"Provider não suportado: {self.provider}")
@@ -285,57 +385,64 @@ class LLMClient:
     async def _generate_raw(
         self, prompt: str, temperature: float, max_tokens: int
     ) -> str:
-        """Chamada direta ao provider atual, sem lógica de failover."""
-        if self.provider == LLMProvider.ANTHROPIC:
-            response = await self._client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.content[0].text
+        """Chamada direta ao provider atual com suporte a rotação automática de chaves."""
+        attempts = max(1, len(self._api_keys))
+        for attempt in range(attempts):
+            try:
+                if self.provider == LLMProvider.ANTHROPIC:
+                    response = await self._client.messages.create(
+                        model=self.model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    return response.content[0].text
 
-        elif self.provider in (
-            LLMProvider.OPENAI,
-            LLMProvider.OPENROUTER,
-            LLMProvider.OLLAMA,
-        ):
-            response = await self._client.chat.completions.create(
-                model=self.model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}],
-                timeout=30.0,
-            )
-            return response.choices[0].message.content
+                elif self.provider in (
+                    LLMProvider.OPENAI,
+                    LLMProvider.OPENROUTER,
+                    LLMProvider.OLLAMA,
+                ):
+                    response = await self._client.chat.completions.create(
+                        model=self.model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        messages=[{"role": "user", "content": prompt}],
+                        timeout=30.0,
+                    )
+                    return response.choices[0].message.content
 
-        elif self.provider == LLMProvider.GROQ:
-            if not self._client:
-                raise RuntimeError("Groq SDK não instalado")
-            response = await self._client.chat.completions.create(
-                model=self.model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}],
-                timeout=30.0,
-            )
-            return response.choices[0].message.content
+                elif self.provider == LLMProvider.GROQ:
+                    if not self._client:
+                        raise RuntimeError("Groq SDK não instalado")
+                    response = await self._client.chat.completions.create(
+                        model=self.model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        messages=[{"role": "user", "content": prompt}],
+                        timeout=30.0,
+                    )
+                    return response.choices[0].message.content
 
-        elif self.provider == LLMProvider.GEMINI:
-            if not self._client:
-                raise RuntimeError("Gemini SDK não instalado")
-            from google.genai import types as genai_types
+                elif self.provider == LLMProvider.GEMINI:
+                    if not self._client:
+                        raise RuntimeError("Gemini SDK não instalado")
+                    from google.genai import types as genai_types
 
-            response = await self._client.aio.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=genai_types.GenerateContentConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                ),
-            )
-            return response.text or ""
-
+                    coro = self._client.aio.models.generate_content(
+                        model=self.model,
+                        contents=prompt,
+                        config=genai_types.GenerateContentConfig(
+                            temperature=temperature,
+                            max_output_tokens=max_tokens,
+                        ),
+                    )
+                    response = await asyncio.wait_for(coro, timeout=30.0)
+                    return response.text or ""
+            except Exception as exc:
+                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)) and self._rotate_key():
+                    continue
+                raise
         return ""
 
     async def _failover_generate(
@@ -350,7 +457,7 @@ class LLMClient:
           openrouter → gemini → groq → ollama
         Pula o provider que já falhou (skip).
         """
-        chain: list[str] = ["openrouter", "gemini", "groq", "ollama"]
+        chain: list[str] = ["openrouter", "gemini", "groq", "deepseek", "github_models", "ollama"]
 
         for provider_name in chain:
             if provider_name == skip.value:
@@ -392,7 +499,46 @@ class LLMClient:
         temperature: float,
         max_tokens: int,
     ) -> str:
-        """Cria um client temporário para o provider de fallback e executa a chamada."""
+        """Executa a chamada ao provider de fallback com suporte a rotação de chaves de fallback."""
+        api_key_raw = cfg.get("api_key") or ""
+        if isinstance(api_key_raw, str) and "," in api_key_raw:
+            keys = [k.strip() for k in api_key_raw.split(",") if k.strip()]
+        else:
+            keys = [api_key_raw] if api_key_raw else []
+
+        last_exc = None
+        for idx, key in enumerate(keys):
+            cfg_copy = cfg.copy()
+            cfg_copy["api_key"] = key
+            try:
+                if len(keys) > 1:
+                    logger.info(
+                        f"[RotaçãoChaves] Tentando chave {idx + 1}/{len(keys)} para fallback '{provider.value}'."
+                    )
+                return await self._call_provider_raw(
+                    provider, cfg_copy, prompt, temperature, max_tokens
+                )
+            except Exception as exc:
+                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)) and len(keys) > 1:
+                    logger.warning(
+                        f"[RotaçãoChaves] Falha na chave {idx + 1}/{len(keys)} do fallback '{provider.value}': {exc}."
+                    )
+                    last_exc = exc
+                    continue
+                raise
+        if last_exc:
+            raise last_exc
+        return ""
+
+    async def _call_provider_raw(
+        self,
+        provider: LLMProvider,
+        cfg: dict[str, Any],
+        prompt: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """Cria um client temporário para o provider de fallback e executa a chamada crua."""
         if provider in (LLMProvider.OPENROUTER, LLMProvider.OPENAI, LLMProvider.OLLAMA):
             import openai
 
@@ -450,6 +596,40 @@ class LLMClient:
             )
             return resp.text or ""
 
+        elif provider == LLMProvider.DEEPSEEK:
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=cfg["api_key"],
+                base_url=cfg.get("base_url", "https://api.deepseek.com/v1"),
+            )
+            model = cfg.get("model", "deepseek-chat")
+            resp = await client.chat.completions.create(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=30.0,
+            )
+            return resp.choices[0].message.content
+
+        elif provider == LLMProvider.GITHUB_MODELS:
+            import openai
+
+            client = openai.AsyncOpenAI(
+                api_key=cfg["api_key"],
+                base_url=cfg.get("base_url", "https://models.inference.ai.azure.com"),
+            )
+            model = cfg.get("model", "gpt-4o-mini")
+            resp = await client.chat.completions.create(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=30.0,
+            )
+            return resp.choices[0].message.content
+
         return ""
 
     # ── Geração estruturada (JSON) ────────────────────────────────────────────
@@ -503,7 +683,11 @@ class LLMClient:
                 )
 
             try:
-                async with trace_llm_call(self.provider.value, self.model, f"structured_{response_model.__name__.lower()}"):
+                async with trace_llm_call(
+                    self.provider.value,
+                    self.model,
+                    f"structured_{response_model.__name__.lower()}",
+                ):
                     raw_json = await retrying_call(
                         system_prompt=system_prompt,
                         user_prompt=prompt,
@@ -536,34 +720,60 @@ class LLMClient:
         temperature: float,
         max_tokens: int,
     ) -> str:
-        """Faz a chamada crua ao provider ativo usando structured outputs nativos."""
-        if self.provider in (LLMProvider.OPENAI, LLMProvider.OPENROUTER, LLMProvider.OLLAMA):
-            return await self._call_openai_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
-        elif self.provider == LLMProvider.ANTHROPIC:
-            return await self._call_anthropic_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
-        elif self.provider == LLMProvider.GEMINI:
-            return await self._call_gemini_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
-        elif self.provider == LLMProvider.GROQ:
-            return await self._call_groq_structured(system_prompt, user_prompt, response_model, temperature, max_tokens)
-        else:
-            json_prompt = (
-                f"{system_prompt}\n\n{user_prompt}"
-                + "\n\nResponda APENAS em JSON valido seguindo este schema: "
-                + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
-                + "\nNao inclua markdown, apenas JSON puro."
-            )
-            raw = await self.generate(json_prompt, temperature=temperature, max_tokens=max_tokens)
-            raw = raw.strip()
-            for fence in ("```json", "```"):
-                if raw.startswith(fence):
-                    raw = raw[len(fence) :]
-            if raw.endswith("```"):
-                raw = raw[:-3]
-            return raw.strip()
+        """Faz a chamada crua ao provider ativo usando structured outputs nativos com suporte a rotação."""
+        attempts = max(1, len(self._api_keys))
+        for attempt in range(attempts):
+            try:
+                if self.provider in (
+                    LLMProvider.OPENAI,
+                    LLMProvider.OPENROUTER,
+                    LLMProvider.OLLAMA,
+                ):
+                    return await self._call_openai_structured(
+                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                    )
+                elif self.provider == LLMProvider.ANTHROPIC:
+                    return await self._call_anthropic_structured(
+                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                    )
+                elif self.provider == LLMProvider.GEMINI:
+                    return await self._call_gemini_structured(
+                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                    )
+                elif self.provider == LLMProvider.GROQ:
+                    return await self._call_groq_structured(
+                        system_prompt, user_prompt, response_model, temperature, max_tokens
+                    )
+                else:
+                    json_prompt = (
+                        f"{system_prompt}\n\n{user_prompt}"
+                        + "\n\nResponda APENAS em JSON valido seguindo este schema: "
+                        + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+                        + "\nNao inclua markdown, apenas JSON puro."
+                    )
+                    raw = await self.generate(
+                        json_prompt, temperature=temperature, max_tokens=max_tokens
+                    )
+                    raw = raw.strip()
+                    for fence in ("```json", "```"):
+                        if raw.startswith(fence):
+                            raw = raw[len(fence) :]
+                    if raw.endswith("```"):
+                        raw = raw[:-3]
+                    return raw.strip()
+            except Exception as exc:
+                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)) and self._rotate_key():
+                    continue
+                raise
+        return ""
 
     async def _call_openai_structured(
-        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
-        temperature: float, max_tokens: int,
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ModelT],
+        temperature: float,
+        max_tokens: int,
     ) -> str:
         completion = await self._client.beta.chat.completions.parse(
             model=self.model,
@@ -581,8 +791,12 @@ class LLMClient:
         return choice.message.content
 
     async def _call_anthropic_structured(
-        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
-        temperature: float, max_tokens: int,
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ModelT],
+        temperature: float,
+        max_tokens: int,
     ) -> str:
         tool_name = f"emit_{response_model.__name__.lower()}"
         message = await self._client.messages.create(
@@ -603,15 +817,22 @@ class LLMClient:
         for block in message.content:
             if block.type == "tool_use" and block.name == tool_name:
                 return json.dumps(block.input)
-        raise LLMClientError("Anthropic não retornou um tool_use bloco com a resposta estruturada esperada.")
+        raise LLMClientError(
+            "Anthropic não retornou um tool_use bloco com a resposta estruturada esperada."
+        )
 
     async def _call_gemini_structured(
-        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
-        temperature: float, max_tokens: int,
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ModelT],
+        temperature: float,
+        max_tokens: int,
     ) -> str:
         from google.genai import types as genai_types
+
         combined_prompt = f"{system_prompt}\n\n{user_prompt}"
-        response = await self._client.aio.models.generate_content(
+        coro = self._client.aio.models.generate_content(
             model=self.model,
             contents=combined_prompt,
             config=genai_types.GenerateContentConfig(
@@ -621,11 +842,16 @@ class LLMClient:
                 max_output_tokens=max_tokens,
             ),
         )
+        response = await asyncio.wait_for(coro, timeout=30.0)
         return response.text or ""
 
     async def _call_groq_structured(
-        self, system_prompt: str, user_prompt: str, response_model: type[ModelT],
-        temperature: float, max_tokens: int,
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ModelT],
+        temperature: float,
+        max_tokens: int,
     ) -> str:
         json_prompt = (
             f"{system_prompt}\n\n{user_prompt}"

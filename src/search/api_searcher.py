@@ -53,8 +53,6 @@ from src.types import SearchResult
 from src.utils.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
-    CircuitBreakerOpen,
-    CircuitBreakerRegistry,
     get_default_registry,
 )
 from src.utils.rate_limiter import DomainRateLimiter
@@ -137,7 +135,9 @@ class APISearcher(BaseSearcher):
         self._cfg = config
         self._source_name = config.source_name
         self._base_url = config.base_url.rstrip("/")
-        self._rate_limit_domain = config.rate_limit_domain or urlparse(self._base_url).netloc
+        self._rate_limit_domain = (
+            config.rate_limit_domain or urlparse(self._base_url).netloc
+        )
         self._cache_prefix = config.cache_prefix or config.source_name
         self._client_lock = asyncio.Lock()
 
@@ -197,7 +197,9 @@ class APISearcher(BaseSearcher):
         if self._client is None or self._client.is_closed:
             async with self._client_lock:
                 if self._client is None or self._client.is_closed:
-                    limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
+                    limits = httpx.Limits(
+                        max_connections=20, max_keepalive_connections=10
+                    )
                     timeout = httpx.Timeout(self._cfg.timeout, connect=10.0)
                     self._client = httpx.AsyncClient(
                         base_url=self._base_url,
@@ -205,14 +207,18 @@ class APISearcher(BaseSearcher):
                         limits=limits,
                         follow_redirects=True,
                     )
-                    logger.debug(f"APISearcher '{self._source_name}': httpx.AsyncClient criado")
+                    logger.debug(
+                        f"APISearcher '{self._source_name}': httpx.AsyncClient criado"
+                    )
         return self._client
 
     async def close(self) -> None:
         """Fecha o cliente HTTP e libera recursos."""
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
-            logger.debug(f"APISearcher '{self._source_name}': httpx.AsyncClient fechado")
+            logger.debug(
+                f"APISearcher '{self._source_name}': httpx.AsyncClient fechado"
+            )
         await super().close()
 
     # ── Circuit Breaker ─────────────────────────────────────────────────────
@@ -248,9 +254,12 @@ class APISearcher(BaseSearcher):
             remaining = status.get("metrics", {}).get("last_failure_time", 0)
             # Calcula tempo restante aproximado
             from src.utils.circuit_breaker import CircuitBreakerOpen as CBO
+
             raise CBO(
                 name=self._circuit_name,
-                remaining=self._cfg.circuit_config.recovery_timeout if self._cfg.circuit_config else 300,
+                remaining=self._cfg.circuit_config.recovery_timeout
+                if self._cfg.circuit_config
+                else 300,
                 state=breaker.state,
             )
         return breaker
@@ -290,7 +299,9 @@ class APISearcher(BaseSearcher):
 
     def _cache_key(self, method: str, path: str, params: dict | None = None) -> str:
         """Gera chave de cache determinística para uma requisição."""
-        payload = json.dumps({"m": method, "p": path, "q": params or {}}, sort_keys=True)
+        payload = json.dumps(
+            {"m": method, "p": path, "q": params or {}}, sort_keys=True
+        )
         hash_val = hashlib.sha256(payload.encode()).hexdigest()[:16]
         return f"{self._cache_prefix}_{hash_val}"
 
@@ -369,7 +380,9 @@ class APISearcher(BaseSearcher):
             cache_key = self._cache_key(method, path, params)
             cached = await self._get_cached(cache_key)
             if cached is not None:
-                logger.debug(f"APISearcher '{self._source_name}': cache hit '{cache_key}'")
+                logger.debug(
+                    f"APISearcher '{self._source_name}': cache hit '{cache_key}'"
+                )
                 return cached
 
         # 3. Rate limiting
@@ -433,7 +446,9 @@ class APISearcher(BaseSearcher):
                     url, params=params, json=json_data, headers=request_headers
                 )
             elif method.upper() == "DELETE":
-                response = await client.delete(url, params=params, headers=request_headers)
+                response = await client.delete(
+                    url, params=params, headers=request_headers
+                )
             else:
                 raise ValueError(f"Método HTTP não suportado: {method}")
 

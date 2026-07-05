@@ -14,7 +14,7 @@ async def test_semantic_cache_in_memory_fallback():
         cache = SemanticCache(similarity_threshold=0.90)
 
     assert cache.backend_name == "in_memory" or cache.backend_name == "chromadb"
-    
+
     # Adiciona algo
     # Para cosseno funcionar, vamos mockar duas respostas diferentes:
     # Retorna [1.0, 0.0] para "query 1", e [0.95, 0.05] para "query 2" (similaridade alta)
@@ -53,7 +53,7 @@ async def test_semantic_cache_in_memory_fallback():
 
     # Testando interface síncrona exigida pelo Cache legado (find/index)
     cache.index("prefix:frameworks python", {"data": "python_frameworks_list"}, prefix="prefix", ttl=3600)
-    
+
     # Busca com find
     match = cache.find("bibliotecas python", prefix="prefix")
     assert match is not None

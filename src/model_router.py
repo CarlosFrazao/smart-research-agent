@@ -47,9 +47,9 @@ _REASONING_TASKS = frozenset(
 )
 
 _PRICES_PER_1K_TOKENS: dict[str, float] = {
-    "claude-haiku-4-5": 0.001,
-    "claude-sonnet-4-5": 0.015,
-    "claude-opus-4-5": 0.075,
+    "claude-3-5-haiku-20241022": 0.001,
+    "claude-3-5-sonnet-20241022": 0.015,
+    "claude-3-opus-20240229": 0.075,
     "gpt-4o-mini": 0.0015,
     "gpt-4o": 0.030,
     "o3-mini": 0.011,
@@ -61,28 +61,28 @@ _PRICES_PER_1K_TOKENS: dict[str, float] = {
 
 _ROUTING_TABLE: dict[str, dict[str, str]] = {
     "simple": {
-        "anthropic": "claude-haiku-4-5",
+        "anthropic": "claude-3-5-haiku-20241022",
         "openai": "gpt-4o-mini",
         "google": "gemini-2.0-flash",
-        "openrouter": "anthropic/claude-haiku-4-5",
+        "openrouter": "anthropic/claude-3-5-haiku",
         "ollama": "llama3.1",
     },
     "medium": {
-        "anthropic": "claude-sonnet-4-5",
+        "anthropic": "claude-3-5-sonnet-20241022",
         "openai": "gpt-4o",
         "google": "gemini-2.5-pro",
-        "openrouter": "anthropic/claude-sonnet-4-5",
+        "openrouter": "anthropic/claude-3.5-sonnet",
         "ollama": "llama3.1",
     },
     "complex": {
-        "anthropic": "claude-opus-4-5",
+        "anthropic": "claude-3-opus-20240229",
         "openai": "gpt-4o",
         "google": "gemini-2.5-pro",
-        "openrouter": "anthropic/claude-opus-4-5",
+        "openrouter": "anthropic/claude-3-opus",
         "ollama": "llama3.1",
     },
     "reasoning": {
-        "anthropic": "claude-opus-4-5",
+        "anthropic": "claude-3-opus-20240229",
         "openai": "o3-mini",
         "google": "gemini-2.5-flash-thinking",
         "openrouter": "deepseek/deepseek-r1",
@@ -141,7 +141,7 @@ class ModelRouter:
             level = "reasoning"
 
         tier = _ROUTING_TABLE.get(level, _ROUTING_TABLE["medium"])
-        model = tier.get(provider, tier.get("anthropic", "claude-sonnet-4-5"))
+        model = tier.get(provider, tier.get("anthropic", "claude-3-5-sonnet-20241022"))
 
         # Override dinâmico vindo das configurações se disponível
         if self.config and level == "reasoning":

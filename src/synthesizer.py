@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 _STOPWORDS = {"the", "a", "an", "is", "are", "best", "top", "new", "open"}
 
 # ── Clusterizacao semantica (embeddings) ────────────────────────────────────
-_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"  # mesmo modelo usado em SemanticReranker/hybrid_search
+_EMBEDDING_MODEL_NAME = (
+    "all-MiniLM-L6-v2"  # mesmo modelo usado em SemanticReranker/hybrid_search
+)
 _SEMANTIC_SIMILARITY_THRESHOLD = 0.72  # cosine sim minima para unir ao mesmo cluster
 _EMBED_CHUNK_SIZE = 64  # itens por lote de encode, processados em paralelo
 
@@ -130,9 +132,7 @@ class Synthesizer:
         ]
         loop = asyncio.get_running_loop()
         tasks = [
-            loop.run_in_executor(
-                None, self._scan_fuzzy_chunk, chunk, results, fuzz
-            )
+            loop.run_in_executor(None, self._scan_fuzzy_chunk, chunk, results, fuzz)
             for chunk in chunks
         ]
         chunk_results = await asyncio.gather(*tasks)
@@ -258,7 +258,9 @@ class Synthesizer:
         tasks = [
             loop.run_in_executor(
                 None,
-                functools.partial(self._embedder.encode, chunk, show_progress_bar=False),
+                functools.partial(
+                    self._embedder.encode, chunk, show_progress_bar=False
+                ),
             )
             for chunk in chunks
         ]

@@ -31,6 +31,12 @@ DOMAIN_KEYWORDS = {
         "b2b",
         "sales",
         "support",
+        "pricing",
+        "preco",
+        "custo",
+        "free",
+        "quanto custa",
+        "gratis",
     ],
     Domain.DEV_TOOLS: [
         "ide",
@@ -121,10 +127,37 @@ class IntentAnalyzer:
     _CACHE_TTL_SECONDS = 3600
     _CACHE_SIMILARITY_THRESHOLD = 0.8
     _STOPWORDS = {
-        "the", "a", "an", "of", "for", "and", "or", "is", "are", "to", "in",
-        "on", "with", "how", "what", "best", "vs",
-        "de", "da", "do", "das", "dos", "um", "uma", "para", "com", "como",
-        "melhor", "melhores", "que", "qual",
+        "the",
+        "a",
+        "an",
+        "of",
+        "for",
+        "and",
+        "or",
+        "is",
+        "are",
+        "to",
+        "in",
+        "on",
+        "with",
+        "how",
+        "what",
+        "best",
+        "vs",
+        "de",
+        "da",
+        "do",
+        "das",
+        "dos",
+        "um",
+        "uma",
+        "para",
+        "com",
+        "como",
+        "melhor",
+        "melhores",
+        "que",
+        "qual",
     }
 
     def __init__(
@@ -184,9 +217,11 @@ class IntentAnalyzer:
         Returns:
             str: ``"sim"`` se a query indica urgencia ou recencia, ``"nao"`` caso contrario.
         """
+        from datetime import UTC, datetime
+        curr_year = datetime.now(UTC).year
         urgent = [
-            "2026",
-            "2025",
+            str(curr_year),
+            str(curr_year - 1),
             "new",
             "latest",
             "trending",

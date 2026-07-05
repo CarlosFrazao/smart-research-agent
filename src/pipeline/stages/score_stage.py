@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -146,6 +146,7 @@ STRUCTURED_CONTENT_TYPES = frozenset(
 
 # ── Configuração do Stage ───────────────────────────────────────────────────
 
+
 @dataclass
 class ScoreStageConfig:
     """Configuração fina do ScoreStage."""
@@ -164,6 +165,7 @@ class ScoreStageConfig:
 
 
 # ── ScoreStage ──────────────────────────────────────────────────────────────
+
 
 class ScoreStage(PipelineStage):
     """Stage independente de confidence scoring.
@@ -184,7 +186,14 @@ class ScoreStage(PipelineStage):
     ):
         self.cfg = config or ScoreStageConfig()
         self.llm = llm_client
-        self._current_year = datetime.now(UTC).year
+
+    @property
+    def current_year(self) -> int:
+        return datetime.now(UTC).year
+
+    @property
+    def _current_year(self) -> int:
+        return self.current_year
 
     # ── Interface do Pipeline ───────────────────────────────────────────────
 
@@ -390,7 +399,9 @@ class ScoreStage(PipelineStage):
         result.evidence_quality = "verified"
         result.metrics["skipped_scoring"] = True
         result.metrics["claim_type"] = "structured_data"
-        logger.debug(f"ScoreStage: skip scoring para fonte estruturada '{result.source}'")
+        logger.debug(
+            f"ScoreStage: skip scoring para fonte estruturada '{result.source}'"
+        )
         return result
 
     # ── Cross-Validation Inter-Fontes ───────────────────────────────────────
@@ -410,9 +421,7 @@ class ScoreStage(PipelineStage):
                 r.contradictions = contradictions[r.url]
                 if "contradicted_by_other_sources" not in r.hallucination_flags:
                     r.hallucination_flags.append("contradicted_by_other_sources")
-                r.confidence_score = round(
-                    max(0.0, r.confidence_score - 0.10), 3
-                )
+                r.confidence_score = round(max(0.0, r.confidence_score - 0.10), 3)
 
         # Circularidade
         if self.cfg.detect_circularity:
@@ -423,9 +432,7 @@ class ScoreStage(PipelineStage):
                     r.metrics["circular_sources"] = partners
                     if "circular_reference" not in r.hallucination_flags:
                         r.hallucination_flags.append("circular_reference")
-                    r.confidence_score = round(
-                        max(0.0, r.confidence_score - 0.07), 3
-                    )
+                    r.confidence_score = round(max(0.0, r.confidence_score - 0.07), 3)
 
         # Convergência factual: claims sem corroboração de outra fonte
         self._detect_isolated_claims(results)
@@ -478,7 +485,9 @@ class ScoreStage(PipelineStage):
         urls = list(citation_graph.keys())
         for i, a in enumerate(urls):
             for b in urls[i + 1 :]:
-                if b in citation_graph.get(a, set()) and a in citation_graph.get(b, set()):
+                if b in citation_graph.get(a, set()) and a in citation_graph.get(
+                    b, set()
+                ):
                     circular.setdefault(a, []).append(b)
                     circular.setdefault(b, []).append(a)
 

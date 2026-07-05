@@ -1,7 +1,7 @@
 # DEVELOPMENT.md — Guia de Desenvolvimento do Smart Research Agent
 
-> **Versão:** 6.0  
-> **Última atualização:** 2026-07-04  
+> **Versão:** 6.0
+> **Última atualização:** 2026-07-04
 > **Público-alvo:** Contribuidores, mantenedores e integradores
 
 ---

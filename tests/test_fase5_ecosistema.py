@@ -217,6 +217,12 @@ class TestTokenEconomyCount:
         assert c1 > 0
         assert c2 > 0
 
+    def test_count_tokens_cjk(self, te: TokenEconomy):
+        from src.token_economy import _count_chars_approx
+        latin_text = "abcdefgh" # 8 chars
+        cjk_text = "你好世界" # 4 CJK chars
+        assert _count_chars_approx(cjk_text) > _count_chars_approx(latin_text)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TokenEconomy — Estimativa de Custo

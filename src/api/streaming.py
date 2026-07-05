@@ -37,10 +37,10 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Set
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
 logger = logging.getLogger("api.streaming")
 
@@ -66,20 +66,21 @@ DEFAULT_PROGRESS_STAGES: List[str] = [
 
 # ── Enums e Dataclasses ──────────────────────────────────────────────────────
 
+
 class StreamEventType(str, Enum):
     """Tipos de eventos do stream."""
 
-    CONNECTED = "connected"           # Conexão estabelecida
-    STAGE_UPDATE = "stage_update"     # Mudança de stage
-    PROGRESS = "progress"             # Progresso percentual
+    CONNECTED = "connected"  # Conexão estabelecida
+    STAGE_UPDATE = "stage_update"  # Mudança de stage
+    PROGRESS = "progress"  # Progresso percentual
     PARTIAL_RESULT = "partial_result"  # Resultado parcial disponível
     PARTIAL_REPORT = "partial_report"  # Seção do relatório disponível
-    METRICS = "metrics"               # Métricas de custo/latência
-    WARNING = "warning"               # Aviso não crítico
-    ERROR = "error"                   # Erro (pode ser recuperável)
-    COMPLETE = "complete"             # Pesquisa finalizada
-    HEARTBEAT = "heartbeat"          # Keep-alive
-    DISCONNECT = "disconnect"        # Desconexão solicitada
+    METRICS = "metrics"  # Métricas de custo/latência
+    WARNING = "warning"  # Aviso não crítico
+    ERROR = "error"  # Erro (pode ser recuperável)
+    COMPLETE = "complete"  # Pesquisa finalizada
+    HEARTBEAT = "heartbeat"  # Keep-alive
+    DISCONNECT = "disconnect"  # Desconexão solicitada
 
 
 @dataclass
@@ -105,13 +106,16 @@ class StreamEvent:
 
     def to_ws(self) -> str:
         """Serializa para formato WebSocket (JSON puro)."""
-        return json.dumps({
-            "type": self.type.value,
-            "correlation_id": self.correlation_id,
-            "timestamp": self.timestamp,
-            "data": self.data,
-            "message": self.message,
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "type": self.type.value,
+                "correlation_id": self.correlation_id,
+                "timestamp": self.timestamp,
+                "data": self.data,
+                "message": self.message,
+            },
+            ensure_ascii=False,
+        )
 
 
 @dataclass
@@ -130,6 +134,7 @@ class StreamingConfig:
 
 
 # ── StreamingManager ────────────────────────────────────────────────────────
+
 
 class StreamingManager:
     """Gerencia streams SSE e WebSocket para o SRA.
@@ -223,7 +228,9 @@ class StreamingManager:
         ).to_sse()
 
         # Loop de leitura da queue com heartbeat
-        heartbeat_task = asyncio.create_task(self._heartbeat_loop(correlation_id, queue))
+        heartbeat_task = asyncio.create_task(
+            self._heartbeat_loop(correlation_id, queue)
+        )
         start_time = time.monotonic()
 
         try:
@@ -289,12 +296,14 @@ class StreamingManager:
             query = data.get("query", "")
             formats = data.get("formats")
         except Exception as e:
-            await websocket.send_text(StreamEvent(
-                type=StreamEventType.ERROR,
-                correlation_id=correlation_id,
-                data={"reason": "invalid_message"},
-                message=f"Mensagem inválida: {e}",
-            ).to_ws())
+            await websocket.send_text(
+                StreamEvent(
+                    type=StreamEventType.ERROR,
+                    correlation_id=correlation_id,
+                    data={"reason": "invalid_message"},
+                    message=f"Mensagem inválida: {e}",
+                ).to_ws()
+            )
             return
 
         # Inicia pesquisa em background
@@ -311,12 +320,14 @@ class StreamingManager:
         self._stream_tasks[correlation_id] = research_task
 
         # Envia confirmação de conexão
-        await websocket.send_text(StreamEvent(
-            type=StreamEventType.CONNECTED,
-            correlation_id=correlation_id,
-            data={"query": query, "stages": self.config.stages},
-            message="Conexão WebSocket estabelecida",
-        ).to_ws())
+        await websocket.send_text(
+            StreamEvent(
+                type=StreamEventType.CONNECTED,
+                correlation_id=correlation_id,
+                data={"query": query, "stages": self.config.stages},
+                message="Conexão WebSocket estabelecida",
+            ).to_ws()
+        )
 
         try:
             while True:
@@ -330,11 +341,13 @@ class StreamingManager:
                     break
 
         except asyncio.TimeoutError:
-            await websocket.send_text(StreamEvent(
-                type=StreamEventType.HEARTBEAT,
-                correlation_id=correlation_id,
-                message="keep-alive",
-            ).to_ws())
+            await websocket.send_text(
+                StreamEvent(
+                    type=StreamEventType.HEARTBEAT,
+                    correlation_id=correlation_id,
+                    message="keep-alive",
+                ).to_ws()
+            )
 
         except Exception as e:
             logger.warning(f"WebSocket error: {e}")
@@ -371,8 +384,12 @@ class StreamingManager:
 
             from unittest.mock import Mock
 
-            if hasattr(orchestrator, "research_streaming") and not isinstance(orchestrator, Mock):
-                async for event in orchestrator.research_streaming(query, formats=formats):
+            if hasattr(orchestrator, "research_streaming") and not isinstance(
+                orchestrator, Mock
+            ):
+                async for event in orchestrator.research_streaming(
+                    query, formats=formats
+                ):
                     await queue.put(event)
                 return
 
@@ -382,35 +399,43 @@ class StreamingManager:
                     queue, correlation_id, stage_name, stage_idx, total_stages, data
                 ),
                 lambda result: self._buffer_partial_result(
-                    partial_results_buffer, result, last_batch_time, queue, correlation_id
+                    partial_results_buffer,
+                    result,
+                    last_batch_time,
+                    queue,
+                    correlation_id,
                 ),
             )
 
             try:
                 report = await orchestrator.research(query, formats=formats)
 
-                await queue.put(StreamEvent(
-                    type=StreamEventType.COMPLETE,
-                    correlation_id=correlation_id,
-                    data={
-                        "report_length": len(report),
-                        "stages_completed": total_stages,
-                        "report": report,
-                    },
-                    message="Pesquisa concluída com sucesso",
-                ))
+                await queue.put(
+                    StreamEvent(
+                        type=StreamEventType.COMPLETE,
+                        correlation_id=correlation_id,
+                        data={
+                            "report_length": len(report),
+                            "stages_completed": total_stages,
+                            "report": report,
+                        },
+                        message="Pesquisa concluída com sucesso",
+                    )
+                )
 
             finally:
                 self._unpatch_orchestrator(orchestrator, original_methods)
 
         except Exception as e:
             logger.error(f"Erro no pipeline de streaming {correlation_id}: {e}")
-            await queue.put(StreamEvent(
-                type=StreamEventType.ERROR,
-                correlation_id=correlation_id,
-                data={"error_type": type(e).__name__, "error": str(e)},
-                message=f"Erro durante pesquisa: {e}",
-            ))
+            await queue.put(
+                StreamEvent(
+                    type=StreamEventType.ERROR,
+                    correlation_id=correlation_id,
+                    data={"error_type": type(e).__name__, "error": str(e)},
+                    message=f"Erro durante pesquisa: {e}",
+                )
+            )
 
     # ── Emissores de eventos ────────────────────────────────────────────────
 
@@ -426,28 +451,32 @@ class StreamingManager:
         """Emite evento de atualização de stage + progresso."""
         percent = int(((stage_idx + 1) / total_stages) * 100)
 
-        await queue.put(StreamEvent(
-            type=StreamEventType.STAGE_UPDATE,
-            correlation_id=correlation_id,
-            data={
-                "stage": stage_name,
-                "stage_index": stage_idx,
-                "total_stages": total_stages,
-                **(extra_data or {}),
-            },
-            message=f"Stage: {stage_name}",
-        ))
+        await queue.put(
+            StreamEvent(
+                type=StreamEventType.STAGE_UPDATE,
+                correlation_id=correlation_id,
+                data={
+                    "stage": stage_name,
+                    "stage_index": stage_idx,
+                    "total_stages": total_stages,
+                    **(extra_data or {}),
+                },
+                message=f"Stage: {stage_name}",
+            )
+        )
 
-        await queue.put(StreamEvent(
-            type=StreamEventType.PROGRESS,
-            correlation_id=correlation_id,
-            data={
-                "percent": percent,
-                "stage": stage_name,
-                "stage_index": stage_idx,
-            },
-            message=f"Progresso: {percent}%",
-        ))
+        await queue.put(
+            StreamEvent(
+                type=StreamEventType.PROGRESS,
+                correlation_id=correlation_id,
+                data={
+                    "percent": percent,
+                    "stage": stage_name,
+                    "stage_index": stage_idx,
+                },
+                message=f"Progresso: {percent}%",
+            )
+        )
 
     async def _buffer_partial_result(
         self,
@@ -461,13 +490,17 @@ class StreamingManager:
         buffer.append(result)
 
         now = time.monotonic()
-        if (now - last_batch_time) * 1000 >= self.config.batch_interval_ms or len(buffer) >= 5:
-            await queue.put(StreamEvent(
-                type=StreamEventType.PARTIAL_RESULT,
-                correlation_id=correlation_id,
-                data={"results": list(buffer), "count": len(buffer)},
-                message=f"{len(buffer)} resultados parciais",
-            ))
+        if (now - last_batch_time) * 1000 >= self.config.batch_interval_ms or len(
+            buffer
+        ) >= 5:
+            await queue.put(
+                StreamEvent(
+                    type=StreamEventType.PARTIAL_RESULT,
+                    correlation_id=correlation_id,
+                    data={"results": list(buffer), "count": len(buffer)},
+                    message=f"{len(buffer)} resultados parciais",
+                )
+            )
             buffer.clear()
 
     async def _heartbeat_loop(
@@ -479,11 +512,13 @@ class StreamingManager:
         try:
             while True:
                 await asyncio.sleep(self.config.heartbeat_interval)
-                await queue.put(StreamEvent(
-                    type=StreamEventType.HEARTBEAT,
-                    correlation_id=correlation_id,
-                    message="keep-alive",
-                ))
+                await queue.put(
+                    StreamEvent(
+                        type=StreamEventType.HEARTBEAT,
+                        correlation_id=correlation_id,
+                        message="keep-alive",
+                    )
+                )
         except asyncio.CancelledError:
             pass
 
@@ -510,7 +545,9 @@ class StreamingManager:
 
         return original
 
-    def _unpatch_orchestrator(self, orchestrator: Any, original: Dict[str, Any]) -> None:
+    def _unpatch_orchestrator(
+        self, orchestrator: Any, original: Dict[str, Any]
+    ) -> None:
         """Restaura métodos originais do orchestrator."""
         for name, method in original.items():
             setattr(orchestrator, name, method)
@@ -536,6 +573,7 @@ class StreamingManager:
 try:
     from fastapi import Request
     from fastapi.responses import StreamingResponse
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -561,7 +599,9 @@ class SSEEndpoint:
             raise ImportError("FastAPI não instalado")
 
         async def event_generator():
-            async for sse_line in self.streaming.sse_research(query, orchestrator, formats):
+            async for sse_line in self.streaming.sse_research(
+                query, orchestrator, formats
+            ):
                 yield sse_line
 
         return StreamingResponse(
@@ -579,6 +619,7 @@ class SSEEndpoint:
 
 try:
     import streamlit as st
+
     STREAMLIT_AVAILABLE = True
 except ImportError:
     STREAMLIT_AVAILABLE = False
@@ -662,7 +703,9 @@ class StreamlitStreamingClient:
             if event.type == StreamEventType.PROGRESS:
                 percent = event.data.get("percent", 0)
                 progress_bar.progress(min(percent / 100, 1.0))
-                status_text.info(f"🔄 {event.data.get('stage', 'processando')}... ({percent}%)")
+                status_text.info(
+                    f"🔄 {event.data.get('stage', 'processando')}... ({percent}%)"
+                )
 
             elif event.type == StreamEventType.STAGE_UPDATE:
                 status_text.info(f"📍 Stage: {event.data.get('stage', '')}")
@@ -710,6 +753,7 @@ class StreamlitStreamingClient:
 
 
 # ── Async Client ─────────────────────────────────────────────────────────────
+
 
 class AsyncStreamingClient:
     """Cliente async para consumir stream SSE programaticamente."""
@@ -759,7 +803,10 @@ class AsyncStreamingClient:
                         )
                         yield event
 
-                        if event.type in (StreamEventType.COMPLETE, StreamEventType.ERROR):
+                        if event.type in (
+                            StreamEventType.COMPLETE,
+                            StreamEventType.ERROR,
+                        ):
                             break
 
                     except json.JSONDecodeError:

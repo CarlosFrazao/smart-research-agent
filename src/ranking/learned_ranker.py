@@ -21,13 +21,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import math
 import pickle
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
@@ -84,7 +83,7 @@ class RankingFeatures:
 
     # 3. Freshness
     freshness_days: float = 365.0  # dias desde publicação
-    freshness_score: float = 0.0   # 0-1 (1 = mais recente)
+    freshness_score: float = 0.0  # 0-1 (1 = mais recente)
 
     # 4. Source authority
     source_authority: float = 0.5  # 0-1
@@ -202,18 +201,34 @@ class FeatureExtractor:
     }
 
     _TRUSTED_DOMAINS = {
-        "github.com", "arxiv.org", "stackoverflow.com",
-        "news.ycombinator.com", "reddit.com", "docs.python.org",
-        "developer.mozilla.org", "pypi.org", "npmjs.com",
-        "pkg.go.dev", "crates.io", "microsoft.com",
-        "google.com", "openai.com", "anthropic.com",
-        "huggingface.co", "pytorch.org", "tensorflow.org",
-        "pubmed.ncbi.nlm.nih.gov", "doi.org",
+        "github.com",
+        "arxiv.org",
+        "stackoverflow.com",
+        "news.ycombinator.com",
+        "reddit.com",
+        "docs.python.org",
+        "developer.mozilla.org",
+        "pypi.org",
+        "npmjs.com",
+        "pkg.go.dev",
+        "crates.io",
+        "microsoft.com",
+        "google.com",
+        "openai.com",
+        "anthropic.com",
+        "huggingface.co",
+        "pytorch.org",
+        "tensorflow.org",
+        "pubmed.ncbi.nlm.nih.gov",
+        "doi.org",
     }
 
     _UNTRUSTED_DOMAINS = {
-        "medium.com", "buzzfeed.com", "quora.com",
-        "pinterest.com", "slideshare.net",
+        "medium.com",
+        "buzzfeed.com",
+        "quora.com",
+        "pinterest.com",
+        "slideshare.net",
     }
 
     def __init__(
@@ -239,6 +254,7 @@ class FeatureExtractor:
             return self._model
         try:
             from sentence_transformers import SentenceTransformer
+
             self._model = SentenceTransformer(self._embedding_model)
             logger.info(f"FeatureExtractor: modelo {self._embedding_model} carregado")
         except Exception as e:
@@ -250,7 +266,9 @@ class FeatureExtractor:
         """Tokenização simples para overlap."""
         return set(re.findall(r"\b\w{3,}\b", text.lower()))
 
-    def _bm25_like(self, query: str, doc: str, k1: float = 1.5, b: float = 0.75) -> float:
+    def _bm25_like(
+        self, query: str, doc: str, k1: float = 1.5, b: float = 0.75
+    ) -> float:
         """BM25 simplificado sem IDF (assume corpus uniforme)."""
         query_tokens = self._tokenize(query)
         doc_tokens = self._tokenize(doc)
@@ -306,7 +324,9 @@ class FeatureExtractor:
                 return self._embedding_cache[cache_key]
 
             embeddings = model.encode([query, text], convert_to_numpy=True)
-            sim = dot(embeddings[0], embeddings[1]) / (norm(embeddings[0]) * norm(embeddings[1]) + 1e-8)
+            sim = dot(embeddings[0], embeddings[1]) / (
+                norm(embeddings[0]) * norm(embeddings[1]) + 1e-8
+            )
             result = float(sim)
             self._embedding_cache[cache_key] = result
             return result
@@ -332,16 +352,28 @@ class FeatureExtractor:
         features.query_length = len(q_tokens)
         features.doc_length = len(self._tokenize(doc_text))
         features.bm25_score = self._bm25_like(query, doc_text)
-        features.title_overlap_ratio = len(q_tokens & self._tokenize(title)) / max(len(q_tokens), 1)
-        features.description_overlap_ratio = len(q_tokens & self._tokenize(description)) / max(len(q_tokens), 1)
+        features.title_overlap_ratio = len(q_tokens & self._tokenize(title)) / max(
+            len(q_tokens), 1
+        )
+        features.description_overlap_ratio = len(
+            q_tokens & self._tokenize(description)
+        ) / max(len(q_tokens), 1)
 
         # 2. Embedding similarity
         if self._embedding_model:
-            features.embedding_cosine = self._embedding_similarity(query, doc_text[:1000])
+            features.embedding_cosine = self._embedding_similarity(
+                query, doc_text[:1000]
+            )
 
         # 3. Freshness
-        date_str = result.metrics.get("updated_at") or result.metrics.get("published") or result.metrics.get("created_at")
-        features.freshness_days, features.freshness_score = self._compute_freshness(date_str)
+        date_str = (
+            result.metrics.get("updated_at")
+            or result.metrics.get("published")
+            or result.metrics.get("created_at")
+        )
+        features.freshness_days, features.freshness_score = self._compute_freshness(
+            date_str
+        )
 
         # 4. Source authority
         source = result.source or "unknown"
@@ -358,7 +390,9 @@ class FeatureExtractor:
         # Conta ocorrências no feedback store
         if self.feedback_store:
             all_records = self.feedback_store.load_all()
-            features.feedback_count = sum(1 for r in all_records if r.get("result_id") == rid)
+            features.feedback_count = sum(
+                1 for r in all_records if r.get("result_id") == rid
+            )
 
         # 6. Heurísticas legadas (source-specific)
         m = result.metrics
@@ -452,7 +486,9 @@ class LearnedRanker:
                 logger.debug("LearnedRanker: fallback para QualityRanker heurístico")
                 return await self.heuristic_ranker.rank(results)
             else:
-                logger.warning("LearnedRanker: modelo indisponível e fallback desabilitado")
+                logger.warning(
+                    "LearnedRanker: modelo indisponível e fallback desabilitado"
+                )
                 return []
 
         start = time.monotonic()
@@ -521,12 +557,12 @@ class LearnedRanker:
 
         return ranked
 
-    async def _extract_features_async(self, result: SearchResult, query: str) -> RankingFeatures:
+    async def _extract_features_async(
+        self, result: SearchResult, query: str
+    ) -> RankingFeatures:
         """Wrapper async para extração de features."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self.extractor.extract, result, query
-        )
+        return await loop.run_in_executor(None, self.extractor.extract, result, query)
 
     def _predict(self, X: list[list[float]]) -> list[float]:
         """Executa predição no modelo carregado."""
@@ -539,6 +575,7 @@ class LearnedRanker:
 
         elif self.cfg.model_backend == "xgboost":
             import xgboost as xgb
+
             dmatrix = xgb.DMatrix(X_array, feature_names=self._feature_names)
             return self._model.predict(dmatrix).tolist()
 
@@ -558,6 +595,7 @@ class LearnedRanker:
 
         try:
             import numpy as np
+
             if self.cfg.model_backend == "lightgbm":
                 importances = self._model.feature_importances_
             elif self.cfg.model_backend == "xgboost":
@@ -568,8 +606,7 @@ class LearnedRanker:
                 return None
 
             return {
-                name: float(imp)
-                for name, imp in zip(self._feature_names, importances)
+                name: float(imp) for name, imp in zip(self._feature_names, importances)
             }
         except Exception as e:
             logger.debug(f"Feature importance indisponível: {e}")
@@ -621,9 +658,7 @@ class LearnedRankerTrainer:
 
         # 4. Serializa
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None, lambda: out.write_bytes(pickle.dumps(model))
-        )
+        await loop.run_in_executor(None, lambda: out.write_bytes(pickle.dumps(model)))
 
         logger.info(f"LearnedRankerTrainer: modelo salvo em {out}")
         return out
@@ -635,7 +670,13 @@ class LearnedRankerTrainer:
         X: list[list[float]] = []
         y: list[float] = []
 
-        label_map = {"useful": 3.5, "bookmark": 4.0, "not_useful": 1.0, "irrelevant": 0.5, "outdated": 1.5}
+        label_map = {
+            "useful": 3.5,
+            "bookmark": 4.0,
+            "not_useful": 1.0,
+            "irrelevant": 0.5,
+            "outdated": 1.5,
+        }
 
         result_labels: dict[str, float] = {}
         for rec in records:
@@ -696,7 +737,9 @@ class LearnedRankerTrainer:
             import xgboost as xgb
 
             def _train():
-                dtrain = xgb.DMatrix(X_arr, label=y_arr, feature_names=self.extractor._feature_names)
+                dtrain = xgb.DMatrix(
+                    X_arr, label=y_arr, feature_names=self.extractor._feature_names
+                )
                 params = {
                     "objective": "reg:squarederror",
                     "eval_metric": "rmse",

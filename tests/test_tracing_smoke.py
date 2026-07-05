@@ -19,10 +19,10 @@ async def test_tracing_manager_initialization_and_correlation_id():
 
     config = TracingConfig(enabled=True, service_name="test-sra")
     manager = TracingManager(config)
-    
+
     # Inicializa (deve ir para fallback ou OTel)
     manager.init()
-    
+
     assert manager.config.service_name == "test-sra"
 
     # Testa Correlation ID
@@ -40,7 +40,7 @@ async def test_trace_span_decorator():
     # Zera singleton
     TracingManager._instance = None
     TracingManager._initialized = False
-    
+
     manager = TracingManager(TracingConfig(enabled=True))
     manager.init()
 
@@ -64,7 +64,7 @@ async def test_trace_block_context_manager():
     # Zera singleton
     TracingManager._instance = None
     TracingManager._initialized = False
-    
+
     manager = TracingManager(TracingConfig(enabled=True))
     manager.init()
 

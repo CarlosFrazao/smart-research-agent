@@ -414,7 +414,7 @@ class ResearchPipeline:
                     f"[{self.name}] stage '{stage.name}' concluída em {duration:.2f}s"
                 )
             except Exception as exc:
-                is_crit = getattr(stage, 'critical', True)
+                is_crit = getattr(stage, "critical", True)
                 context.record_error(stage.name, exc, critical=is_crit)
 
                 if not is_crit:
@@ -458,10 +458,10 @@ class ResearchPipeline:
                 return await stage.run(context)
             except Exception:
                 attempt += 1
-                max_r = getattr(stage, 'max_retries', 0)
+                max_r = getattr(stage, "max_retries", 0)
                 if attempt > max_r:
                     raise
-                wait = getattr(stage, 'retry_backoff_seconds', 1.0) * attempt
+                wait = getattr(stage, "retry_backoff_seconds", 1.0) * attempt
                 logger.warning(
                     f"[{self.name}] stage '{stage.name}' falhou "
                     f"(tentativa {attempt}/{max_r}) — "
@@ -504,4 +504,3 @@ class ResearchPipeline:
 
 # Alias de compatibilidade com stage_factory.py e orquestrador
 Pipeline = ResearchPipeline
-

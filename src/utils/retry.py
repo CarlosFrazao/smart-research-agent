@@ -15,11 +15,16 @@ import asyncio
 import logging
 import random
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Type, Union, Sequence, Optional
+from typing import Any, Callable, Type, Sequence, Optional
 import tenacity
-from tenacity import before_sleep_log, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    before_sleep_log,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 logger = logging.getLogger("utils.retry")
 
@@ -37,6 +42,7 @@ class RetryConfig:
 
     Mapeia tanto a nova nomenclatura v7.0 quanto a legada v6.0/tenacity.
     """
+
     # Atributos v7.0
     max_attempts: Optional[int] = None
     min_wait: Optional[float] = None
@@ -45,7 +51,9 @@ class RetryConfig:
     jitter_ratio: float = 0.25
     expected_exceptions: Optional[Sequence[Type[Exception]]] = None
     circuit_breaker: Optional[Any] = None  # Instância de CircuitBreaker
-    on_retry: Optional[Callable[[int, Exception, float], None]] = None  # Hook callback(attempt, exception, wait_seconds)
+    on_retry: Optional[Callable[[int, Exception, float], None]] = (
+        None  # Hook callback(attempt, exception, wait_seconds)
+    )
 
     # Atributos legados/v6.0/tenacity
     max_retries: Optional[int] = None
@@ -123,6 +131,7 @@ class RetryConfig:
 @dataclass
 class RetryResult:
     """Resultado final de uma execução protegida por retry."""
+
     value: Any
     attempts: int
     total_wait_seconds: float
@@ -137,17 +146,17 @@ def calculate_backoff(attempt: int, config: RetryConfig) -> float:
     """Calcula o tempo de espera para a tentativa usando backoff exponencial e jitter."""
     if attempt <= 1:
         return 0.0
-    
+
     # Exponencial: min_wait * backoff_factor^(attempt-2)
     wait = config.min_wait * (config.backoff_factor ** (attempt - 2))
     wait = min(wait, config.max_wait)
-    
+
     # Aplica Jitter
     if config.jitter_ratio > 0.0:
         jitter_range = wait * config.jitter_ratio
         wait += random.uniform(-jitter_range, jitter_range)
         wait = max(0.0, wait)
-        
+
     return round(wait, 3)
 
 
@@ -167,7 +176,7 @@ def log_retry_summary(name: str, result: RetryResult) -> None:
 
 class CircuitBreakerStop:
     """Critério de parada personalizado para Tenacity que falha se o Circuit Breaker estiver OPEN."""
-    
+
     def __init__(self, circuit_breaker: Optional[Any], stop_policy: Any):
         self.circuit_breaker = circuit_breaker
         self.stop_policy = stop_policy
@@ -175,8 +184,11 @@ class CircuitBreakerStop:
     def __call__(self, retry_state: Any) -> bool:
         if self.circuit_breaker is not None:
             cb_state = getattr(self.circuit_breaker, "state", None)
-            if cb_state == "open" or (hasattr(cb_state, "value") and cb_state.value == "open"):
+            if cb_state == "open" or (
+                hasattr(cb_state, "value") and cb_state.value == "open"
+            ):
                 from src.utils.circuit_breaker import CircuitBreakerOpen
+
                 raise CircuitBreakerOpen(
                     f"Circuit Breaker '{getattr(self.circuit_breaker, 'name', 'unnamed')}' is OPEN. Abortando retries."
                 )
@@ -193,14 +205,16 @@ def build_async_retrying(config: RetryConfig) -> tenacity.AsyncRetrying:
     """
     stop_policy = stop_after_attempt(config.max_attempts)
     wrapped_stop = CircuitBreakerStop(config.circuit_breaker, stop_policy)
-    
+
     exceptions = tuple(config.expected_exceptions)
-    
+
     # Callback antes de dormir para registrar sucesso/falha do breaker se presente
     def before_sleep_cb(retry_state):
-        if config.circuit_breaker is not None and hasattr(config.circuit_breaker, "record_failure"):
+        if config.circuit_breaker is not None and hasattr(
+            config.circuit_breaker, "record_failure"
+        ):
             config.circuit_breaker.record_failure(str(retry_state.outcome.exception()))
-        
+
         # Chama callback de retry do usuário
         if config.on_retry is not None:
             try:
@@ -210,124 +224,168 @@ def build_async_retrying(config: RetryConfig) -> tenacity.AsyncRetrying:
                 config.on_retry(attempt, exc, wait)
             except Exception as hook_exc:
                 logger.error(f"Error in on_retry hook: {hook_exc}")
-                
+
         before_sleep_log(logger, logging.WARNING)(retry_state)
 
     # Callback de sucesso se a execução passar
     # O tenacity não tem hook nativo pós-sucesso fácil, mas podemos tratar no decorator ou no retry wrapper.
-    
+
     return tenacity.AsyncRetrying(
         stop=wrapped_stop,
-        wait=wait_exponential(multiplier=config.min_wait, max=config.max_wait, exp_base=config.backoff_factor),
+        wait=wait_exponential(
+            multiplier=config.min_wait,
+            max=config.max_wait,
+            exp_base=config.backoff_factor,
+        ),
         retry=retry_if_exception_type(exceptions),
         before_sleep=before_sleep_cb,
-        reraise=True
+        reraise=True,
     )
 
 
-async def retry_call_async(func: Callable, config: RetryConfig, *args, **kwargs) -> RetryResult:
+async def retry_call_async(
+    func: Callable, config: RetryConfig, *args, **kwargs
+) -> RetryResult:
     """Executa chamadas assíncronas com lógica de retry."""
     total_wait = 0.0
     last_exc = None
-    
+
     for attempt in range(1, config.max_attempts + 1):
         if config.circuit_breaker is not None:
             cb = config.circuit_breaker
             cb_state = getattr(cb, "state", None)
-            if cb_state == "open" or (hasattr(cb_state, "value") and cb_state.value == "open"):
+            if cb_state == "open" or (
+                hasattr(cb_state, "value") and cb_state.value == "open"
+            ):
                 from src.utils.circuit_breaker import CircuitBreakerOpen
+
                 raise CircuitBreakerOpen(
                     f"Circuit Breaker '{getattr(cb, 'name', 'unnamed')}' is OPEN. Abortando retries."
                 )
 
         try:
             val = await func(*args, **kwargs)
-            res = RetryResult(value=val, attempts=attempt, total_wait_seconds=total_wait)
-            if config.circuit_breaker is not None and hasattr(config.circuit_breaker, "record_success"):
+            res = RetryResult(
+                value=val, attempts=attempt, total_wait_seconds=total_wait
+            )
+            if config.circuit_breaker is not None and hasattr(
+                config.circuit_breaker, "record_success"
+            ):
                 config.circuit_breaker.record_success()
             return res
         except Exception as exc:
             last_exc = exc
-            
-            if not any(isinstance(exc, expected) for expected in config.expected_exceptions):
-                if config.circuit_breaker is not None and hasattr(config.circuit_breaker, "record_failure"):
+
+            if not any(
+                isinstance(exc, expected) for expected in config.expected_exceptions
+            ):
+                if config.circuit_breaker is not None and hasattr(
+                    config.circuit_breaker, "record_failure"
+                ):
                     config.circuit_breaker.record_failure(str(exc))
                 raise exc
-            
+
             if attempt == config.max_attempts:
-                if config.circuit_breaker is not None and hasattr(config.circuit_breaker, "record_failure"):
+                if config.circuit_breaker is not None and hasattr(
+                    config.circuit_breaker, "record_failure"
+                ):
                     config.circuit_breaker.record_failure(str(exc))
                 break
-                
+
             wait_sec = calculate_backoff(attempt + 1, config)
             logger.warning(
                 f"Attempt {attempt} for async call failed with exception: {exc}. "
                 f"Retrying in {wait_sec:.2f}s..."
             )
-            
+
             if config.on_retry is not None:
                 try:
                     config.on_retry(attempt, exc, wait_sec)
                 except Exception as hook_exc:
                     logger.error(f"Error in on_retry hook: {hook_exc}")
-                    
+
             await asyncio.sleep(wait_sec)
             total_wait += wait_sec
-            
-    res = RetryResult(value=None, attempts=config.max_attempts, total_wait_seconds=total_wait, last_exception=last_exc)
+
+    res = RetryResult(
+        value=None,
+        attempts=config.max_attempts,
+        total_wait_seconds=total_wait,
+        last_exception=last_exc,
+    )
     return res
 
 
-def retry_call_sync(func: Callable, config: RetryConfig, *args, **kwargs) -> RetryResult:
+def retry_call_sync(
+    func: Callable, config: RetryConfig, *args, **kwargs
+) -> RetryResult:
     """Executa chamadas síncronas com lógica de retry."""
     total_wait = 0.0
     last_exc = None
-    
+
     for attempt in range(1, config.max_attempts + 1):
         if config.circuit_breaker is not None:
             cb = config.circuit_breaker
             cb_state = getattr(cb, "state", None)
-            if cb_state == "open" or (hasattr(cb_state, "value") and cb_state.value == "open"):
+            if cb_state == "open" or (
+                hasattr(cb_state, "value") and cb_state.value == "open"
+            ):
                 from src.utils.circuit_breaker import CircuitBreakerOpen
+
                 raise CircuitBreakerOpen(
                     f"Circuit Breaker '{getattr(cb, 'name', 'unnamed')}' is OPEN. Abortando retries."
                 )
 
         try:
             val = func(*args, **kwargs)
-            res = RetryResult(value=val, attempts=attempt, total_wait_seconds=total_wait)
-            if config.circuit_breaker is not None and hasattr(config.circuit_breaker, "record_success"):
+            res = RetryResult(
+                value=val, attempts=attempt, total_wait_seconds=total_wait
+            )
+            if config.circuit_breaker is not None and hasattr(
+                config.circuit_breaker, "record_success"
+            ):
                 config.circuit_breaker.record_success()
             return res
         except Exception as exc:
             last_exc = exc
-            
-            if not any(isinstance(exc, expected) for expected in config.expected_exceptions):
-                if config.circuit_breaker is not None and hasattr(config.circuit_breaker, "record_failure"):
+
+            if not any(
+                isinstance(exc, expected) for expected in config.expected_exceptions
+            ):
+                if config.circuit_breaker is not None and hasattr(
+                    config.circuit_breaker, "record_failure"
+                ):
                     config.circuit_breaker.record_failure(str(exc))
                 raise exc
-            
+
             if attempt == config.max_attempts:
-                if config.circuit_breaker is not None and hasattr(config.circuit_breaker, "record_failure"):
+                if config.circuit_breaker is not None and hasattr(
+                    config.circuit_breaker, "record_failure"
+                ):
                     config.circuit_breaker.record_failure(str(exc))
                 break
-                
+
             wait_sec = calculate_backoff(attempt + 1, config)
             logger.warning(
                 f"Attempt {attempt} for sync call failed with exception: {exc}. "
                 f"Retrying in {wait_sec:.2f}s..."
             )
-            
+
             if config.on_retry is not None:
                 try:
                     config.on_retry(attempt, exc, wait_sec)
                 except Exception as hook_exc:
                     logger.error(f"Error in on_retry hook: {hook_exc}")
-                    
+
             time.sleep(wait_sec)
             total_wait += wait_sec
-            
-    res = RetryResult(value=None, attempts=config.max_attempts, total_wait_seconds=total_wait, last_exception=last_exc)
+
+    res = RetryResult(
+        value=None,
+        attempts=config.max_attempts,
+        total_wait_seconds=total_wait,
+        last_exception=last_exc,
+    )
     return res
 
 
@@ -339,22 +397,38 @@ async def retry_call(func: Callable, *args, **kwargs) -> Any:
     """
     # Extrai configs dos kwargs de controle de retry
     cfg_kwargs = {}
-    for field_name in ["max_attempts", "min_wait", "max_wait", "backoff_factor", "jitter_ratio", "expected_exceptions", "circuit_breaker", "on_retry", "max_retries", "base_delay", "max_delay", "exponential_base", "jitter", "retryable_exceptions", "retry_on"]:
+    for field_name in [
+        "max_attempts",
+        "min_wait",
+        "max_wait",
+        "backoff_factor",
+        "jitter_ratio",
+        "expected_exceptions",
+        "circuit_breaker",
+        "on_retry",
+        "max_retries",
+        "base_delay",
+        "max_delay",
+        "exponential_base",
+        "jitter",
+        "retryable_exceptions",
+        "retry_on",
+    ]:
         if field_name in kwargs:
             cfg_kwargs[field_name] = kwargs.pop(field_name)
-            
+
     config = RetryConfig(**cfg_kwargs)
-    
+
     if asyncio.iscoroutinefunction(func):
         res = await retry_call_async(func, config, *args, **kwargs)
     else:
         res = retry_call_sync(func, config, *args, **kwargs)
-        
+
     log_retry_summary(func.__name__, res)
-    
+
     if not res.success and res.last_exception is not None:
         raise res.last_exception
-        
+
     return res.value
 
 
@@ -385,6 +459,7 @@ def retry_with_backoff(
 
     def decorator(func: Callable):
         if asyncio.iscoroutinefunction(func):
+
             @wraps(func)
             async def wrapper(*args, **kwargs):
                 res = await retry_call_async(func, config, *args, **kwargs)
@@ -392,8 +467,10 @@ def retry_with_backoff(
                 if not res.success and res.last_exception is not None:
                     raise res.last_exception
                 return res.value
+
             return wrapper
         else:
+
             @wraps(func)
             def wrapper(*args, **kwargs):
                 res = retry_call_sync(func, config, *args, **kwargs)
@@ -401,18 +478,23 @@ def retry_with_backoff(
                 if not res.success and res.last_exception is not None:
                     raise res.last_exception
                 return res.value
+
             return wrapper
+
     return decorator
 
 
 # ── Aliases de Compatibilidade Retroativa ───────────────────────────────────
 
+
 def with_retry(config: RetryConfig | None = None):
     """Alias para with_retry legado (espera receber uma instância de RetryConfig)."""
+
     def decorator(func: Callable):
         cfg = config if config is not None else RetryConfig()
-        
+
         if asyncio.iscoroutinefunction(func):
+
             @wraps(func)
             async def wrapper(*args, **kwargs):
                 res = await retry_call_async(func, cfg, *args, **kwargs)
@@ -420,8 +502,10 @@ def with_retry(config: RetryConfig | None = None):
                 if not res.success and res.last_exception is not None:
                     raise res.last_exception
                 return res.value
+
             return wrapper
         else:
+
             @wraps(func)
             def wrapper(*args, **kwargs):
                 res = retry_call_sync(func, cfg, *args, **kwargs)
@@ -429,5 +513,7 @@ def with_retry(config: RetryConfig | None = None):
                 if not res.success and res.last_exception is not None:
                     raise res.last_exception
                 return res.value
+
             return wrapper
+
     return decorator

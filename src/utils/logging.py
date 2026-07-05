@@ -20,6 +20,8 @@ import logging
 import os
 import sys
 from datetime import datetime
+from contextvars import ContextVar
+from typing import Any
 
 # Força UTF-8 nos fluxos padrão para evitar UnicodeEncodeError no Windows (CP1252)
 if hasattr(sys.stdout, "reconfigure"):
@@ -32,6 +34,35 @@ if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
     except Exception:
         pass
+
+# Fallback context variables dictionary
+_fallback_log_context: ContextVar[dict[str, Any]] = ContextVar("fallback_log_context", default={})
+
+def bind_contextvars(**kwargs: Any) -> None:
+    """Fallback / Wrapper para associar variáveis de contexto ao thread/corrotina atual."""
+    try:
+        import structlog
+        structlog.contextvars.bind_contextvars(**kwargs)
+    except ImportError:
+        ctx = _fallback_log_context.get().copy()
+        ctx.update(kwargs)
+        _fallback_log_context.set(ctx)
+
+def clear_contextvars() -> None:
+    """Fallback / Wrapper para limpar variáveis de contexto."""
+    try:
+        import structlog
+        structlog.contextvars.clear_contextvars()
+    except ImportError:
+        _fallback_log_context.set({})
+
+def get_contextvars() -> dict[str, Any]:
+    """Fallback / Wrapper para recuperar variáveis de contexto."""
+    try:
+        import structlog
+        return structlog.contextvars.get_contextvars()
+    except (ImportError, AttributeError):
+        return _fallback_log_context.get()
 
 
 def _current_trace_fields() -> dict[str, str]:
@@ -50,6 +81,12 @@ def _current_trace_fields() -> dict[str, str]:
         fields.update(get_current_trace_context())
     except Exception:
         pass
+        
+    try:
+        fields.update({k: str(v) for k, v in get_contextvars().items()})
+    except Exception:
+        pass
+        
     return fields
 
 

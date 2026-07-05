@@ -61,15 +61,15 @@ async def test_hybrid_ranker_pipeline():
     ]
 
     ranked = await ranker.rank(results, query="fastapi async python web")
-    
+
     assert len(ranked) == 2
-    
+
     # FastAPI deve ser o top 1 por causa do BM25 (overlap lexical) e Embeddings
     top_result = ranked[0]
     assert "FastAPI" in top_result.title
     assert top_result.score_breakdown["bm25"] > ranked[1].score_breakdown["bm25"]
     assert top_result.score_breakdown["embedding"] >= ranked[1].score_breakdown["embedding"]
     assert top_result.score_breakdown["authority"] == 0.95  # github NETLOC authority
-    
+
     # Verifica chamada do LLM Re-ranker
     mock_llm.generate_structured.assert_called_once()

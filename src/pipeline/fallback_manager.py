@@ -26,7 +26,6 @@ from typing import Any, Callable, TypeVar
 from collections.abc import Awaitable
 
 from src.utils.circuit_breaker import (
-    CircuitBreaker,
     CircuitBreakerOpen,
     CircuitBreakerRegistry,
     get_default_registry,
@@ -43,10 +42,10 @@ T = TypeVar("T")
 class FallbackStrategy(Enum):
     """Estratégia de seleção entre múltiplas alternativas de fallback."""
 
-    PRIORITY = "priority"       # Tenta na ordem registrada (0, 1, 2...)
+    PRIORITY = "priority"  # Tenta na ordem registrada (0, 1, 2...)
     ROUND_ROBIN = "round_robin"  # Distribui ciclos entre alternativas
-    RANDOM = "random"         # Seleciona aleatoriamente
-    WEIGHTED = "weighted"     # Seleciona proporcionalmente aos pesos
+    RANDOM = "random"  # Seleciona aleatoriamente
+    WEIGHTED = "weighted"  # Seleciona proporcionalmente aos pesos
 
 
 class FallbackStatus(StrEnum):
@@ -68,7 +67,7 @@ class FallbackAction:
 
     name: str
     action: Callable[..., Awaitable[Any]]
-    weight: float = 1.0           # Para WEIGHTED strategy
+    weight: float = 1.0  # Para WEIGHTED strategy
     timeout: float | None = None  # Timeout específico da ação
     circuit_breaker_name: str | None = None  # Nome do CB associado
     condition: Callable[..., bool] | None = None  # Função de condição
@@ -83,7 +82,7 @@ class FallbackRegistration:
     primary: FallbackAction
     fallbacks: list[FallbackAction]
     strategy: FallbackStrategy
-    max_attempts: int = 3       # Máximo de tentativas (primary + fallbacks)
+    max_attempts: int = 3  # Máximo de tentativas (primary + fallbacks)
     global_timeout: float | None = None  # Timeout total da execução
     on_all_failed: Callable[..., Awaitable[Any]] | None = None  # Handler final
 
@@ -186,11 +185,13 @@ class FallbackManager:
         fb_actions = []
         if fallbacks:
             for fb_name, fb_action in fallbacks:
-                fb_actions.append(FallbackAction(
-                    name=fb_name,
-                    action=fb_action,
-                    circuit_breaker_name=fb_name,
-                ))
+                fb_actions.append(
+                    FallbackAction(
+                        name=fb_name,
+                        action=fb_action,
+                        circuit_breaker_name=fb_name,
+                    )
+                )
 
         self._registrations[key] = FallbackRegistration(
             stage=stage,
@@ -322,12 +323,8 @@ class FallbackManager:
 
             except CircuitBreakerOpen:
                 metrics.circuit_open_skips += 1
-                last_error = CircuitBreakerOpen(
-                    f"Circuito aberto para '{action.name}'"
-                )
-                logger.debug(
-                    f"FallbackManager: '{action.name}' circuit breaker open"
-                )
+                last_error = CircuitBreakerOpen(f"Circuito aberto para '{action.name}'")
+                logger.debug(f"FallbackManager: '{action.name}' circuit breaker open")
 
             except Exception as e:
                 latency = (time.monotonic() - action_start) * 1000
@@ -419,27 +416,30 @@ class FallbackManager:
             return False
 
         try:
-            breaker = await self._circuit_registry.get_async(action.circuit_breaker_name)
+            breaker = await self._circuit_registry.get_async(
+                action.circuit_breaker_name
+            )
             if breaker is None:
                 return False
             return breaker.state.value == "open"
         except Exception as e:
-            logger.debug(f"FallbackManager: erro ao ler circuit breaker '{action.circuit_breaker_name}': {e}")
+            logger.debug(
+                f"FallbackManager: erro ao ler circuit breaker '{action.circuit_breaker_name}': {e}"
+            )
             return False
 
     # ── Métricas ──────────────────────────────────────────────────────────────
 
-    def get_metrics(self, stage: str | None = None, name: str | None = None) -> dict[str, FallbackMetrics]:
+    def get_metrics(
+        self, stage: str | None = None, name: str | None = None
+    ) -> dict[str, FallbackMetrics]:
         """Retorna métricas de fallback."""
         if stage and name:
             key = self._key(stage, name)
             return {key: self._metrics.get(key, FallbackMetrics())}
 
         if stage:
-            return {
-                k: v for k, v in self._metrics.items()
-                if k.startswith(f"{stage}:")
-            }
+            return {k: v for k, v in self._metrics.items() if k.startswith(f"{stage}:")}
 
         return dict(self._metrics)
 
@@ -474,12 +474,14 @@ class FallbackManager:
             stage: {
                 "invocations": sum(m.total_invocations for m in metrics_list),
                 "success_rate": (
-                    sum(m.total_success for m in metrics_list) /
-                    max(sum(m.total_success + m.total_failure for m in metrics_list), 1)
+                    sum(m.total_success for m in metrics_list)
+                    / max(
+                        sum(m.total_success + m.total_failure for m in metrics_list), 1
+                    )
                 ),
                 "fallback_rate": (
-                    sum(m.fallback_success + m.fallback_failure for m in metrics_list) /
-                    max(sum(m.total_invocations for m in metrics_list), 1)
+                    sum(m.fallback_success + m.fallback_failure for m in metrics_list)
+                    / max(sum(m.total_invocations for m in metrics_list), 1)
                 ),
             }
             for stage, metrics_list in stages.items()
@@ -571,6 +573,7 @@ def with_fallback(
 
     NOTA: Requer que o fallback esteja previamente registrado no manager.
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
@@ -581,7 +584,9 @@ def with_fallback(
                 args=args,
                 kwargs=kwargs,
             )
+
         return wrapper
+
     return decorator
 
 
@@ -611,5 +616,7 @@ def set_default_manager(manager: FallbackManager) -> None:
 def _get_default_manager() -> FallbackManager:
     """Versão síncrona para uso no decorator (assume já inicializado)."""
     if _default_manager is None:
-        raise RuntimeError("FallbackManager não inicializado. Chame get_default_manager() primeiro.")
+        raise RuntimeError(
+            "FallbackManager não inicializado. Chame get_default_manager() primeiro."
+        )
     return _default_manager

@@ -187,10 +187,7 @@ class CacheWarmer:
 
     async def _warm_traditional_cache(self, queries: list[str]) -> None:
         """Pré-busca queries e armazena no cache tradicional."""
-        tasks = [
-            asyncio.create_task(self._warm_single_query(q))
-            for q in queries
-        ]
+        tasks = [asyncio.create_task(self._warm_single_query(q)) for q in queries]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for query, result in zip(queries, results):
@@ -267,6 +264,7 @@ class CacheWarmer:
 
         # Cria ExpandedQuery simples
         from src.types import ExpandedQuery
+
         expanded = [ExpandedQuery(query=query, type="original", priority="alta")]
 
         # Plano de fontes simplificado
@@ -291,9 +289,11 @@ class CacheWarmer:
             from sentence_transformers import SentenceTransformer
 
             model = SentenceTransformer("all-MiniLM-L6-v2")
-            logger.info(f"CacheWarmer: carregando modelo para semantic cache")
+            logger.info("CacheWarmer: carregando modelo para semantic cache")
         except ImportError:
-            logger.warning("CacheWarmer: sentence-transformers não instalado — semantic cache ignorado")
+            logger.warning(
+                "CacheWarmer: sentence-transformers não instalado — semantic cache ignorado"
+            )
             return
 
         embeddings_computed = 0
@@ -321,7 +321,9 @@ class CacheWarmer:
                 logger.debug(f"CacheWarmer: semantic cache → '{query[:40]}'")
 
             except Exception as e:
-                logger.warning(f"CacheWarmer: falha no semantic cache para '{query[:40]}': {e}")
+                logger.warning(
+                    f"CacheWarmer: falha no semantic cache para '{query[:40]}': {e}"
+                )
 
         self._metrics["semantic_cached"] = embeddings_computed
         logger.info(f"CacheWarmer: {embeddings_computed} embeddings computados")
@@ -352,10 +354,12 @@ class CacheWarmer:
         return {
             **self._metrics,
             "success_rate": (
-                self._metrics["successful_queries"] / max(self._metrics["total_queries"], 1)
+                self._metrics["successful_queries"]
+                / max(self._metrics["total_queries"], 1)
             ),
             "avg_results_per_query": (
-                self._metrics["total_results_cached"] / max(self._metrics["successful_queries"], 1)
+                self._metrics["total_results_cached"]
+                / max(self._metrics["successful_queries"], 1)
             ),
         }
 
@@ -431,7 +435,9 @@ class ScheduledCacheWarmer:
 
         # Sobrescreve o handler de execução para warming
         self._job_id = job_id
-        logger.info(f"ScheduledCacheWarmer: job agendado {job_id} (a cada {interval_minutes}min)")
+        logger.info(
+            f"ScheduledCacheWarmer: job agendado {job_id} (a cada {interval_minutes}min)"
+        )
         return job_id
 
     async def run_warming_job(self, job_id: str) -> dict[str, Any]:
@@ -557,7 +563,7 @@ async def main() -> int:
         metrics_dir = Path("reports/warm_cache")
         if metrics_dir.exists():
             files = sorted(metrics_dir.glob("metrics_*.json"))[-5:]
-            print(f"\nÚltimas execuções:")
+            print("\nÚltimas execuções:")
             for f in files:
                 with open(f) as fh:
                     data = json.load(fh)
@@ -592,7 +598,7 @@ async def main() -> int:
         scheduled = ScheduledCacheWarmer(scheduler, orchestrator, orchestrator.cache)
         job_id = scheduled.schedule(interval_minutes=args.interval // 60)
         print(f"Job de warming agendado: {job_id}")
-        print(f"Próximas execuções conforme cron do scheduler")
+        print("Próximas execuções conforme cron do scheduler")
         return 0
 
     if args.daemon:
@@ -618,13 +624,15 @@ async def main() -> int:
     warmer.export_metrics(args.output)
 
     print("\n=== Resultado do Warming ===")
-    print(f"Queries: {metrics['successful_queries']}/{metrics['total_queries']} sucesso")
+    print(
+        f"Queries: {metrics['successful_queries']}/{metrics['total_queries']} sucesso"
+    )
     print(f"Resultados cached: {metrics['total_results_cached']}")
     print(f"Semantic cached: {metrics['semantic_cached']}")
     print(f"Tempo: {metrics['elapsed_seconds']}s")
-    if metrics['errors']:
+    if metrics["errors"]:
         print(f"Erros: {len(metrics['errors'])}")
-        for e in metrics['errors'][:3]:
+        for e in metrics["errors"][:3]:
             print(f"  - {e}")
 
     return 0

@@ -22,22 +22,17 @@ import asyncio
 import inspect
 import logging
 import threading
-import weakref
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from typing import (
     Any,
     Callable,
     Dict,
-    ForwardRef,
     List,
     Optional,
-    Set,
     Type,
     TypeVar,
     Union,
-    get_type_hints,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,12 +42,13 @@ T = TypeVar("T")
 
 # ── Enums ────────────────────────────────────────────────────────────────────
 
+
 class Lifecycle(str, Enum):
     """Lifecycle dos serviços registrados."""
 
-    SINGLETON = "singleton"      # Uma instância global, reutilizada sempre
-    SCOPED = "scoped"            # Uma instância por scope (request/session)
-    TRANSIENT = "transient"      # Nova instância a cada resolve()
+    SINGLETON = "singleton"  # Uma instância global, reutilizada sempre
+    SCOPED = "scoped"  # Uma instância por scope (request/session)
+    TRANSIENT = "transient"  # Nova instância a cada resolve()
     LAZY_SINGLETON = "lazy_singleton"  # Singleton criado no primeiro resolve()
 
 
@@ -60,11 +56,12 @@ class ScopeType(str, Enum):
     """Tipos de scope suportados."""
 
     APPLICATION = "application"  # Vida útil = aplicação
-    REQUEST = "request"          # Vida útil = uma requisição HTTP
-    SESSION = "session"            # Vida útil = sessão do usuário
+    REQUEST = "request"  # Vida útil = uma requisição HTTP
+    SESSION = "session"  # Vida útil = sessão do usuário
 
 
 # ── Dataclasses ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ServiceRegistration:
@@ -86,15 +83,16 @@ class ServiceRegistration:
 class ContainerConfig:
     """Configuração do container DI."""
 
-    auto_wire: bool = True               # Tenta resolver dependências automaticamente
-    validate_on_register: bool = True    # Valida factory no registro
-    strict_mode: bool = False            # Se True, erro se dependência não registrada
-    log_resolutions: bool = False        # Loga cada resolve()
-    enable_scopes: bool = True           # Suporte a scopes request/session
-    max_resolution_depth: int = 20       # Previne recursão infinita
+    auto_wire: bool = True  # Tenta resolver dependências automaticamente
+    validate_on_register: bool = True  # Valida factory no registro
+    strict_mode: bool = False  # Se True, erro se dependência não registrada
+    log_resolutions: bool = False  # Loga cada resolve()
+    enable_scopes: bool = True  # Suporte a scopes request/session
+    max_resolution_depth: int = 20  # Previne recursão infinita
 
 
 # ── Container ─────────────────────────────────────────────────────────────
+
 
 class Container:
     """Container de Injeção de Dependências para o SRA.
@@ -135,7 +133,9 @@ class Container:
     ) -> "Container":
         """Registra um serviço no container (fluent API)."""
         if name in self._registry:
-            logger.warning(f"Container: serviço '{name}' já registrado — sobrescrevendo")
+            logger.warning(
+                f"Container: serviço '{name}' já registrado — sobrescrevendo"
+            )
 
         # Auto-detect dependencies da assinatura se não fornecidas
         deps = dependencies or []
@@ -259,15 +259,21 @@ class Container:
                 self._scopes[scope_context][resolved_name] = instance
 
         if self.config.log_resolutions:
-            logger.debug(f"Container: resolvido '{resolved_name}' ({reg.lifecycle.value})")
+            logger.debug(
+                f"Container: resolvido '{resolved_name}' ({reg.lifecycle.value})"
+            )
 
         return instance
 
-    def resolve_all(self, names: List[str], scope_context: Optional[str] = None) -> Dict[str, Any]:
+    def resolve_all(
+        self, names: List[str], scope_context: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Resolve múltiplos serviços de uma vez."""
         return {name: self.resolve(name, scope_context) for name in names}
 
-    def try_resolve(self, name: str, default: Any = None, scope_context: Optional[str] = None) -> Any:
+    def try_resolve(
+        self, name: str, default: Any = None, scope_context: Optional[str] = None
+    ) -> Any:
         """Tenta resolver, retorna default se não encontrado."""
         try:
             return self.resolve(name, scope_context)
@@ -344,7 +350,9 @@ class Container:
                     try:
                         self.resolve(name)
                     except Exception as e:
-                        logger.warning(f"Container: falha ao pré-inicializar '{name}': {e}")
+                        logger.warning(
+                            f"Container: falha ao pré-inicializar '{name}': {e}"
+                        )
 
         @app.on_event("shutdown")
         async def shutdown():
@@ -356,11 +364,13 @@ class Container:
 
     def get_fastapi_dependency(self, name: str):
         """Retorna função para uso com FastAPI Depends()."""
+
         def _dependency(request: Any) -> Any:
             scope_id = None
             if hasattr(request, "state") and hasattr(request.state, "scope_id"):
                 scope_id = request.state.scope_id
             return self.resolve(name, scope_context=scope_id)
+
         return _dependency
 
     # ── Lifecycle Management ──────────────────────────────────────────────────
@@ -410,26 +420,53 @@ class Container:
         """Lista todos os serviços registrados."""
         result = []
         for name, reg in self._registry.items():
-            result.append({
-                "name": name,
-                "lifecycle": reg.lifecycle.value,
-                "scope": reg.scope.value,
-                "dependencies": reg.dependencies,
-                "has_instance": reg.instance is not None,
-                "has_override": name in self._overrides,
-            })
+            result.append(
+                {
+                    "name": name,
+                    "lifecycle": reg.lifecycle.value,
+                    "scope": reg.scope.value,
+                    "dependencies": reg.dependencies,
+                    "has_instance": reg.instance is not None,
+                    "has_override": name in self._overrides,
+                }
+            )
         return result
 
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas do container."""
         return {
             "registered_services": len(self._registry),
-            "active_singletons": sum(1 for r in self._registry.values() if r.instance is not None),
+            "active_singletons": sum(
+                1 for r in self._registry.values() if r.instance is not None
+            ),
             "active_scopes": len(self._scopes) - 1,
             "overrides": len(self._overrides),
             "aliases": len(self._aliases),
             "resolution_stack": list(self._resolution_stack),
         }
+
+    async def close(self) -> None:
+        """Encerra todas as instâncias ativas que possuem método close()."""
+        instances = []
+        for reg in self._registry.values():
+            if reg.instance is not None:
+                instances.append(reg.instance)
+        for inst in instances:
+            if hasattr(inst, "close"):
+                try:
+                    close_fn = getattr(inst, "close")
+                    if inspect.iscoroutinefunction(close_fn):
+                        await close_fn()
+                    else:
+                        close_fn()
+                except Exception as e:
+                    logger.error(f"Erro ao fechar dependência {inst}: {e}")
+
+    def __getattr__(self, name: str) -> Any:
+        """Permite acessar serviços registrados diretamente como atributos do container."""
+        if self.is_registered(name) or name in self._aliases:
+            return self.resolve(name)
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
     # ── Helpers internos ────────────────────────────────────────────────────
 
@@ -525,6 +562,7 @@ class Container:
 
 # ── Scope ───────────────────────────────────────────────────────────────────
 
+
 class Scope:
     """Context manager para scopes de request/session."""
 
@@ -550,8 +588,10 @@ class Scope:
 
 # ── FastAPI Helpers ──────────────────────────────────────────────────────────
 
+
 def fastapi_dependency(name: str):
     """Factory de dependências para FastAPI Depends()."""
+
     def _resolver(request: Any) -> Any:
         container = getattr(request.app.state, "container", None)
         if container is None:
@@ -568,18 +608,22 @@ def fastapi_dependency(name: str):
 
 # ── Exceções ─────────────────────────────────────────────────────────────────
 
+
 class DependencyError(Exception):
     """Erro na resolução de dependências."""
+
     pass
 
 
 class CircularDependencyError(DependencyError):
     """Dependência circular detectada."""
+
     pass
 
 
 class ScopeError(Exception):
     """Erro relacionado a scopes."""
+
     pass
 
 

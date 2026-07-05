@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Awaitable, Callable, TypeVar
 
 from .exceptions import CircuitBreakerOpenError
@@ -41,9 +41,9 @@ class CircuitState(enum.Enum):
 
 @dataclass
 class CircuitBreakerConfig:
-    failure_threshold: int = 5          # falhas consecutivas até abrir
-    recovery_timeout: float = 30.0      # segundos em OPEN antes de tentar HALF_OPEN
-    half_open_max_calls: int = 1        # chamadas de teste permitidas em HALF_OPEN
+    failure_threshold: int = 5  # falhas consecutivas até abrir
+    recovery_timeout: float = 30.0  # segundos em OPEN antes de tentar HALF_OPEN
+    half_open_max_calls: int = 1  # chamadas de teste permitidas em HALF_OPEN
 
 
 @dataclass
@@ -83,8 +83,13 @@ class CircuitBreaker:
                 self._state.half_open_calls_in_flight = 0
 
             if self._state.state is CircuitState.HALF_OPEN:
-                if self._state.half_open_calls_in_flight >= self.config.half_open_max_calls:
-                    raise CircuitBreakerOpenError(self.name, self.config.recovery_timeout)
+                if (
+                    self._state.half_open_calls_in_flight
+                    >= self.config.half_open_max_calls
+                ):
+                    raise CircuitBreakerOpenError(
+                        self.name, self.config.recovery_timeout
+                    )
                 self._state.half_open_calls_in_flight += 1
 
     async def on_success(self) -> None:

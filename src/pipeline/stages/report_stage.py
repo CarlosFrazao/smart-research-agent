@@ -51,21 +51,26 @@ class ReportStage(PipelineStage):
         "properties": {
             "executive_summary": {
                 "type": "string",
-                "description": "Resumo executivo de 3-5 frases sobre os achados principais"
+                "description": "Resumo executivo de 3-5 frases sobre os achados principais",
             },
             "recommendation": {
                 "type": "string",
-                "description": "Recomendação estratégica com estrutura: 1) Recomendação principal, 2) Alternativa, 3) Próximos passos"
+                "description": "Recomendação estratégica com estrutura: 1) Recomendação principal, 2) Alternativa, 3) Próximos passos",
             },
             "trends": {
                 "type": "string",
-                "description": "2-3 tendências tecnológicas identificadas com evidências concretas"
-            }
+                "description": "2-3 tendências tecnológicas identificadas com evidências concretas",
+            },
         },
-        "required": ["executive_summary", "recommendation", "trends"]
+        "required": ["executive_summary", "recommendation", "trends"],
     }
 
-    def __init__(self, orchestrator_or_llm: Any = None, cache: SharedCache | None = None, llm_client: Any = None):
+    def __init__(
+        self,
+        orchestrator_or_llm: Any = None,
+        cache: SharedCache | None = None,
+        llm_client: Any = None,
+    ):
         """Inicializa o ReportStage.
 
         Suporta tanto a instanciação via factory do pipeline (passando o orchestrator)
@@ -79,13 +84,16 @@ class ReportStage(PipelineStage):
         # Detecção de tipo para compatibilidade com Pipeline vs Unit Test
         target_llm = llm_client or orchestrator_or_llm
         from unittest.mock import Mock
+
         if hasattr(target_llm, "llm") and not isinstance(target_llm, Mock):
             self.orchestrator = target_llm
-            self.llm = target_llm.llm
-            self.cache = getattr(target_llm, "smart_cache", None) or cache or SharedCache()
+            self._llm = target_llm.llm
+            self.cache = (
+                getattr(target_llm, "smart_cache", None) or cache or SharedCache()
+            )
         else:
             self.orchestrator = None
-            self.llm = target_llm
+            self._llm = target_llm
             self.cache = cache or SharedCache()
 
         # Importa analisadores especializados
@@ -96,6 +104,16 @@ class ReportStage(PipelineStage):
         self.temporal_analyzer = TemporalAnalyzer()
         self.sentiment_analyzer = SentimentAnalyzer()
         self.comparator = Comparator()
+
+    @property
+    def llm(self) -> Any:
+        if self.orchestrator is not None:
+            return self.orchestrator.llm
+        return self._llm
+
+    @llm.setter
+    def llm(self, value: Any) -> None:
+        self._llm = value
 
     async def run(self, context: PipelineContext) -> PipelineContext:
         """Método de entrada do pipeline que executa a geração do relatório.
@@ -159,7 +177,9 @@ class ReportStage(PipelineStage):
                 - sentiment_section: Seção de análise de sentimento
                 - comparison_section: Seção de comparação de alternativas
         """
-        logger.info(f"ReportStage: Iniciando geração de relatório para query: {query[:50]}...")
+        logger.info(
+            f"ReportStage: Iniciando geração de relatório para query: {query[:50]}..."
+        )
 
         # Verifica cache para seções reutilizáveis
         cache_key = self._make_cache_key(query, results)
@@ -170,7 +190,9 @@ class ReportStage(PipelineStage):
             return cached_sections
 
         # Paraleliza as 3 seções LLM
-        llm_sections = await self._generate_llm_sections_parallel(query, results, metadata)
+        llm_sections = await self._generate_llm_sections_parallel(
+            query, results, metadata
+        )
 
         # Gera seções determinísticas (não dependem de LLM)
         timeline_section = self.temporal_analyzer.generate_timeline_section(results)
@@ -212,15 +234,21 @@ class ReportStage(PipelineStage):
         """
         # Tenta chamada consolidada primeiro
         try:
-            consolidated = await self._generate_consolidated_llm_call(query, results, metadata)
+            consolidated = await self._generate_consolidated_llm_call(
+                query, results, metadata
+            )
             if consolidated:
                 logger.info("ReportStage: Chamada LLM consolidada bem-sucedida")
                 return consolidated
         except Exception as e:
-            logger.warning(f"ReportStage: Chamada consolidada falhou, usando fallback paralelo: {e}")
+            logger.warning(
+                f"ReportStage: Chamada consolidada falhou, usando fallback paralelo: {e}"
+            )
 
         # Fallback: chamadas individuais em paralelo
-        return await self._generate_individual_sections_parallel(query, results, metadata)
+        return await self._generate_individual_sections_parallel(
+            query, results, metadata
+        )
 
     async def _generate_consolidated_llm_call(
         self,
@@ -291,8 +319,12 @@ class ReportStage(PipelineStage):
 
         # Trata exceções
         if isinstance(executive_summary, Exception):
-            logger.warning(f"ReportStage: executive_summary falhou: {executive_summary}")
-            executive_summary = self._fallback_executive_summary(query, results, metadata)
+            logger.warning(
+                f"ReportStage: executive_summary falhou: {executive_summary}"
+            )
+            executive_summary = self._fallback_executive_summary(
+                query, results, metadata
+            )
 
         if isinstance(recommendation, Exception):
             logger.warning(f"ReportStage: recommendation falhou: {recommendation}")
@@ -582,7 +614,9 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
             )
         return "\n".join(lines)
 
-    def _format_top_results_with_highlights(self, results: list[SynthesizedResult]) -> str:
+    def _format_top_results_with_highlights(
+        self, results: list[SynthesizedResult]
+    ) -> str:
         """Formata os top resultados com highlights para o prompt de recomendação.
 
         Args:
@@ -754,7 +788,9 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
 # ── Factory Function ─────────────────────────────────────────────────────────
 
 
-def create_report_stage(llm_client: Any, cache: SharedCache | None = None) -> ReportStage:
+def create_report_stage(
+    llm_client: Any, cache: SharedCache | None = None
+) -> ReportStage:
     """Factory function para criar uma instância do ReportStage.
 
     Args:

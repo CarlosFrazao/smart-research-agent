@@ -187,20 +187,28 @@ class TracingManager:
             from opentelemetry import trace
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import BatchSpanProcessor
-            from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION, DEPLOYMENT_ENVIRONMENT
+            from opentelemetry.sdk.resources import (
+                Resource,
+                SERVICE_NAME,
+                SERVICE_VERSION,
+                DEPLOYMENT_ENVIRONMENT,
+            )
             from opentelemetry.trace import Status, StatusCode
 
             self._otel_available = True
 
             # Resource com metadados do serviço
-            resource = Resource.create({
-                SERVICE_NAME: self._config.service_name,
-                SERVICE_VERSION: self._config.service_version,
-                DEPLOYMENT_ENVIRONMENT: self._config.environment,
-            })
+            resource = Resource.create(
+                {
+                    SERVICE_NAME: self._config.service_name,
+                    SERVICE_VERSION: self._config.service_version,
+                    DEPLOYMENT_ENVIRONMENT: self._config.environment,
+                }
+            )
 
             # Provider com sampler
             from opentelemetry.sdk.trace import sampling
+
             sampler = sampling.TraceIdRatioBased(self._config.sampler_ratio)
             self._provider = TracerProvider(resource=resource, sampler=sampler)
             trace.set_tracer_provider(self._provider)
@@ -241,23 +249,39 @@ class TracingManager:
 
         try:
             if self._config.backend == ExportBackend.OTLP_GRPC:
-                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-                exporter = OTLPSpanExporter(endpoint=self._config.jaeger_endpoint, insecure=True)
+                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                    OTLPSpanExporter,
+                )
+
+                exporter = OTLPSpanExporter(
+                    endpoint=self._config.jaeger_endpoint, insecure=True
+                )
 
             elif self._config.backend == ExportBackend.OTLP_HTTP:
-                from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                    OTLPSpanExporter,
+                )
+
                 exporter = OTLPSpanExporter(endpoint=self._config.jaeger_endpoint)
 
             elif self._config.backend == ExportBackend.ZIPKIN:
                 from opentelemetry.exporter.zipkin.json import ZipkinExporter
-                exporter = ZipkinExporter(endpoint=self._config.zipkin_endpoint or "http://localhost:9411/api/v2/spans")
+
+                exporter = ZipkinExporter(
+                    endpoint=self._config.zipkin_endpoint
+                    or "http://localhost:9411/api/v2/spans"
+                )
 
             elif self._config.backend == ExportBackend.CONSOLE:
                 from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
                 exporter = ConsoleSpanExporter()
 
             else:  # JAEGER ou default
-                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                    OTLPSpanExporter,
+                )
+
                 endpoint = self._config.jaeger_endpoint or "http://localhost:4317"
                 exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
 
@@ -268,7 +292,9 @@ class TracingManager:
             )
 
         except ImportError as e:
-            logger.warning(f"Exportador {self._config.backend.value} não disponível: {e}")
+            logger.warning(
+                f"Exportador {self._config.backend.value} não disponível: {e}"
+            )
             return None
 
     def _setup_structlog_integration(self) -> None:
@@ -276,7 +302,9 @@ class TracingManager:
         try:
             import structlog
 
-            def trace_context_processor(logger: Any, method_name: str, event_dict: dict) -> dict:
+            def trace_context_processor(
+                logger: Any, method_name: str, event_dict: dict
+            ) -> dict:
                 """Processor que injeta trace_id e span_id no dict de log."""
                 trace_id = _current_trace_id.get()
                 span_id = _current_span_id.get()
@@ -297,10 +325,14 @@ class TracingManager:
                 structlog.configure(
                     processors=current_processors + [trace_context_processor]
                 )
-                logger.debug("Structlog integration: trace_context_processor registrado.")
+                logger.debug(
+                    "Structlog integration: trace_context_processor registrado."
+                )
 
         except ImportError:
-            logger.debug("structlog não instalado — integração de tracing em logs ignorada.")
+            logger.debug(
+                "structlog não instalado — integração de tracing em logs ignorada."
+            )
 
     def shutdown(self) -> None:
         """Encerra o TracerProvider e flush de spans pendentes."""
@@ -358,6 +390,7 @@ def get_current_trace_id() -> str | None:
     if TracingManager().is_available:
         try:
             from opentelemetry import trace
+
             span = trace.get_current_span()
             if span and span.get_span_context().is_valid:
                 return format(span.get_span_context().trace_id, "032x")
@@ -371,6 +404,7 @@ def get_current_span_id() -> str | None:
     if TracingManager().is_available:
         try:
             from opentelemetry import trace
+
             span = trace.get_current_span()
             if span and span.get_span_context().is_valid:
                 return format(span.get_span_context().span_id, "016x")
@@ -410,6 +444,7 @@ def trace_span(
         async def search(self, query: str) -> list[SearchResult]:
             ...
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         span_name = name or f"{func.__module__}.{func.__qualname__}"
         attrs = attributes or {}
@@ -468,6 +503,7 @@ def trace_span(
                 manager._fallback_spans.append(span_ctx)
 
                 import time
+
                 span_ctx.start_time = time.monotonic()
                 try:
                     result = await func(*args, **kwargs)
@@ -481,6 +517,7 @@ def trace_span(
                     span_ctx.end_time = time.monotonic()
 
         return wrapper
+
     return decorator
 
 
@@ -537,6 +574,7 @@ def trace_block(
         manager._fallback_spans.append(span_ctx)
 
         import time
+
         span_ctx.start_time = time.monotonic()
         try:
             yield span_ctx
@@ -557,6 +595,7 @@ def _map_span_kind(kind: SpanKind) -> Any:
     if not TracingManager().is_available:
         return None
     from opentelemetry.trace import SpanKind as OTelSpanKind
+
     mapping = {
         SpanKind.INTERNAL: OTelSpanKind.INTERNAL,
         SpanKind.SERVER: OTelSpanKind.SERVER,
@@ -587,10 +626,13 @@ def _sanitize_attributes(attrs: dict[str, Any]) -> dict[str, Any]:
 
 def trace_searcher(name: str):
     """Decorator especializado para searchers (CLIENT span + correlation ID)."""
-    return trace_span(name=name, kind=SpanKind.CLIENT, attributes={"component": "searcher"})
+    return trace_span(
+        name=name, kind=SpanKind.CLIENT, attributes={"component": "searcher"}
+    )
 
 
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def trace_llm(name: str = "llm.completion", *args, **kwargs):
@@ -603,10 +645,12 @@ async def trace_llm(name: str = "llm.completion", *args, **kwargs):
         "component": "llm",
         "llm.provider": str(provider),
         "llm.model": str(model),
-        "llm.task_type": str(task_type)
+        "llm.task_type": str(task_type),
     }
 
-    with trace_block(name=f"llm.{task_type}", kind=SpanKind.CLIENT, attributes=attributes) as span:
+    with trace_block(
+        name=f"llm.{task_type}", kind=SpanKind.CLIENT, attributes=attributes
+    ) as span:
         yield span
 
 
@@ -624,6 +668,7 @@ trace_llm_call = trace_llm
 
 from contextlib import asynccontextmanager
 
+
 @asynccontextmanager
 async def trace_async_span(
     name: str,
@@ -639,3 +684,43 @@ def ensure_correlation_id() -> str:
     return get_correlation_id()
 
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+class CorrelationIdMiddleware(BaseHTTPMiddleware):
+    """Middleware Starlette para injetar e propagar Correlation ID (X-Request-ID)."""
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        header_name = "X-Request-ID"
+        correlation_id = request.headers.get(header_name) or request.headers.get("X-Correlation-ID")
+        if not correlation_id:
+            correlation_id = str(uuid.uuid4())
+
+        token = _correlation_id.set(correlation_id)
+        try:
+            response = await call_next(request)
+            response.headers[header_name] = correlation_id
+            return response
+        finally:
+            _correlation_id.reset(token)
+
+
+def setup_tracing(
+    service_name: str = "smart-research-agent",
+    otlp_endpoint: str | None = None,
+    console_export: bool = False,
+) -> bool:
+    """Configura e inicializa o tracing distribuído (OpenTelemetry)."""
+    backend = ExportBackend.CONSOLE if console_export else ExportBackend.OTLP_HTTP
+    if otlp_endpoint and otlp_endpoint.startswith("grpc://"):
+        backend = ExportBackend.OTLP_GRPC
+
+    config = TracingConfig(
+        service_name=service_name,
+        jaeger_endpoint=otlp_endpoint,
+        backend=backend,
+        enabled=True,
+    )
+    manager = TracingManager(config)
+    return manager.init()

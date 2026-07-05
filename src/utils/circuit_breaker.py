@@ -25,14 +25,21 @@ logger = logging.getLogger("utils.circuit_breaker")
 
 
 class CircuitState(str, Enum):
-    CLOSED = "closed"      # Operação normal
-    OPEN = "open"          # Desligado — rejeita chamadas rápido
+    CLOSED = "closed"  # Operação normal
+    OPEN = "open"  # Desligado — rejeita chamadas rápido
     HALF_OPEN = "half_open"  # Testando se o serviço se recuperou
 
 
 class CircuitBreakerOpen(Exception):
     """Circuit breaker está aberto — serviço temporariamente indisponível."""
-    def __init__(self, message: str = "Circuit Breaker OPEN", name: str | None = None, remaining: float | None = None, state: Any = None):
+
+    def __init__(
+        self,
+        message: str = "Circuit Breaker OPEN",
+        name: str | None = None,
+        remaining: float | None = None,
+        state: Any = None,
+    ):
         super().__init__(message)
         self.name = name
         self.remaining = remaining
@@ -42,18 +49,22 @@ class CircuitBreakerOpen(Exception):
 @dataclass
 class CircuitBreakerConfig:
     """Configuração operacional de um Circuit Breaker."""
+
     name: str
-    failure_threshold: int = 3          # Falhas consecutivas para abrir
-    recovery_timeout: float = 60.0       # Timeout inicial de recuperação (segundos)
-    recovery_timeout_max: float = 300.0   # Timeout de recuperação máximo com backoff
-    half_open_max_calls: int = 1        # Quantidade de testes permitidos em HALF_OPEN
-    backoff_factor: float = 2.0         # Fator multiplicador do backoff exponencial
-    jitter: bool = True                  # Adiciona ruído aleatório ao timeout para evitar thundering herd
+    failure_threshold: int = 3  # Falhas consecutivas para abrir
+    recovery_timeout: float = 60.0  # Timeout inicial de recuperação (segundos)
+    recovery_timeout_max: float = 300.0  # Timeout de recuperação máximo com backoff
+    half_open_max_calls: int = 1  # Quantidade de testes permitidos em HALF_OPEN
+    backoff_factor: float = 2.0  # Fator multiplicador do backoff exponencial
+    jitter: bool = (
+        True  # Adiciona ruído aleatório ao timeout para evitar thundering herd
+    )
 
 
 @dataclass
 class CircuitMetrics:
     """Métricas operacionais e telemetria do Circuit Breaker."""
+
     total_calls: int = 0
     total_failures: int = 0
     total_successes: int = 0
@@ -163,7 +174,9 @@ class CircuitBreaker:
             return self.cfg.recovery_timeout
 
         # Backoff exponencial: base * (factor ^ consecutive_opens)
-        timeout = self.cfg.recovery_timeout * (self.cfg.backoff_factor ** (self._consecutive_opens - 1))
+        timeout = self.cfg.recovery_timeout * (
+            self.cfg.backoff_factor ** (self._consecutive_opens - 1)
+        )
         timeout = min(timeout, self.cfg.recovery_timeout_max)
 
         # Adiciona Jitter (ruído aleatório de +/- 10% do valor)
@@ -250,7 +263,9 @@ class CircuitBreaker:
             self._state == CircuitState.CLOSED
             and self.metrics_data.consecutive_failures >= self.cfg.failure_threshold
         ):
-            self._transition_to(CircuitState.OPEN, f"Failure threshold reached: {error}")
+            self._transition_to(
+                CircuitState.OPEN, f"Failure threshold reached: {error}"
+            )
 
     def reset(self) -> None:
         """Reseta completamente o estado e as métricas do breaker."""
@@ -270,11 +285,17 @@ class CircuitBreaker:
 
     def _check_and_update_state(self) -> None:
         """Atualiza o estado baseado em timeouts expirados."""
-        if self._state == CircuitState.OPEN and self.metrics_data.last_failure_time is not None:
+        if (
+            self._state == CircuitState.OPEN
+            and self.metrics_data.last_failure_time is not None
+        ):
             elapsed = time.time() - self.metrics_data.last_failure_time
             timeout = self.recovery_timeout
             if elapsed >= timeout:
-                self._transition_to(CircuitState.HALF_OPEN, f"Recovery timeout expired ({elapsed:.1f}s >= {timeout:.1f}s)")
+                self._transition_to(
+                    CircuitState.HALF_OPEN,
+                    f"Recovery timeout expired ({elapsed:.1f}s >= {timeout:.1f}s)",
+                )
 
     def _transition_to(self, new_state: CircuitState, reason: str) -> None:
         if self._state == new_state:
@@ -290,12 +311,14 @@ class CircuitBreaker:
             self.metrics_data.total_calls = 0
             self.metrics_data.total_rejects = 0
 
-        self.metrics_data.state_transitions.append({
-            "from": old_state.value,
-            "to": new_state.value,
-            "timestamp": timestamp,
-            "reason": reason
-        })
+        self.metrics_data.state_transitions.append(
+            {
+                "from": old_state.value,
+                "to": new_state.value,
+                "timestamp": timestamp,
+                "reason": reason,
+            }
+        )
 
         logger.info(
             f"CircuitBreaker [{self.name}]: {old_state.value} → {new_state.value} "
@@ -351,9 +374,10 @@ class CircuitBreaker:
 
 # ── Registry Centralizado Async-Safe ────────────────────────────────────────
 
+
 class CircuitBreakerRegistry:
     """Registro thread-safe/async-safe de circuit breakers por source."""
-    
+
     _breakers: dict[str, CircuitBreaker] = {}
     _lock = asyncio.Lock()
 
@@ -361,18 +385,24 @@ class CircuitBreakerRegistry:
     default_failure_threshold: int = 3
     default_recovery_timeout: float = 300.0
 
-    def __init__(self, default_failure_threshold: int = 5, default_recovery_timeout: float = 60.0):
+    def __init__(
+        self, default_failure_threshold: int = 5, default_recovery_timeout: float = 60.0
+    ):
         # Atualiza os defaults de classe na instanciação
         CircuitBreakerRegistry.default_failure_threshold = default_failure_threshold
         CircuitBreakerRegistry.default_recovery_timeout = default_recovery_timeout
 
     @classmethod
-    async def get_or_create(cls, source_name: str, config: CircuitBreakerConfig | None = None, **kwargs) -> CircuitBreaker:
+    async def get_or_create(
+        cls, source_name: str, config: CircuitBreakerConfig | None = None, **kwargs
+    ) -> CircuitBreaker:
         """Obtém ou cria um breaker de forma assíncrona (compatibilidade com APISearcher)."""
         return await cls.get_async(source_name, config=config, **kwargs)
 
     @classmethod
-    async def get_async(cls, source_name: str, config: CircuitBreakerConfig | None = None, **kwargs) -> CircuitBreaker:
+    async def get_async(
+        cls, source_name: str, config: CircuitBreakerConfig | None = None, **kwargs
+    ) -> CircuitBreaker:
         """Obtém ou cria um breaker de forma assíncrona protegida por Lock."""
         async with cls._lock:
             if source_name not in cls._breakers:
@@ -426,7 +456,9 @@ class CircuitBreakerRegistry:
     @classmethod
     def open_circuits(cls) -> list[str]:
         """Retorna nomes de fontes cujos circuitos estão OPEN."""
-        return [name for name, b in cls._breakers.items() if b.state == CircuitState.OPEN]
+        return [
+            name for name, b in cls._breakers.items() if b.state == CircuitState.OPEN
+        ]
 
 
 # Registry padrão global
@@ -440,7 +472,10 @@ async def get_default_registry() -> type[CircuitBreakerRegistry]:
 
 # ── Decorator de Execução Protegida ─────────────────────────────────────────
 
-def with_circuit_breaker(name: str, config: CircuitBreakerConfig | None = None, **cb_kwargs):
+
+def with_circuit_breaker(
+    name: str, config: CircuitBreakerConfig | None = None, **cb_kwargs
+):
     """Decorator assíncrono para envolver métodos de busca com o Circuit Breaker.
 
     Uso:
@@ -449,11 +484,14 @@ def with_circuit_breaker(name: str, config: CircuitBreakerConfig | None = None, 
             async def search(self, query: str) -> list[SearchResult]:
                 ...
     """
+
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
             # Obtém o breaker de forma assíncrona e executa a chamada
             breaker = CircuitBreakerRegistry.get(name, **cb_kwargs)
             return await breaker.call(func, *args, **kwargs)
+
         return wrapper
+
     return decorator

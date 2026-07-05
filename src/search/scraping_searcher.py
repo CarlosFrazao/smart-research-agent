@@ -28,13 +28,16 @@ import asyncio
 import logging
 import time
 from abc import abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from src.search.base_searcher import BaseSearcher
 from src.types import SearchResult
-from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen, CircuitBreakerRegistry
+from src.utils.circuit_breaker import (
+    CircuitBreakerOpen,
+    CircuitBreakerRegistry,
+)
 from src.utils.retry import retry_call, RetryResult
 
 logger = logging.getLogger(__name__)
@@ -49,6 +52,7 @@ DEFAULT_CASCADE_ORDER: Tuple[str, ...] = ("firecrawl", "spider", "steel", "jina"
 
 
 # ── Configuração ────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ScrapingConfig:
@@ -102,6 +106,7 @@ class ScrapeAttempt:
 
 # ── ScrapingSearcher ────────────────────────────────────────────────────────
 
+
 class ScrapingSearcher(BaseSearcher):
     """Classe base intermediária para searchers de scraping com cascade fallback.
 
@@ -151,8 +156,12 @@ class ScrapingSearcher(BaseSearcher):
         return ScrapingConfig(
             timeout=config.get("timeout", DEFAULT_SCRAPER_TIMEOUT),
             rate_limit_rps=config.get("rate_limit_rps", DEFAULT_RATE_LIMIT_RPS),
-            min_content_length=config.get("min_content_length", DEFAULT_MIN_CONTENT_LENGTH),
-            cascade_order=tuple(config.get("cascade_order", list(DEFAULT_CASCADE_ORDER))),
+            min_content_length=config.get(
+                "min_content_length", DEFAULT_MIN_CONTENT_LENGTH
+            ),
+            cascade_order=tuple(
+                config.get("cascade_order", list(DEFAULT_CASCADE_ORDER))
+            ),
             cache_enabled=config.get("cache_enabled", True),
             cache_ttl_seconds=config.get("cache_ttl_seconds", 3600),
             retry_max_attempts=config.get("retry_max_attempts", 3),
@@ -171,7 +180,9 @@ class ScrapingSearcher(BaseSearcher):
 
     # ── API Pública ─────────────────────────────────────────────────────────
 
-    async def _scrape_url(self, url: str, preferred_scraper: Optional[str] = None) -> Dict[str, Any]:
+    async def _scrape_url(
+        self, url: str, preferred_scraper: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Scrapeia uma URL usando o scraper preferido ou a cascata.
 
         Args:
@@ -248,46 +259,52 @@ class ScrapingSearcher(BaseSearcher):
                 latency_ms = (time.monotonic() - start) * 1000
 
                 if self._is_valid_content(result):
-                    attempts.append(ScrapeAttempt(
-                        scraper_name=scraper_name,
-                        url=url,
-                        success=True,
-                        latency_ms=latency_ms,
-                        content_length=len(result.get("markdown", result.get("content", ""))),
-                    ))
+                    attempts.append(
+                        ScrapeAttempt(
+                            scraper_name=scraper_name,
+                            url=url,
+                            success=True,
+                            latency_ms=latency_ms,
+                            content_length=len(
+                                result.get("markdown", result.get("content", ""))
+                            ),
+                        )
+                    )
                     logger.info(
                         f"Cascade: sucesso com '{scraper_name}' para {url[:60]} "
                         f"({latency_ms:.0f}ms, {attempts[-1].content_length} chars)"
                     )
                     return result, attempts
                 else:
-                    attempts.append(ScrapeAttempt(
-                        scraper_name=scraper_name,
-                        url=url,
-                        success=False,
-                        latency_ms=latency_ms,
-                        content_length=0,
-                        error="Conteúdo muito curto ou vazio",
-                        fallback_triggered=True,
-                    ))
+                    attempts.append(
+                        ScrapeAttempt(
+                            scraper_name=scraper_name,
+                            url=url,
+                            success=False,
+                            latency_ms=latency_ms,
+                            content_length=0,
+                            error="Conteúdo muito curto ou vazio",
+                            fallback_triggered=True,
+                        )
+                    )
                     logger.warning(
                         f"Cascade: '{scraper_name}' retornou conteúdo inválido para {url[:60]}"
                     )
 
             except Exception as e:
                 latency_ms = (time.monotonic() - start) * 1000
-                attempts.append(ScrapeAttempt(
-                    scraper_name=scraper_name,
-                    url=url,
-                    success=False,
-                    latency_ms=latency_ms,
-                    content_length=0,
-                    error=str(e)[:200],
-                    fallback_triggered=True,
-                ))
-                logger.warning(
-                    f"Cascade: '{scraper_name}' falhou para {url[:60]}: {e}"
+                attempts.append(
+                    ScrapeAttempt(
+                        scraper_name=scraper_name,
+                        url=url,
+                        success=False,
+                        latency_ms=latency_ms,
+                        content_length=0,
+                        error=str(e)[:200],
+                        fallback_triggered=True,
+                    )
                 )
+                logger.warning(f"Cascade: '{scraper_name}' falhou para {url[:60]}: {e}")
                 continue
 
         # Todos falharam
@@ -359,7 +376,9 @@ class ScrapingSearcher(BaseSearcher):
         except CircuitBreakerOpen:
             raise ScrapingError(f"Circuit breaker OPEN para '{scraper_name}'") from None
         except asyncio.TimeoutError:
-            raise ScrapingError(f"Timeout em '{scraper_name}' (>{self.scraping_config.timeout}s)")
+            raise ScrapingError(
+                f"Timeout em '{scraper_name}' (>{self.scraping_config.timeout}s)"
+            )
         except Exception as e:
             # Retry com backoff via utilitário retry_call
             try:
@@ -380,7 +399,9 @@ class ScrapingSearcher(BaseSearcher):
 
         Pode ser sobrescrito por subclasses para regras de validação customizadas.
         """
-        content = result.get("markdown", result.get("content", result.get("description", "")))
+        content = result.get(
+            "markdown", result.get("content", result.get("description", ""))
+        )
         if not content or not isinstance(content, str):
             return False
         return len(content.strip()) >= self.scraping_config.min_content_length
@@ -398,7 +419,9 @@ class ScrapingSearcher(BaseSearcher):
             return {
                 "url": raw.get("url", url),
                 "title": raw.get("title", ""),
-                "markdown": raw.get("markdown", raw.get("content", raw.get("text", ""))),
+                "markdown": raw.get(
+                    "markdown", raw.get("content", raw.get("text", ""))
+                ),
                 "metadata": raw.get("metadata", {}),
             }
 
@@ -541,11 +564,14 @@ class ScrapingSearcher(BaseSearcher):
 
 # ── Exceções ────────────────────────────────────────────────────────────────
 
+
 class ScrapingError(Exception):
     """Exceção levantada quando toda a cascata de scraping falha."""
+
     pass
 
 
 class RateLimitExceeded(Exception):
     """Exceção levantada quando o rate limit por domínio é violado."""
+
     pass

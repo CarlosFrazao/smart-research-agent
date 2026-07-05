@@ -25,8 +25,8 @@ from .exceptions import RateLimitExceededError
 
 @dataclass
 class RateLimiterConfig:
-    capacity: int = 10          # tamanho máximo do bucket (burst)
-    refill_rate: float = 1.0    # tokens adicionados por segundo
+    capacity: int = 10  # tamanho máximo do bucket (burst)
+    refill_rate: float = 1.0  # tokens adicionados por segundo
 
 
 class RateLimiter:

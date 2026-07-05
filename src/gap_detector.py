@@ -21,7 +21,7 @@ atacam exatamente isso:
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from src.clients.llm_client import LLMClient
 from src.types import GapAnalysis, IntentResult, RankedResult

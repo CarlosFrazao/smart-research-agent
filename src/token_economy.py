@@ -39,6 +39,12 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
     "claude-opus-4": {"input": 0.015, "output": 0.075},
     "claude-sonnet-3.5": {"input": 0.003, "output": 0.015},
     "claude-haiku-3.5": {"input": 0.0008, "output": 0.004},
+    "claude-3-opus-20240229": {"input": 0.015, "output": 0.075},
+    "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
+    "claude-3-5-haiku-20241022": {"input": 0.001, "output": 0.005},
+    "claude-opus-4-5": {"input": 0.015, "output": 0.075},
+    "claude-sonnet-4-5": {"input": 0.003, "output": 0.015},
+    "claude-haiku-4-5": {"input": 0.001, "output": 0.005},
     # Ollama (local — grátis)
     "ollama/llama3": {"input": 0.0, "output": 0.0},
     "ollama/mistral": {"input": 0.0, "output": 0.0},
@@ -61,9 +67,34 @@ def _get_encoding(model: str):
         return None
 
 
+def _is_cjk(char: str) -> bool:
+    """Retorna True se o caractere pertence aos blocos Unicode de CJK."""
+    code = ord(char)
+    return (
+        0x3000 <= code <= 0x303F or  # CJK Symbols and Punctuation
+        0x3040 <= code <= 0x309F or  # Hiragana
+        0x30A0 <= code <= 0x30FF or  # Katakana
+        0x31F0 <= code <= 0x31FF or  # Katakana Phonetic Extensions
+        0x3400 <= code <= 0x4DBF or  # CJK Unified Ideographs Extension A
+        0x4E00 <= code <= 0x9FFF or  # CJK Unified Ideographs
+        0xF900 <= code <= 0xFAFF or  # CJK Compatibility Ideographs
+        0xFF00 <= code <= 0xFFEF     # Halfwidth and Fullwidth Forms
+    )
+
+
 def _count_chars_approx(text: str) -> int:
-    """Estimativa de tokens sem tiktoken: ~4 chars por token."""
-    return max(1, len(text) // 4)
+    """Estimativa de tokens sem tiktoken: ~4 chars por token para latinos, ~1.3 tokens por char para CJK."""
+    if not text:
+        return 1
+    cjk_count = 0
+    other_count = 0
+    for char in text:
+        if _is_cjk(char):
+            cjk_count += 1
+        else:
+            other_count += 1
+    estimated = int(cjk_count * 1.3 + other_count * 0.25)
+    return max(1, estimated)
 
 
 # ── Dataclasses ───────────────────────────────────────────────────────────────

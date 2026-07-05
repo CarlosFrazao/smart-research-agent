@@ -17,15 +17,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from src.pipeline.pipeline import PipelineContext, PipelineStage
 from src.query_validator import QueryValidator
 from src.ranker import QualityRanker
-from src.types import ExpandedQuery, RankedResult, SearchResult, SourcePlan
-from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen, CircuitBreakerRegistry
+from src.types import RankedResult, SearchResult, SourcePlan
+from src.utils.circuit_breaker import (
+    CircuitBreakerOpen,
+    CircuitBreakerRegistry,
+)
 
 logger = logging.getLogger("pipeline.search_stage")
 
@@ -40,7 +43,9 @@ class SearchStageConfig:
 
     # Early termination
     early_termination_enabled: bool = True
-    early_termination_threshold: float = 0.80  # Score mínimo para contar como "alta qualidade"
+    early_termination_threshold: float = (
+        0.80  # Score mínimo para contar como "alta qualidade"
+    )
     early_termination_count: int = 15  # N resultados de alta qualidade para parar
 
     # Circuit breaker
@@ -107,7 +112,9 @@ class SearchStage(PipelineStage):
           6. Atualiza context.raw_results e context.ranked_results.
         """
         if not context.source_plan:
-            raise ValueError("PipelineContext.source_plan é obrigatório para SearchStage")
+            raise ValueError(
+                "PipelineContext.source_plan é obrigatório para SearchStage"
+            )
         if not context.intent:
             raise ValueError("PipelineContext.intent é obrigatório para SearchStage")
 
@@ -202,7 +209,9 @@ class SearchStage(PipelineStage):
                         logger.warning(f"Erro ao ler cache para {cache_key}: {e}")
 
                 task = asyncio.create_task(
-                    self._search_with_protection(searcher, source_name, eq.query, intent.domain.value),
+                    self._search_with_protection(
+                        searcher, source_name, eq.query, intent.domain.value
+                    ),
                     name=f"{source_name}:{eq.query[:30]}",
                 )
                 tasks.append(task)
@@ -227,7 +236,9 @@ class SearchStage(PipelineStage):
                 timeout=self.config.global_timeout,
             )
             if not done:
-                logger.warning("SearchStage: timeout global atingido, cancelando pendentes")
+                logger.warning(
+                    "SearchStage: timeout global atingido, cancelando pendentes"
+                )
                 break
 
             for task in done:
@@ -242,9 +253,15 @@ class SearchStage(PipelineStage):
                         # Early termination check
                         if self.config.early_termination_enabled:
                             for r in task_results:
-                                if getattr(r, "confidence_score", 0.0) >= self.config.early_termination_threshold:
+                                if (
+                                    getattr(r, "confidence_score", 0.0)
+                                    >= self.config.early_termination_threshold
+                                ):
                                     self._high_quality_count += 1
-                            if self._high_quality_count >= self.config.early_termination_count:
+                            if (
+                                self._high_quality_count
+                                >= self.config.early_termination_count
+                            ):
                                 logger.info(
                                     f"Early termination: {self._high_quality_count} resultados "
                                     f"de alta qualidade >= {self.config.early_termination_threshold}"
@@ -256,7 +273,9 @@ class SearchStage(PipelineStage):
 
             # Salvaguarda de volume máximo de resultados
             if len(results) >= 50:
-                logger.info(f"Early termination secundário: limite máximo de 50 resultados atingido.")
+                logger.info(
+                    "Early termination secundário: limite máximo de 50 resultados atingido."
+                )
                 self._stop_event.set()
 
             if self._stop_event.is_set():
@@ -317,10 +336,15 @@ class SearchStage(PipelineStage):
                     await self.cache.set(
                         "search",
                         f"{source_name}:{query}",
-                        [r.model_dump() if hasattr(r, "model_dump") else r.__dict__ for r in results],
+                        [
+                            r.model_dump() if hasattr(r, "model_dump") else r.__dict__
+                            for r in results
+                        ],
                     )
                 except Exception as e:
-                    logger.warning(f"Erro ao escrever cache para {source_name}:{query}: {e}")
+                    logger.warning(
+                        f"Erro ao escrever cache para {source_name}:{query}: {e}"
+                    )
             return results
         except asyncio.TimeoutError:
             logger.warning(f"Timeout em {source_name} (>{timeout}s)")
@@ -365,7 +389,9 @@ class SearchStage(PipelineStage):
                                 title=r.get("title", ""),
                                 url=r.get("url", ""),
                                 description=r.get("snippet", ""),
-                                metrics={"source_domain": urlparse(r.get("url", "")).netloc},
+                                metrics={
+                                    "source_domain": urlparse(r.get("url", "")).netloc
+                                },
                                 raw=r,
                             )
                         )
@@ -386,6 +412,7 @@ class SearchStage(PipelineStage):
                     r["fetched_at"] = datetime.fromisoformat(r["fetched_at"])
                 except Exception:
                     from datetime import datetime as _dt
+
                     r["fetched_at"] = _dt.now()
             try:
                 results.append(SearchResult(**r))

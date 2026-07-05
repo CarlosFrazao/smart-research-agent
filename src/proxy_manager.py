@@ -111,7 +111,7 @@ class ProxyManager:
     async def validate_all_proxies(self):
         """Valida proxies em paralelo contra o HTTPBin"""
         sem = asyncio.Semaphore(
-            50
+            20
         )  # Limita concorrência para evitar rate limits locais
         tasks = [self._validate_single(p, sem) for p in self.proxies]
         await asyncio.gather(*tasks)

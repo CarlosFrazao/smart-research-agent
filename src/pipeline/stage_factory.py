@@ -18,8 +18,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Type
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional
 
 from src.pipeline.pipeline import PipelineStage, ResearchPipeline
 
@@ -42,6 +42,7 @@ DEFAULT_STAGE_NAMES: List[str] = [
 
 
 # ── Configuração ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class StageFactoryConfig:
@@ -66,6 +67,7 @@ class StageFactoryConfig:
 
 # ── StageFactory ─────────────────────────────────────────────────────────────
 
+
 class StageFactory:
     """Factory centralizada para criação de PipelineStage com DI.
 
@@ -83,6 +85,7 @@ class StageFactory:
         llm_config = config.get_llm_config()
 
         from src.clients.smart_model_router import get_router
+
         router = None
         if getattr(config, "smart_routing_enabled", True):
             try:
@@ -93,6 +96,7 @@ class StageFactory:
                 pass
 
         from src.clients.llm_client import LLMClient, LLMProvider
+
         orchestrator.llm = LLMClient(
             LLMProvider(config.llm_provider),
             llm_config,
@@ -101,6 +105,7 @@ class StageFactory:
         )
 
         from src.memory.orvix_memory import OrvixMemoryV2
+
         orchestrator.memory = None
         if getattr(config, "memory_enabled", True):
             try:
@@ -111,6 +116,7 @@ class StageFactory:
                 pass
 
         from src.memory.knowledge_graph import KnowledgeGraph
+
         orchestrator.knowledge_graph = KnowledgeGraph(config)
 
         from src.intent_analyzer import IntentAnalyzer
@@ -151,6 +157,7 @@ class StageFactory:
         orchestrator.sanitizer = LLMSanitizer(orchestrator.llm)
 
         from src.search.factory import SearcherFactory
+
         orchestrator.searchers = SearcherFactory.create_searchers(orchestrator)
         orchestrator.cache = Cache(cache_dir=config.cache_dir)
 
@@ -192,7 +199,16 @@ class StageFactory:
             cache=orchestrator.cache,
             config=orchestrator.config,
         )
-        stage_names = ["intent", "expand", "search", "rank", "score", "gap", "synthesize", "report"]
+        stage_names = [
+            "intent",
+            "expand",
+            "search",
+            "rank",
+            "score",
+            "gap",
+            "synthesize",
+            "report",
+        ]
         return factory.create_pipeline(stage_names)
 
     def __init__(
@@ -262,7 +278,9 @@ class StageFactory:
         Raises:
             StageFactoryError: Se o stage não está registrado.
         """
-        use_cache = use_cache if use_cache is not None else self.factory_config.enable_cache
+        use_cache = (
+            use_cache if use_cache is not None else self.factory_config.enable_cache
+        )
         cache_key = self._build_cache_key(stage_name, stage_config)
 
         # 1. Verifica cache
@@ -452,7 +470,7 @@ class StageFactory:
         """Factory para IntentStage."""
         from src.pipeline.stages.intent_stage import IntentStage
         from src.intent_analyzer import IntentAnalyzer
-        
+
         analyzer = IntentAnalyzer(llm_client=self._deps.get("llm_client"))
         return IntentStage(intent_analyzer=analyzer)
 
@@ -460,7 +478,7 @@ class StageFactory:
         """Factory para ExpandStage."""
         from src.pipeline.stages.expand_stage import ExpandStage
         from src.query_expander import QueryExpander
-        
+
         expander = QueryExpander(llm_client=self._deps.get("llm_client"))
         return ExpandStage(query_expander=expander, cache=self._deps.get("cache"))
 
@@ -492,10 +510,10 @@ class StageFactory:
         from src.pipeline.stages.rank_stage import RankStage
         from src.search.semantic_reranker import SemanticReranker
         from src.feedback_store import FeedbackStore
-        
+
         embedding_ranker = SemanticReranker()
         feedback_store = self._deps.get("feedback_store") or FeedbackStore()
-        
+
         return RankStage(
             embedding_ranker=embedding_ranker,
             llm_reranker=self._deps.get("llm_client"),
@@ -505,43 +523,49 @@ class StageFactory:
     def _create_score_stage(self) -> PipelineStage:
         """Factory para ScoreStage."""
         from src.pipeline.stages.score_stage import ScoreStage
+
         return ScoreStage(llm_client=self._deps.get("llm_client"))
 
     def _create_gap_stage(self) -> PipelineStage:
         """Factory para GapFillStage."""
         from src.pipeline.stages import GapFillStage
+
         return GapFillStage()
 
     def _create_synthesize_stage(self) -> PipelineStage:
         """Factory para SynthesizeStage."""
         from src.pipeline.stages.synthesize_stage import SynthesizeStage
         from src.synthesizer import Synthesizer
-        
+
         synthesizer = Synthesizer(llm_client=self._deps.get("llm_client"))
         return SynthesizeStage(synthesizer=synthesizer)
 
     def _create_report_stage(self) -> PipelineStage:
         """Factory para ReportStage."""
         from src.pipeline.stages.report_stage import ReportStage
+
         return ReportStage(
-            llm_client=self._deps.get("llm_client"),
-            cache=self._deps.get("cache")
+            llm_client=self._deps.get("llm_client"), cache=self._deps.get("cache")
         )
 
     def _create_audit_stage(self) -> PipelineStage:
         """Factory para SanitizationStage."""
         from src.pipeline.stages import SanitizationStage
+
         return SanitizationStage()
 
     # ── Helpers internos ────────────────────────────────────────────────────
 
-    def _build_cache_key(self, stage_name: str, stage_config: Optional[Dict[str, Any]]) -> str:
+    def _build_cache_key(
+        self, stage_name: str, stage_config: Optional[Dict[str, Any]]
+    ) -> str:
         """Constrói chave de cache determinística."""
         if self.factory_config.cache_key_strategy == "name_only":
             return stage_name
 
         if stage_config:
             import hashlib
+
             config_str = str(sorted(stage_config.items()))
             config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
             return f"{stage_name}:{config_hash}"
@@ -574,16 +598,20 @@ class StageFactory:
 
 # ── Exceções ───────────────────────────────────────────────────────────────
 
+
 class StageFactoryError(Exception):
     """Erro na criação de stage pela factory."""
+
     pass
 
 
 class StageNotFoundError(StageFactoryError):
     """Stage solicitado não está registrado."""
+
     pass
 
 
 class StageDependencyError(StageFactoryError):
     """Dependência necessária não foi fornecida."""
+
     pass

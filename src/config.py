@@ -69,6 +69,8 @@ class LLMProvider(StrEnum):
     OPENROUTER = "openrouter"
     GROQ = "groq"
     OLLAMA = "ollama"
+    DEEPSEEK = "deepseek"
+    GITHUB_MODELS = "github_models"
 
 
 def _valid_operation_modes() -> tuple[str, ...] | None:
@@ -123,6 +125,10 @@ class Config(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
     ollama_api_key: str | None = None
+
+    github_models_api_key: str | None = None
+    github_models_model: str = "gpt-4o-mini"
+    github_models_base_url: str = "https://models.inference.ai.azure.com"
 
     firecrawl_api_key: str | None = None
     firecrawl_base_url: str | None = None
@@ -264,7 +270,9 @@ class Config(BaseSettings):
     def _validate_log_level(cls, v: str) -> str:
         valid = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         if v.upper() not in valid:
-            raise ValueError(f"log_level='{v}' inválido. Use um de: {', '.join(sorted(valid))}.")
+            raise ValueError(
+                f"log_level='{v}' inválido. Use um de: {', '.join(sorted(valid))}."
+            )
         return v.upper()
 
     @field_validator(
@@ -277,19 +285,40 @@ class Config(BaseSettings):
         "celery_result_backend",
     )
     @classmethod
-    def _validate_required_url(cls, v: str, info) -> str:
-        schemes = ("redis://",) if "celery" in info.field_name else ("http://", "https://")
+    def _validate_required_url(cls, v: str | None, info) -> str | None:
+        if not v or v.strip() == "" or v.strip().lower() == "none":
+            return v
+        schemes = (
+            ("redis://",) if "celery" in info.field_name else ("http://", "https://")
+        )
         if not _looks_like_url(v, schemes):
             raise ValueError(
                 f"{info.field_name}='{v}' deve começar com {' ou '.join(schemes)}."
             )
         return v
 
+    @field_validator("firecrawl_api_key")
+    @classmethod
+    def _validate_firecrawl_api_key(cls, v: str | None) -> str | None:
+        if v in ("fc-placeholder", "fc_placeholder"):
+            return None
+        return v
+
+    @field_validator("memory_db_path")
+    @classmethod
+    def _validate_memory_db_path(cls, v: str) -> str:
+        path = Path(v)
+        if not path.is_absolute():
+            return str(path.resolve().absolute())
+        return v
+
     @field_validator("firecrawl_base_url")
     @classmethod
     def _validate_optional_url(cls, v: str | None) -> str | None:
         if v is not None and not _looks_like_url(v, ("http://", "https://")):
-            raise ValueError(f"firecrawl_base_url='{v}' deve começar com http:// ou https://.")
+            raise ValueError(
+                f"firecrawl_base_url='{v}' deve começar com http:// ou https://."
+            )
         return v
 
     @model_validator(mode="after")
@@ -306,8 +335,13 @@ class Config(BaseSettings):
             LLMProvider.OPENROUTER: self.openrouter_api_key,
             LLMProvider.GEMINI: self.gemini_api_key,
             LLMProvider.GROQ: self.groq_api_key,
+            LLMProvider.DEEPSEEK: self.deepseek_api_key,
+            LLMProvider.GITHUB_MODELS: self.github_models_api_key,
         }
-        if self.llm_provider in key_by_provider and not key_by_provider[self.llm_provider]:
+        if (
+            self.llm_provider in key_by_provider
+            and not key_by_provider[self.llm_provider]
+        ):
             logger.debug(
                 "llm_provider='%s' está ativo mas sua API key não foi configurada.",
                 self.llm_provider,
@@ -336,6 +370,18 @@ class Config(BaseSettings):
             return {"api_key": self.gemini_api_key, "model": self.gemini_model}
         elif self.llm_provider == LLMProvider.GROQ:
             return {"api_key": self.groq_api_key, "model": self.groq_model}
+        elif self.llm_provider == LLMProvider.DEEPSEEK:
+            return {
+                "api_key": self.deepseek_api_key,
+                "model": self.deepseek_model,
+                "base_url": self.deepseek_base_url,
+            }
+        elif self.llm_provider == LLMProvider.GITHUB_MODELS:
+            return {
+                "api_key": self.github_models_api_key,
+                "model": self.github_models_model,
+                "base_url": self.github_models_base_url,
+            }
         elif self.llm_provider == LLMProvider.OLLAMA:
             return {
                 "base_url": self.ollama_base_url,
@@ -359,6 +405,18 @@ class Config(BaseSettings):
             }
         if self.groq_api_key:
             configs["groq"] = {"api_key": self.groq_api_key, "model": self.groq_model}
+        if self.deepseek_api_key:
+            configs["deepseek"] = {
+                "api_key": self.deepseek_api_key,
+                "model": self.deepseek_model,
+                "base_url": self.deepseek_base_url,
+            }
+        if self.github_models_api_key:
+            configs["github_models"] = {
+                "api_key": self.github_models_api_key,
+                "model": self.github_models_model,
+                "base_url": self.github_models_base_url,
+            }
         configs["ollama"] = {
             "base_url": self.ollama_base_url,
             "model": self.ollama_model,
@@ -428,7 +486,10 @@ class ConfigManager:
                 )
                 return self._config
             self._config = new_config
-            logger.info("[ConfigManager] Configuração recarregada a partir de %s", self._env_path)
+            logger.info(
+                "[ConfigManager] Configuração recarregada a partir de %s",
+                self._env_path,
+            )
             for callback in self._reload_callbacks:
                 try:
                     callback(new_config)
@@ -472,7 +533,9 @@ class ConfigManager:
         observer.daemon = True
         observer.start()
         self._observer = observer
-        logger.info("[ConfigManager] Hot-reload ativo, observando '%s'.", self._env_path)
+        logger.info(
+            "[ConfigManager] Hot-reload ativo, observando '%s'.", self._env_path
+        )
 
     def stop(self) -> None:
         """Desliga o observer (chamar no shutdown da aplicação/worker)."""
@@ -566,7 +629,9 @@ class ABTestExperiment:
 
     def __init__(self, name: str, variants: list[ModeVariant]) -> None:
         if not variants:
-            raise ValueError("Um experimento de A/B testing precisa de ao menos uma variante.")
+            raise ValueError(
+                "Um experimento de A/B testing precisa de ao menos uma variante."
+            )
         self.name = name
         self.variants = variants
         self._assignments: dict[str, str] = {}
@@ -577,7 +642,9 @@ class ABTestExperiment:
         with self._lock:
             if subject_id:
                 if subject_id not in self._assignments:
-                    digest = hashlib.sha256(f"{self.name}:{subject_id}".encode()).hexdigest()
+                    digest = hashlib.sha256(
+                        f"{self.name}:{subject_id}".encode()
+                    ).hexdigest()
                     bucket = int(digest, 16) / (16 ** len(digest))
                     self._assignments[subject_id] = self._weighted_pick(bucket)
                 variant = self._assignments[subject_id]
@@ -621,7 +688,9 @@ class ABTestRegistry:
     def assign_mode(self, experiment_name: str, subject_id: str | None = None) -> str:
         experiment = self.get(experiment_name)
         if experiment is None:
-            raise KeyError(f"Experimento de A/B testing '{experiment_name}' não registrado.")
+            raise KeyError(
+                f"Experimento de A/B testing '{experiment_name}' não registrado."
+            )
         return experiment.assign(subject_id)
 
 
@@ -629,7 +698,9 @@ ab_test_registry = ABTestRegistry()
 
 
 @contextmanager
-def config_for_ab_test(experiment_name: str, subject_id: str | None = None) -> Iterator[Config]:
+def config_for_ab_test(
+    experiment_name: str, subject_id: str | None = None
+) -> Iterator[Config]:
     """Sorteia uma variante do experimento e aplica como `operation_mode` via `config_override`.
 
     Exemplo:

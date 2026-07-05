@@ -74,5 +74,5 @@ async def test_api_searcher_circuit_breaker_open():
 
     with pytest.raises(CircuitBreakerOpen):
         await searcher.search("rust")
-        
+
     await searcher.close()

@@ -1,7 +1,7 @@
 # Arquitetura do Smart Research Agent (SRA) v6.0
 
-> **Versão:** 6.0  
-> **Atualizado:** 2026-07-04  
+> **Versão:** 6.0
+> **Atualizado:** 2026-07-04
 > **Status:** Em refatoração (Fase 2 — Pipeline Pattern)
 
 ---
@@ -455,9 +455,9 @@ flowchart TD
 
 ### ADR-001: Pipeline Pattern em vez de God Object
 
-**Status:** ✅ Aprovado  
-**Contexto:** O `Orchestrator` acumulava ~655 linhas violando SRP.  
-**Decisão:** Decompor em `ResearchPipeline` com stages independentes.  
+**Status:** ✅ Aprovado
+**Contexto:** O `Orchestrator` acumulava ~655 linhas violando SRP.
+**Decisão:** Decompor em `ResearchPipeline` com stages independentes.
 **Consequências:**
 - ✅ Testabilidade: cada stage testável isoladamente
 - ✅ Extensibilidade: novos stages sem modificar existentes
@@ -466,9 +466,9 @@ flowchart TD
 
 ### ADR-002: Hybrid Ranking (BM25 + Embeddings + LLM)
 
-**Status:** ✅ Aprovado  
-**Contexto:** Ranking puramente por LLM era caro e lento.  
-**Decisão:** Pipeline de 3 camadas: pre-filter → BM25+embeddings → LLM só no top-K.  
+**Status:** ✅ Aprovado
+**Contexto:** Ranking puramente por LLM era caro e lento.
+**Decisão:** Pipeline de 3 camadas: pre-filter → BM25+embeddings → LLM só no top-K.
 **Consequências:**
 - ✅ Custo: -70% em chamadas LLM de ranking
 - ✅ Latência: pre-filter O(n), BM25 O(n×vocab), LLM só no top-20
@@ -476,9 +476,9 @@ flowchart TD
 
 ### ADR-003: Semantic Cache com Embeddings
 
-**Status:** ✅ Aprovado  
-**Contexto:** Cache key-value não aproveita queries semanticamente similares.  
-**Decisão:** Cache por similaridade de embeddings (threshold 90%) com TTL adaptativo.  
+**Status:** ✅ Aprovado
+**Contexto:** Cache key-value não aproveita queries semanticamente similares.
+**Decisão:** Cache por similaridade de embeddings (threshold 90%) com TTL adaptativo.
 **Consequências:**
 - ✅ Hit rate: +30-40% para queries similares
 - ✅ TTL adaptativo: GitHub 24h, Reddit 1h
@@ -486,9 +486,9 @@ flowchart TD
 
 ### ADR-004: Circuit Breaker por Source
 
-**Status:** ✅ Aprovado  
-**Contexto:** Falhas em APIs externas causavam cascata de timeouts.  
-**Decisão:** Circuit breaker independente por source (GitHub, Reddit, etc.).  
+**Status:** ✅ Aprovado
+**Contexto:** Falhas em APIs externas causavam cascata de timeouts.
+**Decisão:** Circuit breaker independente por source (GitHub, Reddit, etc.).
 **Consequências:**
 - ✅ Resiliência: falha isolada por source
 - ✅ Latência: fail-fast quando circuito aberto
@@ -496,9 +496,9 @@ flowchart TD
 
 ### ADR-005: Async First com Semaphore por Source
 
-**Status:** ✅ Aprovado  
-**Contexto:** `asyncio.gather(*tasks)` sem controle causava rate limits.  
-**Decisão:** Semáforo por source (3-5 concorrentes) + async em todo o pipeline.  
+**Status:** ✅ Aprovado
+**Contexto:** `asyncio.gather(*tasks)` sem controle causava rate limits.
+**Decisão:** Semáforo por source (3-5 concorrentes) + async em todo o pipeline.
 **Consequências:**
 - ✅ Rate limit compliance
 - ✅ Throughput controlado
@@ -506,9 +506,9 @@ flowchart TD
 
 ### ADR-006: Dependency Injection via Container
 
-**Status:** ✅ Aprovado  
-**Contexto:** Variáveis globais (`_orchestrator`, `_deep_researcher`) impediam multi-tenancy.  
-**Decisão:** Container DI com lifecycle (singleton/scoped/transient) + FastAPI app.state.  
+**Status:** ✅ Aprovado
+**Contexto:** Variáveis globais (`_orchestrator`, `_deep_researcher`) impediam multi-tenancy.
+**Decisão:** Container DI com lifecycle (singleton/scoped/transient) + FastAPI app.state.
 **Consequências:**
 - ✅ Multi-tenancy: múltiplas instâncias com configs diferentes
 - ✅ Testabilidade: override de dependências
@@ -517,9 +517,9 @@ flowchart TD
 
 ### ADR-007: Streaming SSE com WebSocket Fallback
 
-**Status:** ✅ Aprovado  
-**Contexto:** UX ruim com polling ou espera síncrona de 2-5min.  
-**Decisão:** SSE nativo com WebSocket fallback para clientes não compatíveis.  
+**Status:** ✅ Aprovado
+**Contexto:** UX ruim com polling ou espera síncrona de 2-5min.
+**Decisão:** SSE nativo com WebSocket fallback para clientes não compatíveis.
 **Consequências:**
 - ✅ UX: progresso em tempo real
 - ✅ Eficiência: conexão persistente, sem polling
@@ -527,9 +527,9 @@ flowchart TD
 
 ### ADR-008: Learned Ranker (LightGBM/XGBoost)
 
-**Status:** 🔄 Em discussão  
-**Contexto:** Heurísticas estáticas não aprendem com feedback do usuário.  
-**Decisão:** Ranker treinado offline com feedback histórico, inferência < 10ms.  
+**Status:** 🔄 Em discussão
+**Contexto:** Heurísticas estáticas não aprendem com feedback do usuário.
+**Decisão:** Ranker treinado offline com feedback histórico, inferência < 10ms.
 **Consequências:**
 - ✅ Qualidade: +20-30% com feedback
 - ✅ Velocidade: inferência rápida

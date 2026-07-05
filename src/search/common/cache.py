@@ -72,7 +72,9 @@ class NamespacedCache:
     async def get(self, raw_key: str) -> Any | None:
         return await self._backend.get(self._key(raw_key))
 
-    async def set(self, raw_key: str, value: Any, ttl_seconds: float | None = None) -> None:
+    async def set(
+        self, raw_key: str, value: Any, ttl_seconds: float | None = None
+    ) -> None:
         await self._backend.set(
             self._key(raw_key), value, ttl_seconds or self.default_ttl
         )
@@ -103,7 +105,9 @@ class CacheRegistry:
         async with cls._lock:
             if namespace not in cls._caches:
                 backend = cls._backend_factory()
-                cls._caches[namespace] = NamespacedCache(namespace, backend, default_ttl)
+                cls._caches[namespace] = NamespacedCache(
+                    namespace, backend, default_ttl
+                )
             return cls._caches[namespace]
 
     @classmethod

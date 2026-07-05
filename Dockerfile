@@ -9,9 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
-# Gera wheels das dependências na pasta /wheels
-RUN pip wheel --wheel-dir=/wheels -e ".[all]" && \
-    pip wheel --wheel-dir=/wheels uvicorn "mcp[fastapi]"
+# Gera wheels das dependências na pasta /wheels (preferindo binários pré-compilados)
+RUN pip wheel --prefer-binary --wheel-dir=/wheels -e ".[all]" && \
+    pip wheel --prefer-binary --wheel-dir=/wheels uvicorn "mcp[fastapi]"
 
 # Stage 2: Runtime image without compilation tools
 FROM python:3.11-slim

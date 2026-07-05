@@ -65,9 +65,7 @@ _CLICKBAIT_PATTERNS = re.compile(
 )
 
 _ABSOLUTE_CLAIM_PATTERNS = re.compile(
-    r"\b(you won\'t believe|shocking|secret|hack|trick|amazing|"
-    r"incredible|unbelievable|mind.blowing|worst|worst|"
-    r"único|definitivo|perfeito|exclusivo)\b",
+    r"\b(worst|best|único|definitivo|perfeito|exclusivo)\b",
     re.IGNORECASE,
 )
 
@@ -129,6 +127,15 @@ class ConfidenceScorer:
     Inspired by Clarity Research anti-hallucination approach:
     every claim should be traceable to real, verifiable evidence.
     """
+
+    @property
+    def current_year(self) -> int:
+        from datetime import UTC, datetime
+        return datetime.now(UTC).year
+
+    @property
+    def _current_year(self) -> int:
+        return self.current_year
 
     async def score_result(self, result: SearchResult) -> SearchResult:
         """Scores a single SearchResult and returns it with confidence fields filled."""
@@ -453,7 +460,9 @@ class ConfidenceScorerV2(ConfidenceScorer):
             confidence = max(0.0, min(1.0, confidence))
             return claim_type, round(confidence, 2)
         except Exception as e:
-            logger.warning(f"Refinamento de claim_type via LLM falhou, mantendo heuristica: {e}")
+            logger.warning(
+                f"Refinamento de claim_type via LLM falhou, mantendo heuristica: {e}"
+            )
             return None
 
     def _calculate_freshness(self, content: str) -> tuple[float, int | None]:
@@ -463,7 +472,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
             return (0.7, None)
 
         most_recent = max(years_found)
-        age = _get_current_year() - most_recent
+        age = self.current_year - most_recent
 
         if age <= 0:
             return (1.0, most_recent)
@@ -499,7 +508,7 @@ class ConfidenceScorerV2(ConfidenceScorer):
                 cleaned_url = url.rstrip(".,;:!?()[]{}")
                 cited.add(cleaned_url)
 
-            cited_internal = cited & all_result_urls - {result.url}
+            cited_internal = (cited & all_result_urls) - {result.url}
             citation_graph[result.url] = cited_internal
 
         circular: dict[str, list[str]] = {}

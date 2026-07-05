@@ -78,6 +78,7 @@ app = FastAPI(
 # Correlation ID por requisição: propaga/gera X-Request-ID, injeta nos logs e
 # spans de tudo o que a requisição disparar downstream.
 from src.monitoring.tracing import CorrelationIdMiddleware
+
 app.add_middleware(CorrelationIdMiddleware)
 
 app.add_middleware(
@@ -123,7 +124,9 @@ class TaskAcceptedResponse(BaseModel):
 
 
 # ─── Núcleo de execução compartilhado ──────────────────────────
-def _build_response(req: ResearchRequest, synthesis: Any, duration: float) -> ResearchResponse:
+def _build_response(
+    req: ResearchRequest, synthesis: Any, duration: float
+) -> ResearchResponse:
     """Monta o payload de resposta padrão a partir do resultado do Orchestrator."""
     return ResearchResponse(
         query=req.query,

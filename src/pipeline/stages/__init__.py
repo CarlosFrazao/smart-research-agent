@@ -16,27 +16,33 @@ from src.pipeline.pipeline import PipelineStage, PipelineContext
 RankingStage = RankStage
 SynthesisStage = SynthesizeStage
 
+
 # Stubs de compatibilidade temporária para o pipeline de 9 estágios legado
 class HealthCheckStage(PipelineStage):
     async def run(self, context: PipelineContext) -> None:
         if hasattr(self.orchestrator, "_health_check"):
             await self.orchestrator._health_check()
 
+
 class PlanningStage(PipelineStage):
     async def run(self, context: PipelineContext) -> None:
         pass
+
 
 class ConflictResolutionStage(PipelineStage):
     async def run(self, context: PipelineContext) -> None:
         pass
 
+
 class GapFillStage(PipelineStage):
     async def run(self, context: PipelineContext) -> None:
         pass
 
+
 class SanitizationStage(PipelineStage):
     async def run(self, context: PipelineContext) -> None:
         pass
+
 
 from src.pipeline.stages.report_stage import ReportStage
 

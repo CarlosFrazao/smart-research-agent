@@ -185,3 +185,36 @@ async def test_proxy_server_authentication():
             )
             is True
         )
+
+
+@pytest.mark.asyncio
+async def test_proxy_manager_best_proxy_latency():
+    manager = ProxyManager(config_dir="non_existent")
+
+    # Criar proxies de teste
+    p_high_lat = Proxy(ip="1.1.1.1", port=80, proxy_type="public")
+    p_high_lat.health_score = 100.0
+    p_high_lat.latency = 500.0
+
+    p_low_lat = Proxy(ip="2.2.2.2", port=80, proxy_type="public")
+    p_low_lat.health_score = 100.0
+    p_low_lat.latency = 50.0
+
+    p_vps = Proxy(ip="3.3.3.3", port=80, proxy_type="vps_ipv6")
+    p_vps.health_score = 100.0
+    p_vps.latency = 200.0
+
+    # Adicionar ao pool
+    manager.proxies = [p_high_lat, p_low_lat]
+
+    # Para proxies apenas públicos, deve escolher o de menor latência (2.2.2.2)
+    best = manager.get_best_proxy("github.com")
+    assert best is not None
+    assert best.ip == "2.2.2.2"
+
+    # Adicionar o VPS proxy. Deve ter prioridade sobre os públicos
+    manager.proxies.append(p_vps)
+    best_vps = manager.get_best_proxy("github.com")
+    assert best_vps is not None
+    assert best_vps.ip == "3.3.3.3"
+

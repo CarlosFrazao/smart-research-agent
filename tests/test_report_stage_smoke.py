@@ -17,17 +17,17 @@ async def test_report_stage_consolidated_success():
     # Mock dos analisadores
     mock_temporal = MagicMock()
     mock_temporal.generate_timeline_section.return_value = "Timeline Markdown"
-    
+
     mock_sentiment = MagicMock()
     mock_sentiment.generate_sentiment_section.return_value = "Sentiment Markdown"
-    
+
     mock_comparator = MagicMock()
     mock_comparator.generate_comparison_section.return_value = "Comparison Markdown"
 
     with patch("src.temporal_analyzer.TemporalAnalyzer", return_value=mock_temporal), \
          patch("src.sentiment_analyzer.SentimentAnalyzer", return_value=mock_sentiment), \
          patch("src.comparator.Comparator", return_value=mock_comparator):
-         
+
         mock_cache = MagicMock()
         mock_cache.get.return_value = None
         stage = ReportStage(llm_client=mock_llm, cache=mock_cache)
@@ -69,6 +69,6 @@ async def test_report_stage_consolidated_success():
     assert "Timeline Markdown" in updated_context.report
     assert "Sentiment Markdown" in updated_context.report
     assert "Comparison Markdown" in updated_context.report
-    
+
     # Verifica se chamou complete de forma consolidada
     mock_llm.complete.assert_called_once()

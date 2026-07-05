@@ -65,7 +65,7 @@ class OperationModes:
             name="guerrilha",
             description="Máxima velocidade — pesquisas rápidas sem deep research. "
             "Ideal para consultas factuais simples com prazo curto.",
-            searchers=["google", "brave", "searxng", "duckduckgo", "serpapi"],
+            searchers=["web", "searxng", "serpapi"],
             scrapers=["firecrawl", "jina", "curl_impersonate", "playwright"],
             confidence_threshold=0.50,
             max_depth=1,
@@ -81,8 +81,7 @@ class OperationModes:
             description="Máxima precisão — auditoria cruzada e verificação de cada claim. "
             "Indicado para pesquisas que exigem alta confiabilidade.",
             searchers=[
-                "google",
-                "brave",
+                "web",
                 "arxiv",
                 "github",
                 "stackoverflow",
@@ -104,7 +103,7 @@ class OperationModes:
             name="radar",
             description="Monitoramento contínuo — alerta quando novas informações surgem. "
             "Focado em trending, lançamentos e notícias recentes.",
-            searchers=["google", "brave", "hackernews", "reddit", "producthunt"],
+            searchers=["web", "hackernews", "reddit", "producthunt"],
             scrapers=["firecrawl", "jina"],
             confidence_threshold=0.60,
             max_depth=1,
@@ -119,7 +118,7 @@ class OperationModes:
             name="arqueologia",
             description="Foco em conteúdo histórico — Wayback Machine, documentação antiga e versões legadas. "
             "Útil para rastrear deprecações e comportamentos históricos.",
-            searchers=["wayback", "github", "stackoverflow", "google"],
+            searchers=["wayback", "github", "stackoverflow", "web"],
             scrapers=["wayback", "firecrawl", "jina"],
             confidence_threshold=0.40,
             max_depth=2,
@@ -139,8 +138,7 @@ class OperationModes:
                 "hackernews",
                 "reddit",
                 "github",
-                "google",
-                "brave",
+                "web",
             ],
             scrapers=["firecrawl", "jina", "scrapingbee"],
             confidence_threshold=0.60,
@@ -157,8 +155,7 @@ class OperationModes:
             description="Modo hardcore — proxies residenciais + móveis, 5-7 scrapers paralelos, "
             "deep research com auditoria iterativa. Cobertura máxima, custo máximo.",
             searchers=[
-                "google",
-                "brave",
+                "web",
                 "searxng",
                 "arxiv",
                 "github",
@@ -166,8 +163,6 @@ class OperationModes:
                 "hackernews",
                 "reddit",
                 "producthunt",
-                "devto",
-                "medium",
                 "serpapi",
             ],
             scrapers=[
@@ -197,8 +192,7 @@ class OperationModes:
             "Um juiz LLM avalia os argumentos e decide o vencedor. "
             "Ideal para questões controversas, comparações e decisões estratégicas.",
             searchers=[
-                "google",
-                "brave",
+                "web",
                 "arxiv",
                 "github",
                 "stackoverflow",
@@ -255,6 +249,7 @@ class OperationModes:
         Heurística simples para casos onde o modo não é especificado pelo usuário.
         """
         q = query.lower()
+        selected = cls.DEFAULT_MODE
 
         if any(
             kw in q
@@ -269,9 +264,9 @@ class OperationModes:
                 "summary",
             ]
         ):
-            return "guerrilha"
+            selected = "guerrilha"
 
-        if any(
+        elif any(
             kw in q
             for kw in [
                 "verificar",
@@ -283,9 +278,9 @@ class OperationModes:
                 "evidencia",
             ]
         ):
-            return "cirurgia"
+            selected = "cirurgia"
 
-        if any(
+        elif any(
             kw in q
             for kw in [
                 "novidade",
@@ -298,9 +293,9 @@ class OperationModes:
                 "news",
             ]
         ):
-            return "radar"
+            selected = "radar"
 
-        if any(
+        elif any(
             kw in q
             for kw in [
                 "histórico",
@@ -312,9 +307,9 @@ class OperationModes:
                 "legacy",
             ]
         ):
-            return "arqueologia"
+            selected = "arqueologia"
 
-        if any(
+        elif any(
             kw in q
             for kw in [
                 "concorrente",
@@ -325,15 +320,21 @@ class OperationModes:
                 "vs",
             ]
         ):
-            return "concorrencia"
+            selected = "concorrencia"
 
-        if any(
+        elif any(
             kw in q
             for kw in ["completo", "exhaustive", "deep", "profundo", "tudo sobre"]
         ):
-            return "black_ops"
+            selected = "black_ops"
 
-        return cls.DEFAULT_MODE
+        if selected not in cls.MODES:
+            logger.warning(
+                f"OperationModes.auto_select selecionou preset inválido '{selected}'. Fallback para '{cls.DEFAULT_MODE}'."
+            )
+            return cls.DEFAULT_MODE
+
+        return selected
 
     @classmethod
     def get_all_descriptions(cls) -> dict[str, str]:

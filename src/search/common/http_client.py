@@ -22,7 +22,9 @@ import httpx
 from .exceptions import UpstreamHTTPError
 
 DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)
-DEFAULT_USER_AGENT = "smart-research-agent/1.0 (+https://github.com/CarlosFrazao/smart-research-agent)"
+DEFAULT_USER_AGENT = (
+    "smart-research-agent/1.0 (+https://github.com/CarlosFrazao/smart-research-agent)"
+)
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 

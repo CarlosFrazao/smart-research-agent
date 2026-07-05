@@ -38,7 +38,17 @@ import asyncio
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Literal, Optional, Union
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Union,
+)
 
 from pydantic import BaseModel, Field
 
@@ -59,12 +69,16 @@ class ProgressEvent(BaseModel):
     total_steps: int = 0
     message: str = ""
     percent: float = Field(0.0, ge=0.0, le=100.0)
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
     @classmethod
-    def progress(cls, task_id: str, step: int, total_steps: int, message: str) -> "ProgressEvent":
+    def progress(
+        cls, task_id: str, step: int, total_steps: int, message: str
+    ) -> "ProgressEvent":
         """Cria um evento de progresso calculando automaticamente o percentual."""
         percent = round((step / total_steps) * 100, 1) if total_steps > 0 else 0.0
         percent = max(0.0, min(100.0, percent))
@@ -78,7 +92,9 @@ class ProgressEvent(BaseModel):
         )
 
     @classmethod
-    def result(cls, task_id: str, data: Dict[str, Any], total_steps: int = 0) -> "ProgressEvent":
+    def result(
+        cls, task_id: str, data: Dict[str, Any], total_steps: int = 0
+    ) -> "ProgressEvent":
         """Cria o evento terminal de sucesso, carregando o payload final."""
         return cls(
             task_id=task_id,
@@ -93,7 +109,9 @@ class ProgressEvent(BaseModel):
     @classmethod
     def failure(cls, task_id: str, error: str) -> "ProgressEvent":
         """Cria o evento terminal de erro."""
-        return cls(task_id=task_id, event="error", message="Falha na tarefa", error=error)
+        return cls(
+            task_id=task_id, event="error", message="Falha na tarefa", error=error
+        )
 
 
 # Assinatura compatível com `Orchestrator.research(progress_callback=...)`.
@@ -195,7 +213,9 @@ class ProgressBroker:
         try:
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=heartbeat_interval)
+                    event = await asyncio.wait_for(
+                        queue.get(), timeout=heartbeat_interval
+                    )
                 except asyncio.TimeoutError:
                     yield ProgressEvent(task_id=task_id, event="heartbeat")
                     continue
@@ -213,7 +233,9 @@ class ProgressBroker:
         heartbeat_interval: float = 15.0,
     ) -> AsyncIterator[str]:
         """Gera o corpo de resposta SSE pronto para `StreamingResponse`."""
-        async for event in self.subscribe(task_id, heartbeat_interval=heartbeat_interval):
+        async for event in self.subscribe(
+            task_id, heartbeat_interval=heartbeat_interval
+        ):
             if event.event == "heartbeat":
                 yield format_sse_comment()
             else:
@@ -253,7 +275,9 @@ def make_progress_callback(
     """
 
     def _callback(step: int, total_steps: int, message: str) -> None:
-        broker.publish(task_id, ProgressEvent.progress(task_id, step, total_steps, message))
+        broker.publish(
+            task_id, ProgressEvent.progress(task_id, step, total_steps, message)
+        )
 
     return _callback
 

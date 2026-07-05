@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 class BudgetExceededError(Exception):
     """Erro lançado quando o budget financeiro de chamadas LLM é ultrapassado."""
+
     pass
 
 
@@ -37,7 +38,9 @@ class BudgetTracker:
                 break
 
         rate = rates[model_key]
-        cost = (input_tokens / 1_000_000.0 * rate["input"]) + (output_tokens / 1_000_000.0 * rate["output"])
+        cost = (input_tokens / 1_000_000.0 * rate["input"]) + (
+            output_tokens / 1_000_000.0 * rate["output"]
+        )
         self.current_cost_usd += cost
 
         logger.debug(

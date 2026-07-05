@@ -9,6 +9,7 @@ from __future__ import annotations
 import streamlit as st
 import asyncio
 import json
+import time
 from datetime import datetime
 
 # Configuração da página Streamlit com estética premium
@@ -183,13 +184,13 @@ with tab_search:
                     "🧬 [Intent Analyzer] Analisando intenção e extraindo conceitos..."
                 )
                 status_bar.progress(25)
-                await asyncio.sleep(1)
+                time.sleep(1)
 
                 status_text.info(
                     "🔍 [Query Expander] Expandindo sub-queries complementares..."
                 )
                 status_bar.progress(50)
-                await asyncio.sleep(1)
+                time.sleep(1)
 
                 status_text.info(
                     "🌐 Executando buscas paralelas e ranqueando fontes..."

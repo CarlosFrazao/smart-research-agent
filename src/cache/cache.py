@@ -71,13 +71,18 @@ class Cache:
         # Cache semântico: resolve hits por similaridade (>= threshold) quando
         # não há match exato de chave. Opcional — degrada graciosamente se
         # sentence-transformers não estiver instalado.
-        self.semantic = SemanticCache(threshold=semantic_threshold) if semantic_enabled else None
+        self.semantic = (
+            SemanticCache(threshold=semantic_threshold) if semantic_enabled else None
+        )
 
         # Cache warming: contabiliza acessos por chave para priorizar
         # reaquecimento e estender o TTL de queries populares.
         self.warm_threshold = warm_threshold
         self._access_counts: dict[str, int] = {}
-        self._key_meta: dict[str, dict[str, Any]] = {}  # key -> {filename, prefix, ttl, query}
+        self._key_meta: dict[
+            str, dict[str, Any]
+        ] = {}  # key -> {filename, prefix, ttl, query}
+        self._lock = asyncio.Lock()
 
         if redis_url:
             try:
@@ -133,11 +138,16 @@ class Cache:
             except Exception as e:
                 logger.warning(f"Redis get falhou: {e}")
 
-        cached = self.memory.get(key)
+        async with self._lock:
+            cached = self.memory.get(key)
         if cached:
             expires = datetime.fromisoformat(cached["expires"])
-            expires_val = expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
-            now_val = datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            expires_val = (
+                expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
+            )
+            now_val = (
+                datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            )
             if expires_val > now_val:
                 return cached["value"]
             await self._delete_raw(key, filename)
@@ -153,13 +163,18 @@ class Cache:
             data = json.loads(decompressed)
 
             expires = datetime.fromisoformat(data["expires"])
-            expires_val = expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
-            now_val = datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            expires_val = (
+                expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
+            )
+            now_val = (
+                datetime.now(UTC) if expires_val.tzinfo is not None else datetime.now()
+            )
             if expires_val < now_val:
                 await asyncio.to_thread(path.unlink, missing_ok=True)
                 return None
 
-            self.memory[key] = data
+            async with self._lock:
+                self.memory[key] = data
             return data["value"]
         except Exception as e:
             logger.warning(f"Erro ao ler cache local de {path}: {e}")
@@ -179,7 +194,8 @@ class Cache:
             except Exception as e:
                 logger.warning(f"Redis set falhou: {e}")
 
-        self.memory[key] = data
+        async with self._lock:
+            self.memory[key] = data
 
         path = self.cache_dir / filename
         try:
@@ -195,7 +211,8 @@ class Cache:
                 await self.redis.delete(f"sra:{key}")
             except Exception:
                 pass
-        self.memory.pop(key, None)
+        async with self._lock:
+            self.memory.pop(key, None)
         path = self.cache_dir / filename
         if path.exists():
             try:
@@ -203,7 +220,9 @@ class Cache:
             except Exception:
                 pass
 
-    async def _index_semantic(self, query_text: str, key: str, prefix: str | None) -> None:
+    async def _index_semantic(
+        self, query_text: str, key: str, prefix: str | None
+    ) -> None:
         try:
             await asyncio.to_thread(self.semantic.index, query_text, key, prefix)
         except Exception as e:
@@ -240,7 +259,9 @@ class Cache:
                 matched_key, score = match
                 meta = self._key_meta.get(matched_key)
                 if meta is not None:
-                    semantic_value = await self._read_tiers(matched_key, meta["filename"])
+                    semantic_value = await self._read_tiers(
+                        matched_key, meta["filename"]
+                    )
                     if semantic_value is not None:
                         logger.debug(
                             f"Cache HIT semântico ({score:.2%}): "
@@ -280,7 +301,11 @@ class Cache:
             query_text = str(query_or_value)
             prefix = prefix_or_key
 
-        ttl = ttl_seconds or kwargs.get("ttl") or self.TTL_STRATEGIES.get(ttl_bucket, self.TTL_STRATEGIES["default"])
+        ttl = (
+            ttl_seconds
+            or kwargs.get("ttl")
+            or self.TTL_STRATEGIES.get(ttl_bucket, self.TTL_STRATEGIES["default"])
+        )
 
         # Cache warming: queries que já bateram no threshold de popularidade
         # ganham TTL estendido (2x, até MAX_WARM_TTL) — reduz a chance de
@@ -315,13 +340,16 @@ class Cache:
 
     async def invalidate(self, prefix: str) -> None:
         # Invalida memória + rastreamento de acesso/semântica
-        keys_to_del = [k for k in self.memory if k.startswith(f"{prefix}:") or k == prefix]
-        for k in keys_to_del:
-            self.memory.pop(k, None)
-            self._access_counts.pop(k, None)
-            self._key_meta.pop(k, None)
-            if self.semantic is not None:
-                self.semantic.remove(k)
+        async with self._lock:
+            keys_to_del = [
+                k for k in self.memory if k.startswith(f"{prefix}:") or k == prefix
+            ]
+            for k in keys_to_del:
+                self.memory.pop(k, None)
+                self._access_counts.pop(k, None)
+                self._key_meta.pop(k, None)
+                if self.semantic is not None:
+                    self.semantic.remove(k)
 
         # Invalida Redis se disponível
         if self.redis:
@@ -385,7 +413,9 @@ class Cache:
                 continue
             if fresh_value is None:
                 continue
-            ttl = min(meta.get("ttl") or self.TTL_STRATEGIES["default"], self.MAX_WARM_TTL)
+            ttl = min(
+                meta.get("ttl") or self.TTL_STRATEGIES["default"], self.MAX_WARM_TTL
+            )
             await self._write_tiers(key, meta["filename"], fresh_value, ttl)
             warmed.append(key)
         return warmed
@@ -393,4 +423,6 @@ class Cache:
     def popular_queries(self, top_n: int = 10) -> list[tuple[str, int]]:
         """Lista as `top_n` chaves mais acessadas — usado para decidir o que reaquecer
         ou para observabilidade (ex: expor em /health ou métricas)."""
-        return sorted(self._access_counts.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+        return sorted(self._access_counts.items(), key=lambda kv: kv[1], reverse=True)[
+            :top_n
+        ]

@@ -8,6 +8,37 @@ import logging
 import os
 from typing import Any
 
+from src.search.arxiv_searcher import ArxivSearcher
+from src.search.awesome_searcher import AwesomeSearcher
+from src.search.github_searcher import GitHubSearcher
+from src.search.hn_searcher import HNSearcher
+from src.search.reddit_searcher import RedditSearcher
+from src.search.rss_searcher import RSSSearcher
+from src.search.searxng_searcher import SearXNGSearcher
+from src.search.stackoverflow_searcher import StackOverflowSearcher
+from src.search.wayback_searcher import WaybackSearcher
+from src.search.web_searcher import WebSearcher
+from src.search.youtube_searcher import YouTubeSearcher
+from src.search.semantic_scholar_searcher import SemanticScholarSearcher
+from src.search.pubmed_searcher import PubMedSearcher
+from src.search.jina_searcher import JinaSearcher
+from src.search.firecrawl_searcher import FirecrawlSearcher
+from src.search.spider_searcher import SpiderSearcher
+from src.search.steel_searcher import SteelSearcher
+from src.search.serpapi_searcher import SerpAPISearcher
+
+try:
+    from src.search.producthunt_searcher import ProductHuntSearcher
+except ImportError:
+    ProductHuntSearcher = None
+
+try:
+    from src.anti_blocking.residential_proxy import ResidentialProxyProvider
+    from src.search.playwright_searcher import PlaywrightSearcher
+except ImportError:
+    ResidentialProxyProvider = None
+    PlaywrightSearcher = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,22 +78,6 @@ class SearcherFactory:
             "steel_api_key": orchestrator.config.steel_api_key,
             "steel_base_url": orchestrator.config.steel_base_url,
         }
-
-        # Lazy imports dos searchers para evitar dependências circulares e acelerar o boot
-        from src.search.arxiv_searcher import ArxivSearcher
-        from src.search.awesome_searcher import AwesomeSearcher
-        from src.search.github_searcher import GitHubSearcher
-        from src.search.hn_searcher import HNSearcher
-        from src.search.reddit_searcher import RedditSearcher
-        from src.search.rss_searcher import RSSSearcher
-        from src.search.searxng_searcher import SearXNGSearcher
-        from src.search.stackoverflow_searcher import StackOverflowSearcher
-        from src.search.wayback_searcher import WaybackSearcher
-        from src.search.web_searcher import WebSearcher
-        from src.search.youtube_searcher import YouTubeSearcher
-        from src.search.semantic_scholar_searcher import SemanticScholarSearcher
-        from src.search.pubmed_searcher import PubMedSearcher
-
         searxng_cfg = {
             **cfg,
             "searxng_url": os.getenv("SEARXNG_URL", "http://127.0.0.1:3023"),
@@ -84,20 +99,14 @@ class SearcherFactory:
         }
 
         # ProductHunt se disponível
-        try:
-            from src.search.producthunt_searcher import ProductHuntSearcher
-
+        if ProductHuntSearcher is not None:
             searchers["producthunt"] = ProductHuntSearcher(cfg)
-        except ImportError:
-            logger.warning("ProductHuntSearcher não pôde ser importado")
 
         # Firecrawl / Jina
         if getattr(orchestrator.config, "host_mode", False):
             logger.info(
                 "HOST MODE ativo — Firecrawl substituido por JinaSearcher como fallback"
             )
-            from src.search.jina_searcher import JinaSearcher
-
             jina_cfg = {
                 **cfg,
                 "jina_base_url": getattr(
@@ -106,20 +115,14 @@ class SearcherFactory:
             }
             searchers["firecrawl"] = JinaSearcher(jina_cfg)
         else:
-            from src.search.firecrawl_searcher import FirecrawlSearcher
-
             searchers["firecrawl"] = FirecrawlSearcher(cfg)
 
         # Spider
         if orchestrator.config.spider_enabled:
-            from src.search.spider_searcher import SpiderSearcher
-
             searchers["spider"] = SpiderSearcher(cfg)
 
         # Steel
         if orchestrator.config.steel_enabled:
-            from src.search.steel_searcher import SteelSearcher
-
             searchers["steel"] = SteelSearcher(cfg)
 
         # Semantic Scholar
@@ -152,12 +155,9 @@ class SearcherFactory:
         searchers["youtube"] = youtube
 
         # Playwright
-        if getattr(orchestrator.config, "playwright_enabled", False):
-            from src.anti_blocking.residential_proxy import ResidentialProxyProvider
-            from src.search.playwright_searcher import PlaywrightSearcher
-
+        if getattr(orchestrator.config, "playwright_enabled", False) and PlaywrightSearcher is not None:
             proxy_url = None
-            if getattr(orchestrator.config, "residential_proxy_provider", None):
+            if getattr(orchestrator.config, "residential_proxy_provider", None) and ResidentialProxyProvider is not None:
                 try:
                     prov = ResidentialProxyProvider(
                         provider=orchestrator.config.residential_proxy_provider,
@@ -181,8 +181,6 @@ class SearcherFactory:
         serpapi_key = getattr(orchestrator.config, "serpapi_api_key", None)
         serpapi_enabled = getattr(orchestrator.config, "serpapi_enabled", True)
         if serpapi_enabled and serpapi_key:
-            from src.search.serpapi_searcher import SerpAPISearcher
-
             searchers["serpapi"] = SerpAPISearcher(api_key=serpapi_key)
             logger.info("SerpAPISearcher registrado como fallback de último recurso")
 

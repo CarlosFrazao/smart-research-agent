@@ -52,6 +52,22 @@ Notas de compatibilidade (decisões deliberadas, não omissões):
   validação aqui não pega nenhum bug real, mas adiciona um ponto de falha
   tardio e caro caso o enum `Domain` ganhe/perca valores no futuro.
 """
+# HACK: Evita conflito de shadowing com o módulo 'types' da standard library.
+# Como a pasta 'src' está no sys.path (ex: devido a instalação editável do setuptools),
+# qualquer 'import types' feito por bibliotecas padrão (ex: enum, functools)
+# tenta carregar este arquivo (src/types.py) como o módulo 'types' global, gerando import circular.
+# Para evitar isso, removemos temporariamente 'src' do sys.path para forçar a carga do 'types' real,
+# salvando-o em sys.modules['types'].
+import sys
+if 'types' not in sys.modules or not hasattr(sys.modules['types'], 'MappingProxyType'):
+    import os
+    saved_path = list(sys.path)
+    sys.path = [p for p in sys.path if not p.endswith('src') and p != os.path.abspath('src')]
+    if 'types' in sys.modules:
+        del sys.modules['types']
+    import types as _std_types
+    sys.modules['types'] = _std_types
+    sys.path = saved_path
 
 from datetime import datetime
 from enum import StrEnum
@@ -230,7 +246,7 @@ class RankedResult(SearchResult):
     # texto (``misinformation_reason``) nesse dicionário. Dataclasses não
     # validam tipos em runtime, então isso nunca foi detectado; com Pydantic
     # o tipo precisa refletir a realidade para não rejeitar dados válidos.
-    score_breakdown: dict[str, float | str] = Field(default_factory=dict)
+    score_breakdown: dict[str, float | str | None] = Field(default_factory=dict)
 
 
 class SourcePlan(SRAModel):

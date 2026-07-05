@@ -22,10 +22,10 @@ async def test_streaming_manager_sse_research():
 
     # Devem ter sido gerados no mínimo os eventos CONNECTED e COMPLETE
     assert len(events) >= 2
-    
+
     # Valida presença das strings SSE no formato "data: {...}\n\n"
     assert events[0].startswith("data: ")
     assert events[-1].startswith("data: ")
-    
+
     assert "connected" in events[0]
     assert "complete" in events[-1]

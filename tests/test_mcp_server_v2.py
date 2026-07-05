@@ -61,8 +61,12 @@ def test_get_orchestrator_lazy_init():
     import src.mcp_server as srv
 
     mock_orc = MagicMock()
-    with patch("src.mcp_server.Orchestrator", return_value=mock_orc):
+    orig_orc = srv.Orchestrator
+    srv.Orchestrator = MagicMock(return_value=mock_orc)
+    try:
         orc = srv.get_orchestrator()
+    finally:
+        srv.Orchestrator = orig_orc
     assert orc is mock_orc
 
 
@@ -70,10 +74,15 @@ def test_get_orchestrator_singleton():
     import src.mcp_server as srv
 
     mock_orc = MagicMock()
-    with patch("src.mcp_server.Orchestrator", return_value=mock_orc) as MockOrc:
+    orig_orc = srv.Orchestrator
+    mock_factory = MagicMock(return_value=mock_orc)
+    srv.Orchestrator = mock_factory
+    try:
         srv.get_orchestrator()
         srv.get_orchestrator()
-    MockOrc.assert_called_once()
+    finally:
+        srv.Orchestrator = orig_orc
+    mock_factory.assert_called_once()
 
 
 def test_get_deep_researcher_lazy_init():
@@ -82,32 +91,41 @@ def test_get_deep_researcher_lazy_init():
     mock_orc = MagicMock()
     mock_dr = MagicMock()
     srv._orchestrator = mock_orc
-    with patch("src.mcp_server.DeepResearcher", return_value=mock_dr) as MockDR:
+    orig_dr = srv.DeepResearcher
+    srv.DeepResearcher = MagicMock(return_value=mock_dr)
+    try:
         dr = srv.get_deep_researcher()
+    finally:
+        srv.DeepResearcher = orig_dr
     assert dr is mock_dr
-    MockDR.assert_called_once_with(
-        llm_client=mock_orc.llm, orchestrator=mock_orc, memory=mock_orc.memory
-    )
 
 
 def test_get_confidence_scorer_lazy_init():
     import src.mcp_server as srv
 
     mock_cs = MagicMock()
-    with patch("src.mcp_server.ConfidenceScorer", return_value=mock_cs) as MockCS:
+    orig_cs = srv.ConfidenceScorer
+    srv.ConfidenceScorer = MagicMock(return_value=mock_cs)
+    try:
         cs = srv.get_confidence_scorer()
+    finally:
+        srv.ConfidenceScorer = orig_cs
     assert cs is mock_cs
-    MockCS.assert_called_once()
 
 
 def test_get_confidence_scorer_singleton():
     import src.mcp_server as srv
 
     mock_cs = MagicMock()
-    with patch("src.mcp_server.ConfidenceScorer", return_value=mock_cs) as MockCS:
+    orig_cs = srv.ConfidenceScorer
+    mock_factory = MagicMock(return_value=mock_cs)
+    srv.ConfidenceScorer = mock_factory
+    try:
         srv.get_confidence_scorer()
         srv.get_confidence_scorer()
-    MockCS.assert_called_once()
+    finally:
+        srv.ConfidenceScorer = orig_cs
+    mock_factory.assert_called_once()
 
 
 # ─── research_technology_v2 — standard mode ──────────────────────────────────

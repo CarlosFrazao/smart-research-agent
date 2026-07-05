@@ -264,9 +264,22 @@ async def main():
         - ``version`` -> `cmd_version`
         - ``schedule`` -> `cmd_schedule`
     """
-    from src.utils.logging import setup_logging
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
-    setup_logging(json_output=True)
+    from src.config import Config
+    config = Config()
+
+    from src.utils.logging import setup_logging
+    setup_logging(level=config.log_level, json_output=True)
 
     parser = create_parser()
     args = parser.parse_args()

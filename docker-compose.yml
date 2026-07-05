@@ -40,15 +40,25 @@ x-medium-resources: &medium-resources
         cpus: '1.0'
         memory: 512M
 
+x-high-resources: &high-resources
+  deploy:
+    resources:
+      limits:
+        cpus: '3.0'
+        memory: 4096M
+
 services:
   # ─────────────────────────────────────────────────────────────────────────
   # Núcleo — sempre ativo, independente do perfil escolhido
   # ─────────────────────────────────────────────────────────────────────────
   smart-research-agent:
-    <<: [*restart-policy, *medium-resources]
+    <<: [*restart-policy, *high-resources]
     build: .
     container_name: sra-app
     env_file: .env
+    networks:
+      - default
+      - firecrawl_net
     environment:
       # Scraping web (Firecrawl). Sem o perfil `firecrawl` ativo, o SRA usa
       # a cascata de fallback de scraping (Steel/Spider/Jina) automaticamente.
@@ -199,3 +209,10 @@ volumes:
   neo4j_logs:
   redis_data:
   chroma_data:
+
+networks:
+  default:
+    name: smart-research-agent_default
+  firecrawl_net:
+    external: true
+    name: firecrawl_backend

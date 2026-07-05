@@ -24,6 +24,8 @@ dependencies = [
     "chromadb>=0.5.0",
     "kuzu>=0.11.0",
     "watchdog>=4.0",
+    "structlog>=24.1.0",
+    "sentence-transformers",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +64,7 @@ all = [
     "pytest-asyncio>=0.23",
     "aioresponses>=0.7",
     "pytest-mock>=3.12",
+    "sentence-transformers",
 ]
 
 [tool.setuptools.packages.find]

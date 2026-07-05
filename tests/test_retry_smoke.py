@@ -48,7 +48,7 @@ async def test_retry_exhaustion():
 
     with pytest.raises(DummyException) as exc_info:
         await sample_func()
-    
+
     assert "fail 3" in str(exc_info.value)
     assert calls == 3
 
@@ -71,13 +71,13 @@ async def test_retry_circuit_breaker_integration_open():
 
     with pytest.raises(CircuitBreakerOpen):
         await sample_func()
-        
+
     assert calls == 0
 
 @pytest.mark.asyncio
 async def test_retry_call_direct_async():
     calls = 0
-    
+
     async def target(x):
         nonlocal calls
         calls += 1
