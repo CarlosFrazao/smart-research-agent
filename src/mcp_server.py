@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from src.config import Config
 from src.confidence_scorer import ConfidenceScorer
 from src.deep_researcher import DeepResearcher
-from src.dependencies import DependencyContainer
+from src.dependencies import DependencyContainer, Lifecycle
 from src.feedback_store import VALID_SIGNALS, FeedbackStore
 from src.orchestrator import Orchestrator
 
@@ -45,6 +45,20 @@ _REPORTS_DIR = os.path.normpath(
 _current_research: ContextVar[dict | None] = ContextVar(
     "current_research", default=None
 )
+
+# Armazenamento de sessões locais de pesquisa para fins de compatibilidade
+_research_sessions: dict[str, dict] = {}
+
+
+async def _get_or_create_research(session_id: str) -> dict:
+    """Recupera ou cria uma sessão local de pesquisa."""
+    if session_id not in _research_sessions:
+        _research_sessions[session_id] = {
+            "session_id": session_id,
+            "last_query": None,
+            "last_report": None,
+        }
+    return _research_sessions[session_id]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -77,10 +91,13 @@ def get_confidence_scorer_dep(
 ) -> ConfidenceScorer:
     """Dependency FastAPI: `ConfidenceScorer` da instância atual do servidor."""
     return container.confidence_scorer
+
+
 # Globais e funcoes de compatibilidade para testes/singletons legados
 _orchestrator = None
 _deep_researcher = None
 _confidence_scorer = None
+
 
 def get_orchestrator(config: Config | None = None) -> Orchestrator:
     global _orchestrator
@@ -90,23 +107,21 @@ def get_orchestrator(config: Config | None = None) -> Orchestrator:
         _orchestrator = Orchestrator(config)
     return _orchestrator
 
+
 def get_deep_researcher() -> DeepResearcher:
     global _deep_researcher
     if _deep_researcher is None:
         orc = get_orchestrator()
         _deep_researcher = DeepResearcher(
-            llm_client=orc.llm,
-            orchestrator=orc,
-            memory=orc.memory
+            llm_client=orc.llm, orchestrator=orc, memory=orc.memory
         )
     return _deep_researcher
+
 
 def get_confidence_scorer(config: Config | None = None) -> ConfidenceScorer:
     global _confidence_scorer
     if _confidence_scorer is None:
-        if config is None:
-            config = Config()
-        _confidence_scorer = ConfidenceScorer(config)
+        _confidence_scorer = ConfidenceScorer()
     return _confidence_scorer
 
 
@@ -127,7 +142,28 @@ def create_app(config: Config | None = None) -> FastAPI:
         FastAPI: Aplicação pronta para servir via uvicorn/ASGI.
     """
     app = FastAPI(title="Smart Research Agent MCP Server")
-    app.state.container = DependencyContainer(config)
+
+    cfg = config or Config()
+    container = DependencyContainer()
+    container.register_instance("config", cfg)
+
+    # Registra fábricas lazy para compatibilidade DI sem resolver no import
+    container.register_factory(
+        "orchestrator", lambda: get_orchestrator(cfg), Lifecycle.SINGLETON
+    )
+    container.register_factory(
+        "deep_researcher", lambda: get_deep_researcher(), Lifecycle.SINGLETON
+    )
+    container.register_factory(
+        "confidence_scorer", lambda: get_confidence_scorer(cfg), Lifecycle.SINGLETON
+    )
+
+    # Registra HITLManager como singleton
+    from src.hitl_manager import HITLManager
+
+    container.register_instance("hitl_manager", HITLManager())
+
+    app.state.container = container
 
     if os.path.isdir(_STATIC_DIR):
         app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
@@ -358,7 +394,7 @@ def _register_rest_endpoints(app: FastAPI) -> None:
         # api_key e provider são aceitos no body para compatibilidade com o frontend
         # O orchestrator usa as chaves do .env por default; override não é logado
         try:
-            session_data = await container.get_or_create_research(session_id)
+            session_data = await _get_or_create_research(session_id)
             _current_research.set(session_data)
 
             report = await container.orchestrator.research(query)
@@ -372,6 +408,56 @@ def _register_rest_endpoints(app: FastAPI) -> None:
             return {"error": str(e)}
         finally:
             _current_research.set(None)
+
+    @app.get("/api/v1/hitl/pending")
+    async def list_pending_hitl(
+        container: DependencyContainer = Depends(get_container),
+    ):
+        """Lista todas as solicitações de aprovação ativas no momento."""
+        try:
+            hitl = container.resolve("hitl_manager")
+            return {"pending_requests": hitl.list_pending_requests()}
+        except Exception as e:
+            return {"error": str(e)}
+
+    @app.get("/api/v1/hitl/pending/{session_id}")
+    async def get_pending_hitl(
+        session_id: str, container: DependencyContainer = Depends(get_container)
+    ):
+        """Recupera metadados do pedido de aprovação pendente de uma sessão."""
+        try:
+            hitl = container.resolve("hitl_manager")
+            req = hitl.get_pending_request(session_id)
+            if not req:
+                return PlainTextResponse(
+                    "Sessão não encontrada ou não pendente.", status_code=404
+                )
+            return req
+        except Exception as e:
+            return {"error": str(e)}
+
+    @app.post("/api/v1/hitl/resume/{session_id}")
+    async def resume_hitl(
+        session_id: str,
+        body: dict,
+        container: DependencyContainer = Depends(get_container),
+    ):
+        """Submete a resposta do usuário e libera a tarefa suspensa."""
+        approved_data = body.get("approved_data")
+        if approved_data is None:
+            return PlainTextResponse(
+                "approved_data é obrigatório no corpo da requisição", status_code=400
+            )
+        try:
+            hitl = container.resolve("hitl_manager")
+            released = await hitl.submit_response(session_id, approved_data)
+            if not released:
+                return PlainTextResponse(
+                    "Nenhuma sessão pendente encontrada com este ID.", status_code=404
+                )
+            return {"status": "ok", "message": f"Sessão '{session_id}' retomada."}
+        except Exception as e:
+            return {"error": str(e)}
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -462,6 +548,160 @@ def _build_confidence_check_response(claim: str, scored_results: list[Any]) -> s
         ensure_ascii=False,
         indent=2,
     )
+
+
+async def _research_technology_v2_impl(
+    container: DependencyContainer,
+    query: str,
+    mode: str = "standard",
+    include_confidence: bool = True,
+    op_mode: str = None,
+) -> str:
+    try:
+        logger.info(
+            f"[research_technology_v2] query='{query}' mode={mode} op_mode={op_mode}"
+        )
+        orc = container.orchestrator
+        from src.operation_modes import OperationModes
+
+        selected_op = op_mode or OperationModes.auto_select(query)
+        orc.operation_mode = OperationModes.get_mode(selected_op)
+
+        if mode == "deep":
+            result = await container.deep_researcher.research(query)
+            confirmed_count = len(result.confirmed_hypotheses)
+            dead_end_count = len(result.dead_end_hypotheses)
+            overall_confidence = (
+                sum(getattr(f, "confidence_score", 0.0) for f in result.findings)
+                / len(result.findings)
+                if result.findings
+                else 0.0
+            )
+            findings_lines = []
+            for i, f in enumerate(result.findings[:15], 1):
+                title = f.title or "(sem título)"
+                url = f.url or ""
+                desc = (f.description or "")[:200]
+                conf = getattr(f, "confidence_score", 0.0)
+                findings_lines.append(
+                    f"### {i}. {title}\n- URL: {url}\n- Confiança: {conf:.0%}\n- {desc}"
+                )
+            report = (
+                "\n\n".join(findings_lines)
+                if findings_lines
+                else "(nenhum resultado encontrado)"
+            )
+            if include_confidence:
+                tree_md = result.reasoning_tree or ""
+                confidence_lines = [
+                    "",
+                    "---",
+                    "",
+                    "## Confidence Summary",
+                    "",
+                    f"- Overall confidence: {overall_confidence:.0%}",
+                    f"- High-confidence findings: {confirmed_count}",
+                    f"- Dead-end branches pruned: {dead_end_count}",
+                    "",
+                    tree_md,
+                ]
+                report = report + "\n".join(str(line) for line in confidence_lines)
+            return report
+        else:
+            return await orc.research(query)
+    except Exception as e:
+        logger.error(f"[research_technology_v2] erro: {e}")
+        return f"Erro ao executar pesquisa: {e}"
+
+
+async def _scrape_url_impl(
+    container: DependencyContainer,
+    url: str,
+    force_browser: bool = False,
+) -> str:
+    try:
+        logger.info(f"[scrape_url] url='{url}' force_browser={force_browser}")
+        orc = container.orchestrator
+        results = await orc._select_scraper_for_url(url)
+        if not results:
+            return json.dumps(
+                {
+                    "url": url,
+                    "content": "",
+                    "scraper_used": "none",
+                    "error": "Nenhum conteúdo extraído",
+                }
+            )
+        r = results[0]
+        scored = await container.confidence_scorer.score_result(r)
+        return json.dumps(
+            {
+                "url": url,
+                "content": scored.description,
+                "title": scored.title,
+                "scraper_used": scored.source,
+                "confidence_score": round(scored.confidence_score, 3),
+                "evidence_quality": scored.evidence_quality,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"[scrape_url] erro: {e}")
+        return json.dumps({"url": url, "error": str(e)})
+
+
+async def _confidence_check_impl(
+    container: DependencyContainer,
+    claim: str,
+    sources: list[str],
+) -> str:
+    try:
+        logger.info(f"[confidence_check] claim='{claim[:80]}' sources={len(sources)}")
+        scorer = container.confidence_scorer
+        orc = container.orchestrator
+
+        # 1. Tentar scraping direto
+        scored_results = await _scrape_sources(claim, sources, scorer, orc)
+
+        # 2. Fallback chain se scraping direto falhou para todas as fontes
+        if not scored_results:
+            from unittest.mock import MagicMock
+
+            if isinstance(orc, MagicMock):
+                return json.dumps(
+                    {
+                        "claim": claim,
+                        "overall_confidence": 0.0,
+                        "evidence_quality": "unknown",
+                        "supporting_sources": [],
+                        "contradicting_sources": [],
+                        "hallucination_flags": ["no_sources_accessible"],
+                        "recommendation": "do_not_use",
+                    }
+                )
+
+            scored_results = await _run_fallback_search(claim, scorer, orc)
+
+        if not scored_results:
+            return json.dumps(
+                {
+                    "claim": claim,
+                    "overall_confidence": 0.45,
+                    "evidence_quality": "unverified",
+                    "supporting_sources": [],
+                    "contradicting_sources": [],
+                    "hallucination_flags": ["scraper_unavailable"],
+                    "recommendation": "verify_further",
+                    "note": "Scrapers indisponiveis e busca de fallback nao retornou resultados. Verificacao manual recomendada.",
+                }
+            )
+
+        # 3. Montar e retornar resposta final
+        return _build_confidence_check_response(claim, scored_results)
+    except Exception as e:
+        logger.error(f"[confidence_check] erro: {e}")
+        return json.dumps({"claim": claim, "error": str(e)})
 
 
 def _register_mcp_tools(app: FastAPI) -> None:
@@ -632,7 +872,9 @@ def _register_mcp_tools(app: FastAPI) -> None:
                     }
                     for r in results
                 ]
-                logger.info(f"[search_hackernews] {len(data)} resultados para '{query}'")
+                logger.info(
+                    f"[search_hackernews] {len(data)} resultados para '{query}'"
+                )
                 return json.dumps(data, ensure_ascii=False, indent=2)
             except Exception as e:
                 logger.error(f"[search_hackernews] erro: {e}")
@@ -661,7 +903,9 @@ def _register_mcp_tools(app: FastAPI) -> None:
                 orc = container.orchestrator
                 searcher = orc.searchers.get("awesome")
                 if not searcher:
-                    return json.dumps({"error": "Awesome Lists searcher nao disponivel"})
+                    return json.dumps(
+                        {"error": "Awesome Lists searcher nao disponivel"}
+                    )
                 searcher.max_results = min(max_results, 50)
                 results = await searcher.search(query, domain=domain)
                 data = [
@@ -674,7 +918,9 @@ def _register_mcp_tools(app: FastAPI) -> None:
                     }
                     for r in results
                 ]
-                logger.info(f"[search_awesome_lists] {len(data)} resultados para '{query}'")
+                logger.info(
+                    f"[search_awesome_lists] {len(data)} resultados para '{query}'"
+                )
                 return json.dumps(data, ensure_ascii=False, indent=2)
             except Exception as e:
                 logger.error(f"[search_awesome_lists] erro: {e}")
@@ -760,7 +1006,9 @@ def _register_mcp_tools(app: FastAPI) -> None:
                     }
                     for r in results
                 ]
-                logger.info(f"[search_producthunt] {len(data)} resultados para '{query}'")
+                logger.info(
+                    f"[search_producthunt] {len(data)} resultados para '{query}'"
+                )
                 return json.dumps(data, ensure_ascii=False, indent=2)
             except Exception as e:
                 logger.error(f"[search_producthunt] erro: {e}")
@@ -933,7 +1181,9 @@ def _register_mcp_tools(app: FastAPI) -> None:
                     }
                     for eq in expanded
                 ]
-                logger.info(f"[expand_query] {len(data)} queries expandidas para '{query}'")
+                logger.info(
+                    f"[expand_query] {len(data)} queries expandidas para '{query}'"
+                )
                 return json.dumps(data, ensure_ascii=False, indent=2)
             except Exception as e:
                 logger.error(f"[expand_query] erro: {e}")
@@ -960,61 +1210,9 @@ def _register_mcp_tools(app: FastAPI) -> None:
             Modos de operação (op_mode):
             - "guerrilha", "cirurgia", "radar", "arqueologia", "concorrencia", "black_ops"
             """
-            try:
-                logger.info(
-                    f"[research_technology_v2] query='{query}' mode={mode} op_mode={op_mode}"
-                )
-                orc = container.orchestrator
-                from src.operation_modes import OperationModes
-
-                selected_op = op_mode or OperationModes.auto_select(query)
-                orc.operation_mode = OperationModes.get_mode(selected_op)
-
-                if mode == "deep":
-                    result = await container.deep_researcher.research(query)
-                    confirmed_count = len(result.confirmed_hypotheses)
-                    dead_end_count = len(result.dead_end_hypotheses)
-                    overall_confidence = (
-                        sum(getattr(f, "confidence_score", 0.0) for f in result.findings)
-                        / len(result.findings)
-                        if result.findings
-                        else 0.0
-                    )
-                    findings_lines = []
-                    for i, f in enumerate(result.findings[:15], 1):
-                        title = f.title or "(sem título)"
-                        url = f.url or ""
-                        desc = (f.description or "")[:200]
-                        conf = getattr(f, "confidence_score", 0.0)
-                        findings_lines.append(
-                            f"### {i}. {title}\n- URL: {url}\n- Confiança: {conf:.0%}\n- {desc}"
-                        )
-                    report = (
-                        "\n\n".join(findings_lines)
-                        if findings_lines
-                        else "(nenhum resultado encontrado)"
-                    )
-                    if include_confidence:
-                        tree_md = result.reasoning_tree or ""
-                        confidence_lines = [
-                            "",
-                            "---",
-                            "",
-                            "## Confidence Summary",
-                            "",
-                            f"- Overall confidence: {overall_confidence:.0%}",
-                            f"- High-confidence findings: {confirmed_count}",
-                            f"- Dead-end branches pruned: {dead_end_count}",
-                            "",
-                            tree_md,
-                        ]
-                        report = report + "\n".join(str(line) for line in confidence_lines)
-                    return report
-                else:
-                    return await orc.research(query)
-            except Exception as e:
-                logger.error(f"[research_technology_v2] erro: {e}")
-                return f"Erro ao executar pesquisa: {e}"
+            return await _research_technology_v2_impl(
+                container, query, mode, include_confidence, op_mode
+            )
 
         # ─────────────────────────────────────────────────────────────────
         # TOOL 13 — Scraping com cascade inteligente (Firecrawl→Spider→Steel→Jina)
@@ -1043,36 +1241,7 @@ def _register_mcp_tools(app: FastAPI) -> None:
                 url: URL completa para extrair (ex: "https://github.com/org/repo")
                 force_browser: Se True, força uso do Steel.dev (padrão: False)
             """
-            try:
-                logger.info(f"[scrape_url] url='{url}' force_browser={force_browser}")
-                orc = container.orchestrator
-                results = await orc._select_scraper_for_url(url)
-                if not results:
-                    return json.dumps(
-                        {
-                            "url": url,
-                            "content": "",
-                            "scraper_used": "none",
-                            "error": "Nenhum conteúdo extraído",
-                        }
-                    )
-                r = results[0]
-                scored = await container.confidence_scorer.score_result(r)
-                return json.dumps(
-                    {
-                        "url": url,
-                        "content": scored.description,
-                        "title": scored.title,
-                        "scraper_used": scored.source,
-                        "confidence_score": round(scored.confidence_score, 3),
-                        "evidence_quality": scored.evidence_quality,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            except Exception as e:
-                logger.error(f"[scrape_url] erro: {e}")
-                return json.dumps({"url": url, "error": str(e)})
+            return await _scrape_url_impl(container, url, force_browser)
 
         # ─────────────────────────────────────────────────────────────────
         # TOOL 14 — Verificação de confiança de uma afirmação contra fontes reais
@@ -1098,54 +1267,7 @@ def _register_mcp_tools(app: FastAPI) -> None:
                 claim: A afirmação a verificar (ex: "FastAPI é mais rápido que Flask")
                 sources: Lista de URLs de fontes para checar (max 5)
             """
-            try:
-                logger.info(
-                    f"[confidence_check] claim='{claim[:80]}' sources={len(sources)}"
-                )
-                scorer = container.confidence_scorer
-                orc = container.orchestrator
-
-                # 1. Tentar scraping direto
-                scored_results = await _scrape_sources(claim, sources, scorer, orc)
-
-                # 2. Fallback chain se scraping direto falhou para todas as fontes
-                if not scored_results:
-                    from unittest.mock import MagicMock
-
-                    if isinstance(orc, MagicMock):
-                        return json.dumps(
-                            {
-                                "claim": claim,
-                                "overall_confidence": 0.0,
-                                "evidence_quality": "unknown",
-                                "supporting_sources": [],
-                                "contradicting_sources": [],
-                                "hallucination_flags": ["no_sources_accessible"],
-                                "recommendation": "do_not_use",
-                            }
-                        )
-
-                    scored_results = await _run_fallback_search(claim, scorer, orc)
-
-                if not scored_results:
-                    return json.dumps(
-                        {
-                            "claim": claim,
-                            "overall_confidence": 0.45,
-                            "evidence_quality": "unverified",
-                            "supporting_sources": [],
-                            "contradicting_sources": [],
-                            "hallucination_flags": ["scraper_unavailable"],
-                            "recommendation": "verify_further",
-                            "note": "Scrapers indisponiveis e busca de fallback nao retornou resultados. Verificacao manual recomendada.",
-                        }
-                    )
-
-                # 3. Montar e retornar resposta final
-                return _build_confidence_check_response(claim, scored_results)
-            except Exception as e:
-                logger.error(f"[confidence_check] erro: {e}")
-                return json.dumps({"claim": claim, "error": str(e)})
+            return await _confidence_check_impl(container, claim, sources)
 
         # ─────────────────────────────────────────────────────────────────
         # TOOL 15 — Registrar feedback de resultado (FeedbackRanker)
@@ -1223,6 +1345,58 @@ def _register_mcp_tools(app: FastAPI) -> None:
 app = create_app()
 
 
+def _get_effective_container() -> DependencyContainer:
+    container = app.state.container
+    if (
+        _orchestrator is not None
+        or _deep_researcher is not None
+        or _confidence_scorer is not None
+    ):
+        from src.dependencies import DependencyContainer
+
+        fake_container = DependencyContainer()
+        fake_container.register_instance(
+            "orchestrator",
+            _orchestrator if _orchestrator is not None else container.orchestrator,
+        )
+        fake_container.register_instance(
+            "deep_researcher",
+            _deep_researcher
+            if _deep_researcher is not None
+            else container.deep_researcher,
+        )
+        fake_container.register_instance(
+            "confidence_scorer",
+            _confidence_scorer
+            if _confidence_scorer is not None
+            else container.confidence_scorer,
+        )
+        return fake_container
+    return container
+
+
 async def health():
     """Função de compatibilidade para testes unitários legados."""
     return {"status": "ok", "service": "smart-research-agent"}
+
+
+async def research_technology_v2(
+    query: str,
+    mode: str = "standard",
+    include_confidence: bool = True,
+    op_mode: str = None,
+) -> str:
+    """Função de compatibilidade para testes unitários legados."""
+    return await _research_technology_v2_impl(
+        _get_effective_container(), query, mode, include_confidence, op_mode
+    )
+
+
+async def scrape_url(url: str, force_browser: bool = False) -> str:
+    """Função de compatibilidade para testes unitários legados."""
+    return await _scrape_url_impl(_get_effective_container(), url, force_browser)
+
+
+async def confidence_check(claim: str, sources: list[str]) -> str:
+    """Função de compatibilidade para testes unitários legados."""
+    return await _confidence_check_impl(_get_effective_container(), claim, sources)
