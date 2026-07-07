@@ -35,14 +35,23 @@ Integração e limitações conhecidas (leia antes de usar):
     as gap queries geradas, não como filtro de dados. Se precisar de
     isolamento real por sessão, o schema de `add_triple`/`add_fact` precisa
     ganhar essa coluna primeiro.
-  - Antes desta correção, o agente chamava métodos que não existem em nenhum
-    backend real do projeto (`get_session_nodes`, `.query()` com Cypher cru,
-    `get_communities`) e por isso sempre retornava um relatório vazio sem
-    nunca lançar erro — e não estava conectado ao Orchestrator em lugar
-    nenhum do pipeline (`grep` confirma zero referências fora deste arquivo).
-    Este arquivo corrige a busca de dados para usar a interface real; a
-    integração no pipeline (registrar como stage em
-    `src/pipeline/stage_factory.py`) ainda precisa ser feita à parte.
+  - Antes da correção original desta sessão, o agente chamava métodos que
+    não existem em nenhum backend real do projeto (`get_session_nodes`,
+    `.query()` com Cypher cru, `get_communities`) e por isso sempre
+    retornava um relatório vazio sem nunca lançar erro — e não estava
+    conectado ao Orchestrator em lugar nenhum do pipeline.
+  - Integração no pipeline: feita em `src/pipeline/stages/graph_explorer_stage.py`
+    (`GraphExplorerStage`, registrado em `src/pipeline/stage_factory.py` sob
+    os nomes `"graph_explorer"`/`"graph_gap"`, executado entre `"score"` e
+    `"gap"` no pipeline padrão de `StageFactory.build_pipeline`). Ela reusa
+    `orchestrator.memory.kg` (já uma `SemanticKnowledgeGraph` real, ver
+    `src/memory/orvix_memory.py`) e injeta `report.to_expanded_queries()` em
+    `context.expanded_queries` — mas, como o `ResearchPipeline` é linear e
+    executa cada stage uma única vez, isso hoje não dispara uma nova rodada
+    de busca automaticamente (ver limitação 1 no docstring do stage). O
+    "Passo 3" do plano original (coluna `session_id` em `add_triple`/
+    `add_fact` para filtro real por sessão) segue não implementado — é
+    opcional e não foi pedido nesta sessão.
 """
 
 from __future__ import annotations

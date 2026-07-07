@@ -10,6 +10,7 @@ from src.pipeline.stages.expand_stage import ExpandStage
 from src.pipeline.stages.search_stage import SearchStage
 from src.pipeline.stages.rank_stage import RankStage
 from src.pipeline.stages.score_stage import ScoreStage
+from src.pipeline.stages.graph_explorer_stage import GraphExplorerStage
 from src.pipeline.stages.synthesize_stage import SynthesizeStage
 from src.pipeline.pipeline import PipelineStage, PipelineContext
 
@@ -55,6 +56,7 @@ __all__ = [
     "RankingStage",
     "RankStage",
     "ScoreStage",
+    "GraphExplorerStage",
     "SynthesisStage",
     "SynthesizeStage",
     "HealthCheckStage",

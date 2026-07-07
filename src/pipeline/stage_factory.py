@@ -35,6 +35,7 @@ DEFAULT_STAGE_NAMES: List[str] = [
     "search",
     "rank",
     "score",
+    "graph_explorer",
     "gap",
     "synthesize",
     "report",
@@ -207,6 +208,7 @@ class StageFactory:
             "search",
             "rank",
             "score",
+            "graph_explorer",
             "gap",
             "synthesize",
             "report",
@@ -457,6 +459,10 @@ class StageFactory:
         self.register("score", self._create_score_stage, lazy=True)
         self.register("scoring", self._create_score_stage, lazy=True)
 
+        # Graph Explorer Stage (análise de densidade do Grafo de Conhecimento)
+        self.register("graph_explorer", self._create_graph_explorer_stage, lazy=True)
+        self.register("graph_gap", self._create_graph_explorer_stage, lazy=True)
+
         # Gap Stage
         self.register("gap", self._create_gap_stage, lazy=True)
         self.register("gap_detection", self._create_gap_stage, lazy=True)
@@ -546,6 +552,30 @@ class StageFactory:
         from src.pipeline.stages.score_stage import ScoreStage
 
         return ScoreStage(llm_client=self._deps.get("llm_client"))
+
+    def _create_graph_explorer_stage(self) -> PipelineStage:
+        """Factory para GraphExplorerStage.
+
+        Reaproveita `orchestrator.memory.kg` — instância real de
+        `SemanticKnowledgeGraph` já criada dentro de `OrvixMemory.__init__`
+        (ver `src/memory/orvix_memory.py`) — em vez de abrir uma segunda
+        conexão KuzuDB. Se `orchestrator` não estiver disponível nos deps
+        (uso standalone/testes) ou `memory`/`memory.kg` não existir, o
+        agente é criado com `knowledge_graph=None` e o próprio
+        `GraphExplorerAgent` sabe devolver um relatório vazio em vez de
+        falhar (ver docstring de `src/graph_explorer_agent.py`).
+        """
+        from src.graph_explorer_agent import GraphExplorerAgent
+        from src.pipeline.stages.graph_explorer_stage import GraphExplorerStage
+
+        orch = self._deps.get("orchestrator")
+        kg = None
+        if orch is not None:
+            memory = getattr(orch, "memory", None)
+            kg = getattr(memory, "kg", None) if memory is not None else None
+
+        agent = GraphExplorerAgent(knowledge_graph=kg, llm=self._deps.get("llm_client"))
+        return GraphExplorerStage(graph_explorer_agent=agent)
 
     def _create_gap_stage(self) -> PipelineStage:
         """Factory para GapFillStage."""
