@@ -65,6 +65,69 @@ class SynthesizeStage(PipelineStage):
         # SearchResult, podemos passá-los diretamente.
         evidence_graph.build_from_results(results)
 
+        # ── Loop de Decisão HITL baseada em achados de detectores ─────────────
+        orchestrator = context.extras.get("orchestrator") if context.extras else None
+        hitl_dialog = getattr(orchestrator, "hitl_dialog", None) if orchestrator else None
+        findings = []
+
+        if hitl_dialog and results:
+            # 1. Conflict Detector (Contradições)
+            conflict_detector = getattr(orchestrator, "conflict_detector", None)
+            if conflict_detector:
+                try:
+                    report = conflict_detector.detect(results)
+                    for conflict in report.conflicts:
+                        claims_str = ", ".join([f"'{c.context}' (valor: {c.value} {c.unit} via {c.source_name})" for c in conflict.claims])
+                        findings.append({
+                            "type": "contradiction",
+                            "content": f"Divergência sobre {conflict.metric_name}: {claims_str}",
+                            "urgency": 0.85 if conflict.severity in ("critical", "high") else 0.60,
+                        })
+                except Exception as e:
+                    logger.warning(f"Falha no ConflictDetector em SynthesizeStage: {e}")
+
+            # 2. Gap Detector (Lacunas)
+            gap_detector = getattr(orchestrator, "gap_detector", None)
+            if gap_detector and context.intent:
+                try:
+                    gap_analysis = await gap_detector.detect(
+                        results=results,
+                        query=context.query,
+                        intent=context.intent,
+                    )
+                    for gap in getattr(gap_analysis, "gaps", []):
+                        findings.append({
+                            "type": "gap",
+                            "content": f"Lacuna identificada: {gap.description} (aspecto: {gap.aspect})",
+                            "urgency": 0.80 if gap.severity in ("critical", "high") else 0.50,
+                        })
+                except Exception as e:
+                    logger.warning(f"Falha no GapDetector em SynthesizeStage: {e}")
+
+            # 3. Misinformation Detector (Fontes Suspeitas)
+            try:
+                from src.misinformation_detector import MisinformationDetector
+                misinfo_detector = MisinformationDetector()
+                for r in results:
+                    is_flagged, penalty, reason = misinfo_detector.check_url(r.url)
+                    if is_flagged:
+                        findings.append({
+                            "type": "suspicious_source",
+                            "content": f"Fonte não confiável detectada: {r.url} (Motivo: {reason})",
+                            "urgency": 0.90,
+                        })
+            except Exception as e:
+                logger.warning(f"Falha no MisinformationDetector em SynthesizeStage: {e}")
+
+            # Executa o diálogo interativo para cada finding relevante
+            session_id = getattr(context, "session_id", "default")
+            for finding in findings:
+                dialog = await hitl_dialog.evaluate_finding(session_id, finding)
+                if dialog:
+                    decision = await hitl_dialog.await_user_decision(dialog, timeout=180)
+                    if decision:
+                        await orchestrator._apply_hitl_decision(decision, context)
+
         # 3. Atualiza o contexto
         context.synthesized_results = synthesized
         context.set("evidence_graph", evidence_graph)

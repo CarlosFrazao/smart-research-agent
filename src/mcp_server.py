@@ -468,6 +468,31 @@ def _register_rest_endpoints(app: FastAPI) -> None:
         except Exception as e:
             return {"error": str(e)}
 
+    @app.get("/api/v1/hitl/dialog/report/{session_id}", status_code=200)
+    async def get_hitl_dialog_report(
+        session_id: str,
+        orchestrator: Orchestrator = Depends(get_orchestrator_dep),
+    ):
+        """Retorna o histórico de diálogos e decisões HITL de uma sessão específica."""
+        if not getattr(orchestrator, "hitl_dialog", None):
+            raise HTTPException(
+                status_code=400, detail="HITL Dialog Agent not initialized."
+            )
+
+        report = orchestrator.hitl_dialog.get_report(session_id)
+        if not report:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No dialog report found for session {session_id}.",
+            )
+
+        # Compatível com Pydantic model ou dataclass
+        if hasattr(report, "model_dump"):
+            return report.model_dump()
+        elif hasattr(report, "__dict__"):
+            return report.__dict__
+        return {"report": str(report)}
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Helpers puros da TOOL 14 (confidence_check) — não dependem de estado

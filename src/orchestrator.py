@@ -156,6 +156,16 @@ class Orchestrator:
                 len(self.config.monitoring_feeds),
             )
 
+        # Inicialização do HITLDialogAgent
+        from src.hitl_dialog_agent import HITLDialogAgent
+
+        self.hitl_dialog = HITLDialogAgent(
+            hitl_manager=getattr(self, "hitl_manager", None),
+            llm=getattr(self, "llm", None),
+            dialog_callback=getattr(self, "_push_dialog_to_sse", None),
+        )
+        logger.info("HITLDialogAgent inicializado.")
+
         # Monta o pipeline de estágios independentes usado por `research()`
         self._pipeline = StageFactory.build_pipeline(self)
 
@@ -348,6 +358,38 @@ class Orchestrator:
                 self.memory.close()
             except Exception as e:
                 logger.warning(f"Erro ao fechar OrvixMemoryV2: {e}")
+
+    async def _apply_hitl_decision(self, decision: dict, context: any) -> None:
+        """Aplica a decisão do usuário (HITL) no contexto do pipeline."""
+        if not decision:
+            return
+        action = decision.get("action")
+        data = decision.get("parameters", decision.get("data", {}))
+
+        if action == "pivot_to_contradiction" or action == "pivot":
+            logger.info(f"HITL Decision: Pivô solicitado. Novo foco: {data}")
+            if isinstance(data, dict) and data.get("additional_query"):
+                from src.types import ExpandedQuery
+
+                eq = ExpandedQuery(
+                    query=data["additional_query"],
+                    type="hitl_pivot",
+                    priority="alta",
+                )
+                if eq not in context.expanded_queries:
+                    context.expanded_queries.append(eq)
+            elif isinstance(data, str) and data:
+                from src.types import ExpandedQuery
+
+                eq = ExpandedQuery(query=data, type="hitl_pivot", priority="alta")
+                if eq not in context.expanded_queries:
+                    context.expanded_queries.append(eq)
+        elif action == "exclude_source" or action == "veto":
+            logger.info(f"HITL Decision: Veto aplicado a: {data}")
+        elif action == "expand_scope" or action == "expand":
+            logger.info(f"HITL Decision: Expansão solicitada: {data}")
+        else:
+            logger.info(f"HITL Decision: Ação padrão (incluir/ignorar): {action}")
 
 
 # Atributos de compatibilidade expostos para patches de testes legados
