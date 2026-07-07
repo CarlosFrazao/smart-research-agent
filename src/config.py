@@ -170,6 +170,16 @@ class Config(BaseSettings):
     github_token: str | None = None
     producthunt_token: str | None = None
 
+    # ── Stream Monitor (Monitoramento em tempo real) ─────────────────────────
+    enable_live_monitoring: bool = Field(
+        default=False,
+        description="Habilita o monitoramento contínuo de fontes em tempo real (RSS, GitHub, arXiv, Webhooks).",
+    )
+    monitoring_feeds: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Lista de feeds para monitorar. Formato: {'name': 'HN', 'url': '...', 'source_type': 'rss', 'topics': ['tech']}",
+    )
+
     memory_enabled: bool = Field(default=True)
     memory_db_path: str = Field(default="reports/.research_memory.db")
     smart_routing_enabled: bool = Field(default=True)

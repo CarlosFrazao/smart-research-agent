@@ -20,9 +20,10 @@ import os
 from contextvars import ContextVar
 from typing import Any
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from src.config import Config
 from src.confidence_scorer import ConfidenceScorer
@@ -1408,3 +1409,61 @@ async def scrape_url(url: str, force_browser: bool = False) -> str:
 async def confidence_check(claim: str, sources: list[str]) -> str:
     """Função de compatibilidade para testes unitários legados."""
     return await _confidence_check_impl(_get_effective_container(), claim, sources)
+
+
+# ── Stream Monitor REST API ───────────────────────────────────────────────────
+
+
+class MonitorFeedRequest(BaseModel):
+    name: str = Field(..., description="Nome legível do feed")
+    url: str = Field(..., description="URL do feed, owner/repo para GitHub, ou query para arXiv")
+    source_type: str = Field(..., description="rss, github, arxiv ou webhook")
+    topics: list[str] = Field(default_factory=list, description="Tags temáticas")
+    poll_interval: int = Field(default=300, description="Intervalo de polling em segundos")
+
+
+@app.post("/api/v1/monitor/feeds", status_code=201)
+async def add_monitor_feed(
+    req: MonitorFeedRequest,
+    orchestrator: Orchestrator = Depends(get_orchestrator_dep),
+):
+    """Registra um novo feed para monitoramento em tempo real."""
+    if not getattr(orchestrator, "stream_monitor", None):
+        raise HTTPException(
+            status_code=400,
+            detail="Live monitoring not enabled. Set enable_live_monitoring=True in config.",
+        )
+    try:
+        orchestrator.stream_monitor.add_feed(**req.model_dump())
+        return {"status": "added", "feed": req.name}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/v1/monitor/feeds/{name}", status_code=200)
+async def remove_monitor_feed(
+    name: str,
+    orchestrator: Orchestrator = Depends(get_orchestrator_dep),
+):
+    """Remove um feed do monitoramento em tempo real."""
+    if not getattr(orchestrator, "stream_monitor", None):
+        raise HTTPException(status_code=400, detail="Live monitoring not enabled.")
+    removed = orchestrator.stream_monitor.remove_feed(name)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"Feed '{name}' not found.")
+    return {"status": "removed", "feed": name}
+
+
+@app.get("/api/v1/monitor/report", status_code=200)
+async def get_monitor_report(
+    orchestrator: Orchestrator = Depends(get_orchestrator_dep),
+):
+    """Retorna o relatório de atividade do monitor de streams."""
+    if not getattr(orchestrator, "stream_monitor", None):
+        raise HTTPException(status_code=400, detail="Live monitoring not enabled.")
+    report = orchestrator.stream_monitor.get_report()
+    if hasattr(report, "model_dump"):
+        return report.model_dump()
+    elif hasattr(report, "__dict__"):
+        return report.__dict__
+    return {"report": str(report)}

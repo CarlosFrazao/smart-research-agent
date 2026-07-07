@@ -140,6 +140,22 @@ class Orchestrator:
         # Registra callbacks de fallback do HealthMonitor
         FallbackManager(self).register_all()
 
+        # Inicialização do StreamMonitorAgent (opcional)
+        self.stream_monitor = None
+        if self.config.enable_live_monitoring:
+            from src.stream_monitor_agent import StreamMonitorAgent
+
+            self.stream_monitor = StreamMonitorAgent(
+                knowledge_graph=getattr(self, "knowledge_graph", None),
+                github_token=self.config.github_token,
+            )
+            for feed in self.config.monitoring_feeds:
+                self.stream_monitor.add_feed(**feed)
+            logger.info(
+                "StreamMonitorAgent inicializado com %d feeds.",
+                len(self.config.monitoring_feeds),
+            )
+
         # Monta o pipeline de estágios independentes usado por `research()`
         self._pipeline = StageFactory.build_pipeline(self)
 
@@ -181,6 +197,13 @@ class Orchestrator:
             )
 
         await self._report_progress(progress_callback, 0, "Iniciando pesquisa")
+
+        # Iniciar workers do monitor se ainda não estiverem rodando
+        if self.stream_monitor and not getattr(self.stream_monitor, "_running", False):
+            try:
+                await self.stream_monitor.start()
+            except Exception as e:
+                logger.warning(f"Falha ao iniciar StreamMonitorAgent: {e}")
         async with trace_async_span(
             "research.pipeline",
             {
@@ -309,6 +332,15 @@ class Orchestrator:
 
     async def close(self) -> None:
         """Encerra pools de conexoes e recursos da memoria e do Grafo de Conhecimento."""
+        # Parar monitor de streams se estiver ativo
+        if getattr(self, "stream_monitor", None) and getattr(
+            self.stream_monitor, "_running", False
+        ):
+            try:
+                await self.stream_monitor.stop()
+            except Exception as e:
+                logger.warning(f"Erro ao parar StreamMonitorAgent: {e}")
+
         if hasattr(self, "knowledge_graph") and self.knowledge_graph:
             await self.knowledge_graph.close()
         if self.memory:

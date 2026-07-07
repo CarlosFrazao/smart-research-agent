@@ -138,6 +138,24 @@ class SearchStage(PipelineStage):
             gathered = await self._execute_with_early_termination(tasks, context)
             all_results.extend(gathered)
 
+        # Injetar eventos do StreamMonitorAgent se disponível
+        orchestrator = context.extras.get("orchestrator") if context.extras else None
+        if orchestrator and getattr(orchestrator, "stream_monitor", None):
+            try:
+                stream_results = await orchestrator.stream_monitor.events_as_search_results(
+                    limit=10
+                )
+                if stream_results:
+                    all_results.extend(stream_results)
+                    logger.info(
+                        "SearchStage: %d eventos do StreamMonitorAgent injetados.",
+                        len(stream_results),
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"SearchStage: falha ao injetar eventos do StreamMonitorAgent: {e}"
+                )
+
         # 3. Fallback de último recurso
         if not all_results and self.config.fallback_on_empty:
             fallback_results = await self._fallback_serpapi(context)
