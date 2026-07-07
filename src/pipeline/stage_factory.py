@@ -30,6 +30,7 @@ logger = logging.getLogger("pipeline.stage_factory")
 
 DEFAULT_STAGE_NAMES: List[str] = [
     "intent",
+    "storm",
     "expand",
     "search",
     "rank",
@@ -201,6 +202,7 @@ class StageFactory:
         )
         stage_names = [
             "intent",
+            "storm",
             "expand",
             "search",
             "rank",
@@ -436,6 +438,10 @@ class StageFactory:
         self.register("intent", self._create_intent_stage, lazy=True)
         self.register("intent_analysis", self._create_intent_stage, lazy=True)
 
+        # Storm Stage (perspectivas multi-especialista, antes do Expand)
+        self.register("storm", self._create_storm_stage, lazy=True)
+        self.register("storm_perspectives", self._create_storm_stage, lazy=True)
+
         # Expand Stage
         self.register("expand", self._create_expand_stage, lazy=True)
         self.register("query_expansion", self._create_expand_stage, lazy=True)
@@ -473,6 +479,21 @@ class StageFactory:
 
         analyzer = IntentAnalyzer(llm_client=self._deps.get("llm_client"))
         return IntentStage(intent_analyzer=analyzer)
+
+    def _create_storm_stage(self) -> PipelineStage:
+        """Factory para StormStage (perspectivas multi-especialista STORM)."""
+        from src.pipeline.stages.storm_stage import StormStage
+
+        config = self._deps.get("config")
+        enabled = getattr(config, "storm_enabled", True) if config else True
+        num_perspectives = getattr(config, "storm_num_perspectives", 3) if config else 3
+
+        return StormStage(
+            llm_client=self._deps.get("llm_client"),
+            cache=self._deps.get("cache"),
+            num_perspectives=num_perspectives,
+            enabled=enabled,
+        )
 
     def _create_expand_stage(self) -> PipelineStage:
         """Factory para ExpandStage."""

@@ -5,6 +5,7 @@ delegando a um serviço/analyzer já existente no codebase.
 """
 
 from src.pipeline.stages.intent_stage import IntentStage
+from src.pipeline.stages.storm_stage import StormStage
 from src.pipeline.stages.expand_stage import ExpandStage
 from src.pipeline.stages.search_stage import SearchStage
 from src.pipeline.stages.rank_stage import RankStage
@@ -48,6 +49,7 @@ from src.pipeline.stages.report_stage import ReportStage
 
 __all__ = [
     "IntentStage",
+    "StormStage",
     "ExpandStage",
     "SearchStage",
     "RankingStage",
