@@ -130,17 +130,47 @@ async def test_auditor_extracts_claims(mock_llm):
 
 
 @pytest.mark.asyncio
-async def test_auditor_validates_high_coverage(mock_llm, mock_results):
-    """Claims com alta cobertura devem ser marcadas como 'verified'."""
+async def test_auditor_validates_high_coverage(mock_llm):
+    """Claims com alta cobertura e fontes distintas devem ser marcadas como 'verified'."""
     auditor = ResearchAuditor(llm_client=mock_llm)
     claims = [
         AuditClaim(text="Python supports free-threaded execution."),
         AuditClaim(text="FastAPI released with improved async support."),
     ]
-    validated = await auditor._validate_claims(claims, mock_results)
-    # Pelo menos uma claim deve ser verificada com alta cobertura
-    verified = [c for c in validated if c.status == "verified"]
-    assert len(verified) >= 1
+
+    # Criamos resultados que corroboram a claim do Python em dois provedores diferentes
+    r1 = MagicMock()
+    r1.title = "Python 3.13 Release Notes"
+    r1.description = "Python 3.13 supports free-threaded mode and GIL-free execution natively."
+    r1.url = "https://github.com/python/cpython"
+    r1.source = "github"
+    r1.confidence_score = 0.9
+
+    r2 = MagicMock()
+    r2.title = "Reddit Python Discussion"
+    r2.description = "Post discussing how Python supports free-threaded execution."
+    r2.url = "https://reddit.com/r/python/comments/123"
+    r2.source = "reddit"
+    r2.confidence_score = 0.8
+
+    # E um resultado para a claim do FastAPI (apenas 1 provedor -> single_source)
+    r3 = MagicMock()
+    r3.title = "FastAPI Changelog"
+    r3.description = "FastAPI 0.115 was released with improved async support and OpenAPI 3.1."
+    r3.url = "https://example.com/fastapi-changelog"
+    r3.source = "web"
+    r3.confidence_score = 0.85
+
+    validated = await auditor._validate_claims(claims, [r1, r2, r3])
+
+    # A claim de Python deve ser 'verified' porque tem 2 fontes/provedores distintos
+    python_claim = [c for c in validated if "Python" in c.text][0]
+    assert python_claim.status == "verified"
+    assert python_claim.confidence >= 0.7
+
+    # A claim de FastAPI deve ser 'single_source' porque só tem 1 fonte/provedor
+    fastapi_claim = [c for c in validated if "FastAPI" in c.text][0]
+    assert fastapi_claim.status == "single_source"
 
 
 @pytest.mark.asyncio

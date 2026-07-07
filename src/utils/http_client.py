@@ -1,9 +1,13 @@
-"""Cliente HTTP assincrono com suporte a timeout, retry e logging de requests."""
+from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.waf_specialist_agent import WAFSpecialistAgent
 
 import aiohttp
 
@@ -19,10 +23,37 @@ USER_AGENTS = [
 
 
 class HTTPClient:
-    def __init__(self, timeout: int = 30, max_retries: int = 3):
+    def __init__(
+        self,
+        timeout: int = 30,
+        max_retries: int = 3,
+        waf_agent: WAFSpecialistAgent | None = None,
+    ):
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_retries = max_retries
         self._session: aiohttp.ClientSession | None = None
+
+        # Inicializa o WAF Specialist Agent de evasão de bloqueio
+        if waf_agent is not None:
+            self.waf_agent = waf_agent
+        else:
+            redis_client = None
+            redis_url = os.environ.get("REDIS_URL") or os.environ.get(
+                "CELERY_BROKER_URL"
+            )
+            if redis_url:
+                try:
+                    import redis.asyncio as aioredis
+
+                    redis_client = aioredis.from_url(redis_url, decode_responses=True)
+                except Exception as e:
+                    logger.debug(
+                        f"Não foi possível conectar ao Redis para o WAF Specialist Agent: {e}"
+                    )
+
+            from src.waf_specialist_agent import WAFSpecialistAgent
+
+            self.waf_agent = WAFSpecialistAgent(redis_client=redis_client)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -73,7 +104,13 @@ class HTTPClient:
         **kwargs,
     ) -> dict[str, Any]:
         headers = headers or {}
-        headers.setdefault("User-Agent", random.choice(USER_AGENTS))
+
+        # Injeta headers stealth do WAF Specialist Agent se ativo
+        if self.waf_agent:
+            stealth_headers = self.waf_agent.get_stealth_headers(url)
+            headers = {**stealth_headers, **headers}
+        else:
+            headers.setdefault("User-Agent", random.choice(USER_AGENTS))
 
         # Throttling por domínio — respeita limites de cada API
         await DomainRateLimiter.wait(url)
@@ -93,11 +130,32 @@ class HTTPClient:
                 async with req_ctx as resp:
                     # Alimenta o rate limiter adaptativo com o status real da resposta
                     DomainRateLimiter.record(url, resp.status)
+
+                    text = await resp.text()
+
+                    # Intercepta e inspeciona se há sinal de bloqueio de WAF
+                    if self.waf_agent:
+                        signal = self.waf_agent.inspect_response(url, resp.status, text)
+                        if signal:
+                            # Tenta aplicar contramedida assincronamente (backoff, proxy, etc.)
+                            cm = await self.waf_agent.apply_countermeasure(signal)
+                            if cm.get("success"):
+                                kwargs = self.waf_agent.apply_countermeasure_to_request(
+                                    cm, kwargs
+                                )
+                                if cm.get("new_headers"):
+                                    headers = cm["new_headers"]
+                                logger.info(
+                                    f"[HTTPClient] Contramedida aplicada com sucesso para {url}. "
+                                    f"Fazendo retry ({attempt + 1}/{self.max_retries})."
+                                )
+                                continue  # Executa retry imediatamente com novos parâmetros
+
                     resp.raise_for_status()
                     content_type = resp.headers.get("Content-Type", "")
                     if "application/json" in content_type:
                         return await resp.json()
-                    return {"text": await resp.text(), "status": resp.status}
+                    return {"text": text, "status": resp.status}
 
             except aiohttp.ClientResponseError as e:
                 if e.status in {400, 401, 403, 404, 405}:

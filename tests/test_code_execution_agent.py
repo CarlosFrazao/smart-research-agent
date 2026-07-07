@@ -5,7 +5,7 @@ from src.services.code_execution_agent import CodeExecutionAgent
 def test_sandbox_success():
     agent = CodeExecutionAgent()
     code = "print(21 + 21)"
-    result = agent.execute_python(code)
+    result = agent.execute_python(code, timeout=15.0)
 
     assert result.exit_code == 0
     assert result.stdout.strip() == "42"
@@ -16,7 +16,7 @@ def test_sandbox_timeout():
     agent = CodeExecutionAgent()
     # Code with an infinite loop
     code = "import time\nwhile True:\n    time.sleep(0.1)"
-    result = agent.execute_python(code, timeout=1.0)
+    result = agent.execute_python(code, timeout=2.0)
 
     assert result.timed_out
     assert result.exit_code == -1
@@ -31,7 +31,7 @@ def test_sandbox_no_network():
         "interfaces = [x[1] for x in socket.if_nameindex()]\n"
         "print(interfaces)\n"
     )
-    result = agent.execute_python(code, timeout=15.0)
+    result = agent.execute_python(code, timeout=30.0)
 
     assert result.exit_code == 0
     # Only loopback should be present

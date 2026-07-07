@@ -31,6 +31,16 @@ SUPERLATIVOS = [
     "impossível",
 ]
 
+# Padrão para reconhecer uma citação de verdade perto de um superlativo:
+# link markdown "[texto](url)", referência numérica "[1]", uma URL nua, ou
+# a palavra "fonte". Antes disso, o código considerava QUALQUER parêntese
+# ou colchete como "citado" — o que faz um parêntese comum qualquer
+# (ex.: "sempre (segundo alguns) o melhor") mascarar um superlativo sem
+# nenhuma evidência de fato, esvaziando boa parte da checagem de viés.
+_CITATION_PATTERN = re.compile(
+    r"\[[^\]]*\]\([^)]+\)|\[\d+\]|https?://|\bfonte\b", re.IGNORECASE
+)
+
 
 @dataclass
 class ReviewIssue:
@@ -60,6 +70,23 @@ class PeerReviewReport:
     @property
     def minor_count(self) -> int:
         return sum(1 for i in self.issues if i.severity == "minor")
+
+
+def _clamp_confidence(value: Any, default: float = 0.70) -> float:
+    """Converte `value` em float dentro de 0.0-1.0.
+
+    Protege `to_markdown` (que formata com `:.0%`) contra um LLM devolvendo
+    a confiança como porcentagem inteira (ex.: 95 em vez de 0.95), como
+    string, ou fora de faixa — qualquer um desses casos, sem esse guard,
+    gera saída absurda (ex.: "9500%") ou levanta exceção na formatação.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return default
+    if v > 1.0:
+        v = v / 100.0  # provavelmente veio como porcentagem (0-100)
+    return max(0.0, min(1.0, v))
 
 
 class PeerReviewAgent:
@@ -93,7 +120,7 @@ class PeerReviewAgent:
         all_issues = list(heuristic_issues)
         seen_descriptions = {i.description.lower() for i in all_issues}
 
-        for issue_dict in structured_report.get("issues", []):
+        for issue_dict in structured_report.get("issues") or []:
             desc = issue_dict.get("description", "")
             if desc.lower() not in seen_descriptions:
                 all_issues.append(
@@ -108,15 +135,24 @@ class PeerReviewAgent:
                 seen_descriptions.add(desc.lower())
 
         return PeerReviewReport(
-            overall_assessment=structured_report.get(
-                "overall_assessment", structured_report.get("assessment", "moderate")
+            # O schema enviado ao LLM define a chave "assessment"/"confidence"
+            # (não "overall_assessment"/"confidence_in_report"); mantemos o
+            # fallback duplo apenas por robustez a variações do modelo, mas
+            # a chave real do schema vem primeiro para não sugerir que
+            # "overall_assessment" é o campo esperado.
+            overall_assessment=str(
+                structured_report.get("assessment")
+                or structured_report.get("overall_assessment")
+                or "moderate"
             ),
-            confidence_in_report=structured_report.get(
-                "confidence_in_report", structured_report.get("confidence", 0.70)
+            confidence_in_report=_clamp_confidence(
+                structured_report.get(
+                    "confidence", structured_report.get("confidence_in_report", 0.70)
+                )
             ),
             issues=all_issues,
-            strengths=structured_report.get("strengths", []),
-            recommendations=structured_report.get("recommendations", []),
+            strengths=structured_report.get("strengths") or [],
+            recommendations=structured_report.get("recommendations") or [],
         )
 
     async def _structured_review(
@@ -198,13 +234,24 @@ Relatório de Pesquisa:
 
     def _heuristic_review(self, report: str, results: list[Any]) -> list[ReviewIssue]:
         """
-        Varredura estática no texto do relatório por superlativos não citados e seções curtas.
+        Varredura estática no texto do relatório por superlativos não citados,
+        seções curtas, e citações que apontam para fora do conjunto de fontes
+        coletadas.
         """
         issues: list[ReviewIssue] = []
 
         # 1. Detecção de superlativos sem citação próxima
         for superlativo in SUPERLATIVOS:
-            pattern = re.compile(rf"\b({superlativo})\b", re.IGNORECASE)
+            # Usa lookaround (?<!\w)...(?!\w) em vez de \b nas duas pontas.
+            # \b exige uma transição \w<->\W; para termos que TERMINAM em
+            # caractere não-alfanumérico (como "100%"), o \b final só
+            # existiria se o próximo caractere do texto fosse letra/dígito
+            # — o que quase nunca acontece (normalmente vem espaço/pontuação)
+            # — então "100%" NUNCA era detectado com \b. O lookaround
+            # funciona igual ao \b para os demais termos e corrige esse caso.
+            pattern = re.compile(
+                rf"(?<!\w)({re.escape(superlativo)})(?!\w)", re.IGNORECASE
+            )
             for match in pattern.finditer(report):
                 matched_word = match.group(1)
                 start_idx = match.start()
@@ -214,8 +261,10 @@ Relatório de Pesquisa:
                 right = min(len(report), start_idx + len(matched_word) + 60)
                 window = report[left:right]
 
-                # Verifica se há marcadores de citação (ex: [1], (Fonte) ou links markdown)
-                has_citation = "[" in window or "(" in window or "http" in window
+                # Verifica se há uma citação de verdade (link markdown,
+                # referência numérica, URL nua ou a palavra "fonte") —
+                # não apenas qualquer parêntese/colchete no texto.
+                has_citation = bool(_CITATION_PATTERN.search(window))
                 if not has_citation:
                     issues.append(
                         ReviewIssue(
@@ -234,10 +283,19 @@ Relatório de Pesquisa:
         # 2. Seções muito curtas (< 200 caracteres de conteúdo)
         # Dividimos em seções baseadas em headings
         sections = re.split(r"\n##+\s+", report)
-        for section in sections:
+        # O primeiro elemento do split é o texto ANTES do primeiro heading
+        # "##"; se o relatório não começa com um heading, esse trecho é só
+        # um preâmbulo (ex.: título "# Relatório..." + intro), não uma
+        # seção nomeada — tratá-lo como seção gera falso positivo do tipo
+        # "a seção 'Este é um relatório sobre...' está muito curta".
+        report_starts_with_heading = bool(re.match(r"^#+\s", report.lstrip()))
+
+        for idx, section in enumerate(sections):
             section = section.strip()
             if not section:
                 continue
+            if idx == 0 and not report_starts_with_heading:
+                continue  # preâmbulo antes do primeiro heading, não é uma seção
 
             lines = section.split("\n")
             title = lines[0].strip() if lines else "Seção"
@@ -253,6 +311,33 @@ Relatório de Pesquisa:
                         suggestion=f"Expandir a seção '{title}' com mais detalhes factuais ou mesclar com uma seção adjacente.",
                     )
                 )
+
+        # 3. Citações que apontam para URLs fora do conjunto de fontes
+        # coletadas nesta pesquisa. `results` era recebido por este método
+        # e nunca utilizado; esta checagem dá uso real ao parâmetro e cobre
+        # a categoria "weak_citation" (já existia em REVIEW_CATEGORIES mas
+        # nunca era produzida pela via heurística, só pelo LLM).
+        known_urls = {url for r in (results or []) if (url := getattr(r, "url", None))}
+        if known_urls:
+            for match in re.finditer(r"\[([^\]]+)\]\((https?://[^\s)]+)\)", report):
+                link_text, url = match.group(1), match.group(2)
+                if url not in known_urls:
+                    issues.append(
+                        ReviewIssue(
+                            category="weak_citation",
+                            severity="major",
+                            description=(
+                                "Citação aponta para uma URL que não está entre "
+                                f"as fontes coletadas nesta pesquisa: {url}"
+                            ),
+                            location=link_text,
+                            suggestion=(
+                                "Confirmar se a URL é uma fonte válida coletada "
+                                "pelo pipeline; se não for, remover ou corrigir "
+                                "a citação."
+                            ),
+                        )
+                    )
 
         return issues
 

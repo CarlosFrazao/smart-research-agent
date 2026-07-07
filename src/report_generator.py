@@ -1,5 +1,4 @@
 """Módulo de geração de relatórios de pesquisa em Markdown.
-
 Orquestra a montagem de relatórios estruturados a partir de resultados sintetizados,
 combinando sumário executivo gerado por LLM, análise de fontes, tendências,
 sentimento, comparações e timeline cronológica.
@@ -9,6 +8,8 @@ import asyncio
 import hashlib
 import logging
 import os
+import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -26,36 +27,9 @@ logger = logging.getLogger(__name__)
 # dentro de uma mesma sessao de pesquisa, sem gastar chamadas de LLM extras.
 _SECTIONS_CACHE_TTL_SECONDS = 1800  # 30 minutos
 
-# Schema JSON para a chamada consolidada das 3 secoes narrativas do relatorio.
-_SECTIONS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "executive_summary": {
-            "type": "string",
-            "description": "Resumo executivo de 3-5 frases sobre os achados principais, em PT-BR.",
-        },
-        "recommendation": {
-            "type": "string",
-            "description": (
-                "Recomendacao final estruturada em PT-BR: (1) recomendacao principal "
-                "com dado concreto, (2) alternativa, (3) proximos passos (max. 3)."
-            ),
-        },
-        "trends": {
-            "type": "string",
-            "description": (
-                "2-3 tendencias tecnologicas em PT-BR, cada uma citando pelo menos "
-                "um projeto concreto como evidencia."
-            ),
-        },
-    },
-    "required": ["executive_summary", "recommendation", "trends"],
-}
-
 
 class ReportGenerator:
     """Gerador de relatórios Markdown estruturados a partir de resultados de pesquisa.
-
     Combina sumário executivo, análise comparativa, timeline, sentimento e
     tendências (via LLM) em um único documento Markdown coeso e exportável.
     """
@@ -66,9 +40,21 @@ class ReportGenerator:
         self.sentiment_analyzer = SentimentAnalyzer()
         self.comparator = Comparator()
         # Cache das 3 secoes narrativas (resumo/recomendacao/tendencias).
-        # Aceita um Cache compartilhado (ex: injetado pelo Orchestrator) ou
-        # cria um proprio com os defaults do projeto (./.cache, sem Redis).
         self.cache = cache or Cache()
+
+    def _get_confidence_tags(self, is_english: bool) -> dict:
+        """Retorna as tags de confiança traduzidas para usar nos prompts e relatórios."""
+        if is_english:
+            return {
+                "verified": "[HIGH CONFIDENCE]",
+                "cited": "[MEDIUM]",
+                "default": "[LOW — VERIFY]",
+            }
+        return {
+            "verified": "[ALTA CONFIANÇA]",
+            "cited": "[MÉDIA]",
+            "default": "[BAIXA — VERIFICAR]",
+        }
 
     def _is_query_english(self, query: str) -> bool:
         """Heurística simples para detectar se a query do usuário está em inglês."""
@@ -111,14 +97,77 @@ class ReportGenerator:
             "sobre",
             "entre",
         }
-
         words = set(query.lower().split())
-        if words & en_words:
-            if not (words & pt_words):
-                return True
-        if "vs" in words or "versus" in words:
+        has_en = bool(words & en_words)
+        has_pt = bool(words & pt_words)
+
+        # Se contém palavras em português, consideramos português (mesmo que tenha "vs")
+        if has_pt:
+            return False
+        # Se contém palavras em inglês e não tem em português, consideramos inglês
+        if has_en:
             return True
         return False
+
+    def _translate_analyzer_sections(self, section: str, is_english: bool) -> str:
+        """Traduz os cabeçalhos das seções geradas por SentimentAnalyzer e TemporalAnalyzer.
+        Como esses módulos ainda não suportam inglês nativamente, fazemos uma substituição
+        de strings para garantir consistência no relatório final.
+        """
+        if not is_english:
+            return section
+
+        # Traduções para SentimentAnalyzer
+        section = section.replace(
+            "## 🎭 Análise de Sentimento & Viés", "## 🎭 Sentiment Analysis & Bias"
+        )
+        section = section.replace(
+            "### 📊 Perfil de Sentimento por Canal de Origem",
+            "### 📊 Sentiment Profile by Source Channel",
+        )
+        section = section.replace("Canal de Origem", "Source Channel")
+        section = section.replace("Relevância / Volume", "Relevance / Volume")
+        section = section.replace("Tom Médio / Sentimento", "Average Tone / Sentiment")
+        section = section.replace("Classificação", "Classification")
+        section = section.replace(
+            "Nenhum dado disponível para análise de sentimento.",
+            "No data available for sentiment analysis.",
+        )
+
+        # Traduções para TemporalAnalyzer
+        section = section.replace(
+            "## 📅 Linha do Tempo & Análise Temporal",
+            "## 📅 Timeline & Temporal Analysis",
+        )
+        section = section.replace(
+            "### 📊 Histograma de Menções/Atividade por Ano",
+            "### 📊 Mentions/Activity Histogram by Year",
+        )
+        section = section.replace("Ano", "Year")
+        section = section.replace("Ocorrências / Eventos", "Occurrences / Events")
+        section = section.replace("Histórico Visual", "Visual History")
+        section = section.replace("Análise de Tendência:", "Trend Analysis:")
+        section = section.replace(
+            "📈 **Tendência Crescente (Alta de Interesse / Atividade)**",
+            "📈 **Rising Trend (Increased Interest / Activity)**",
+        )
+        section = section.replace(
+            "📉 **Tendência Decrescente (Queda de Interesse / Atividade)**",
+            "📉 **Declining Trend (Decreased Interest / Activity)**",
+        )
+        section = section.replace(
+            "➡️ **Tendência Estável / Consolidada**", "➡️ **Stable / Consolidated Trend**"
+        )
+        section = section.replace(
+            "❓ **Dados Temporais Insuficientes para Análise de Tendência**",
+            "❓ **Insufficient Temporal Data for Trend Analysis**",
+        )
+        section = section.replace(
+            "Nenhuma informação temporal significativa pôde ser extraída dos dados coletados.",
+            "No significant temporal information could be extracted from the collected data.",
+        )
+
+        return section
 
     async def generate(
         self,
@@ -126,16 +175,7 @@ class ReportGenerator:
         results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> str:
-        """Gera o relatório completo de pesquisa como string Markdown.
-
-        Args:
-            query: Query original do usuário.
-            results: Lista de `SynthesizedResult` ordenada por score.
-            metadata: Metadados da sessão de pesquisa (duracao, fontes, etc).
-
-        Returns:
-            str: Relatório completo em formato Markdown.
-        """
+        """Gera o relatório completo de pesquisa como string Markdown."""
         if not results:
             is_english = self._is_query_english(query)
             if is_english:
@@ -147,8 +187,11 @@ class ReportGenerator:
         executive_summary = sections["executive_summary"]
         recommendation = sections["recommendation"]
         trends = sections["trends"]
+
         timeline_section = self.temporal_analyzer.generate_timeline_section(results)
         sentiment_section = self.sentiment_analyzer.generate_sentiment_section(results)
+
+        # Integração crítica: usa o Comparator para gerar tabela rica se a query for comparativa
         comparison_section = self.comparator.generate_comparison_section(query, results)
 
         report_raw = self._assemble_report(
@@ -167,7 +210,7 @@ class ReportGenerator:
     async def _validate_and_enrich_sections(
         self, report_md: str, query: str, results: list[SynthesizedResult]
     ) -> str:
-        """Valida se as seções do relatório gerado são muito curtas ou vazias e enriquece se necessário (BUG-13)."""
+        """Valida se as seções do relatório gerado são muito curtas ou vazias e enriquece se necessário."""
         is_english = self._is_query_english(query)
         sections = report_md.split("\n## ")
         enriched_sections = []
@@ -186,10 +229,10 @@ class ReportGenerator:
                 logger.info(
                     f"ReportGenerator: Seção '{header}' curta demais ({len(clean_content)} chars). Enriquecendo via LLM..."
                 )
-
                 project_summaries = "\n".join(
                     f"- {r.title}: {(r.description or '')[:200]}" for r in results[:8]
                 )
+
                 if is_english:
                     prompt = (
                         "You are a senior technology intelligence analyst. Write in English.\n"
@@ -198,26 +241,21 @@ class ReportGenerator:
                         f"Found projects as context:\n{project_summaries}\n\n"
                         f"Specific guidelines for section '{header}':\n"
                     )
-                    if "Technologies / Stacks" in header or "Tecnologias" in header:
+                    if "Technologies" in header or "Stacks" in header:
                         prompt += (
                             "- Identify likely languages (e.g. Rust, Python, TypeScript) and why they are used.\n"
                             "- Elaborate on the transport architecture (HTTP, WebSockets, stdio) commonly employed.\n"
-                            "- Detail dependencies and ecosystems involved (e.g. tokio, async-trait in Rust, fastmcp in Python)."
+                            "- Detail dependencies and ecosystems involved."
                         )
-                    elif (
-                        "Community Discussion" in header
-                        or "Discussao" in header
-                        or "Discussão" in header
-                    ):
+                    elif "Community" in header or "Discussion" in header:
                         prompt += (
                             "- Synthesize the overall reception of this type of technology by the developer community.\n"
                             "- Discuss main bottlenecks discussed (learning curve, data security in LLMs).\n"
-                            "- Cite observed interest through stars and general adoption discussions of the MCP protocol."
                         )
-                    elif "Sentiment" in header or "Sentimento" in header:
+                    elif "Sentiment" in header:
                         prompt += (
                             "- Describe the general tone of mentions (optimistic, pragmatic, skeptical).\n"
-                            "- Point out reasons for enthusiasm (flexible agent automation) and sources of skepticism (security, latency)."
+                            "- Point out reasons for enthusiasm and sources of skepticism."
                         )
                     else:
                         prompt += (
@@ -232,27 +270,24 @@ class ReportGenerator:
                         f"Projetos encontrados como contexto:\n{project_summaries}\n\n"
                         f"Diretrizes específicas para a seção '{header}':\n"
                     )
-
-                    if "Tecnologias / Stacks" in header or "Tecnologias" in header:
+                    if "Tecnologias" in header or "Stacks" in header:
                         prompt += (
                             "- Identifique as linguagens prováveis (ex: Rust, Python, TypeScript) e por que são usadas.\n"
                             "- Discorra sobre a arquitetura de transporte (HTTP, WebSockets, stdio) comumente empregada.\n"
-                            "- Detalhe as dependências e ecossistemas envolvidos (ex: tokio, async-trait no Rust, fastmcp no Python)."
                         )
                     elif (
-                        "Discussao da Comunidade" in header
+                        "Discussao" in header
                         or "Discussão" in header
-                        or "Discussao" in header
+                        or "Comunidade" in header
                     ):
                         prompt += (
                             "- Sintetize a recepção geral desse tipo de tecnologia pela comunidade de desenvolvedores.\n"
                             "- Fale sobre os principais gargalos discutidos (curva de aprendizado, segurança de dados em LLMs).\n"
-                            "- Cite o interesse observado através das estrelas e discussões gerais de adoção do protocolo MCP."
                         )
-                    elif "Sentimento" in header or "Sentimento" in header:
+                    elif "Sentimento" in header:
                         prompt += (
                             "- Descreva o tom geral das menções (otimista, pragmático, cético).\n"
-                            "- Aponte os motivos do entusiasmo (automação flexível de agentes) e as fontes de ceticismo (segurança, latência)."
+                            "- Aponte os motivos do entusiasmo e as fontes de ceticismo."
                         )
                     else:
                         prompt += (
@@ -284,17 +319,10 @@ class ReportGenerator:
         results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> str:
-        """Gera uma chave de cache determinística para as 3 secoes narrativas.
-
-        A chave depende da query, do dominio/total de resultados e de uma
-        "impressao digital" dos top-8 resultados (titulo, score, fontes e
-        qualidade de evidencia). Isso garante cache-hit em reexecucoes ou
-        reexportacoes (md/pdf/docx) do mesmo conjunto de resultados sem
-        depender de identidade de objeto.
-        """
+        """Gera uma chave de cache determinística para as 3 secoes narrativas."""
         fingerprint_parts = [
             query.strip().lower(),
-            str(metadata.domain),
+            metadata.domain,
             str(metadata.total_results),
         ]
         for r in results[:8]:
@@ -312,24 +340,7 @@ class ReportGenerator:
         results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> dict[str, str]:
-        """Obtem as 3 secoes narrativas do relatorio (resumo, recomendacao, tendencias).
-
-        Estrategia (do mais para o menos eficiente):
-          1. Cache — reaproveita secoes ja geradas para o mesmo conjunto de resultados.
-          2. Chamada consolidada — 1 unica chamada LLM com schema JSON estruturado.
-          3. Fallback paralelo — se a consolidada falhar (JSON invalido, erro de
-             API, dados insuficientes), executa as 3 chamadas originais em
-             paralelo via `asyncio.gather()`, cada uma com seu proprio fallback
-             textual individual (comportamento identico ao anterior).
-
-        Args:
-            query: Query original do usuario.
-            results: Resultados sintetizados para contexto do LLM.
-            metadata: Metadados da sessao de pesquisa.
-
-        Returns:
-            dict com as chaves "executive_summary", "recommendation" e "trends".
-        """
+        """Obtem as 3 secoes narrativas do relatorio (resumo, recomendacao, tendencias)."""
 
         async def _parallel_fallback() -> dict[str, str]:
             executive_summary, recommendation, trends = await asyncio.gather(
@@ -343,10 +354,6 @@ class ReportGenerator:
                 "trends": trends,
             }
 
-        # Casos degenerados (sem resultados ou poucos demais para tendencias
-        # confiaveis) usam diretamente o caminho paralelo: os metodos originais
-        # ja tem seus proprios guard-clauses para esses casos (ex: "Poucos dados
-        # para analise de tendencias"), e o volume de dados nao justifica cache.
         if not results or len(results) < 3:
             return await _parallel_fallback()
 
@@ -356,6 +363,7 @@ class ReportGenerator:
         except Exception as e:
             logger.warning(f"ReportGenerator: falha ao consultar cache de secoes: {e}")
             cached = None
+
         if cached and all(
             cached.get(k) for k in ("executive_summary", "recommendation", "trends")
         ):
@@ -391,34 +399,42 @@ class ReportGenerator:
         results: list[SynthesizedResult],
         metadata: ResearchMetadata,
     ) -> dict[str, str]:
-        """Gera resumo executivo, recomendacao e tendencias em 1 unica chamada LLM.
-
-        Consolida os 3 prompts originais em um so, solicitando resposta em
-        JSON estruturado via `LLMClient.generate_structured`. Substitui 3
-        round-trips sequenciais (ou paralelos) por apenas 1.
-
-        Raises:
-            Exception: se a chamada LLM falhar ou o JSON retornado nao tiver
-                todas as secoes preenchidas — o chamador deve tratar isso e
-                cair no fallback paralelo com os prompts individuais.
-        """
+        """Gera resumo executivo, recomendacao e tendencias em 1 unica chamada LLM."""
         is_english = self._is_query_english(query)
+        tags = self._get_confidence_tags(is_english)
+        high_tag = tags["verified"]
+        low_tag = tags["default"]
+
         top_lines_list = []
         for i, r in enumerate(results[:8]):
             quality = getattr(r, "evidence_quality", "unknown")
             confidence_tag = (
-                "[ALTA CONFIANÇA]"
+                tags["verified"]
                 if quality == "verified"
-                else "[MÉDIA]"
+                else tags["cited"]
                 if quality == "cited"
-                else "[BAIXA — VERIFICAR]"
+                else tags["default"]
             )
+
+            if is_english:
+                desc_label, highlights_label, metrics_label = (
+                    "Description",
+                    "Highlights",
+                    "Metrics",
+                )
+            else:
+                desc_label, highlights_label, metrics_label = (
+                    "Descrição",
+                    "Destaques",
+                    "Métricas",
+                )
+
             top_lines_list.append(
                 f"{i+1}. {confidence_tag} {r.title or '(sem título)'} "
                 f"({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n"
-                f"   Descricao: {(r.description or '')[:200]}\n"
-                f"   Destaques: {', '.join(h for h in r.highlights if h)}\n"
-                f"   Metricas: {r.metrics}"
+                f"   {desc_label}: {(r.description or '')[:200]}\n"
+                f"   {highlights_label}: {', '.join(h for h in r.highlights if h)}\n"
+                f"   {metrics_label}: {r.metrics}"
             )
         top_lines = "\n".join(top_lines_list)
 
@@ -447,7 +463,7 @@ class ReportGenerator:
                     "description": (
                         "Final recommendation structured in English: (1) main recommendation with concrete data, (2) alternative, (3) next steps (max 3)."
                         if is_english
-                        else "Recomendacao final estruturada em PT-BR: (1) recomendacao principal com dado concreto, (2) alternativa, (3) proximos passos (max. 3)."
+                        else "Recomendação final estruturada em PT-BR: (1) recomendação principal com dado concreto, (2) alternativa, (3) próximos passos (máx. 3)."
                     ),
                 },
                 "trends": {
@@ -455,7 +471,7 @@ class ReportGenerator:
                     "description": (
                         "2-3 technological trends in English, each citing at least one concrete project as evidence."
                         if is_english
-                        else "2-3 tendencias tecnologicas em PT-BR, cada uma citando pelo menos um projeto concreto como evidencia."
+                        else "2-3 tendências tecnológicas em PT-BR, cada uma citando pelo menos um projeto concreto como evidência."
                     ),
                 },
             },
@@ -468,7 +484,7 @@ class ReportGenerator:
                 "Based on the research data below, generate the THREE narrative sections of a technical report.\n\n"
                 "General rules: use concrete data (stars, dates, languages) when available. "
                 "Admit limitations when confidence is low. Do not invent information. "
-                "Prioritize sources marked with [ALTA CONFIANÇA] and handle with caution those marked [BAIXA — VERIFICAR].\n\n"
+                f"Prioritize sources marked with {high_tag} and handle with caution those marked {low_tag}.\n\n"
                 f"Query: {query}\n"
                 f"Domain: {metadata.domain}\n"
                 f"Sources searched: {', '.join(s for s in metadata.sources if s)}\n"
@@ -482,7 +498,7 @@ class ReportGenerator:
                 "2. recommendation — mandatory structure: (a) Main recommendation, citing a project "
                 "and concrete data justifying it; (b) Alternative and when to choose it; "
                 "(c) Next steps (maximum 3 specific and actionable actions). Give clear preference "
-                "to [ALTA CONFIANÇA] projects and avoid recommending [BAIXA — VERIFICAR] items as primary option.\n"
+                f"to {high_tag} projects and avoid recommending {low_tag} items as primary option.\n"
                 "3. trends — 2 to 3 technological trends, each citing at least one concrete project "
                 "as evidence. Do not extrapolate beyond the data provided."
             )
@@ -492,7 +508,7 @@ class ReportGenerator:
                 "Com base nos dados de pesquisa abaixo, gere as TRÊS seções narrativas de um relatório técnico.\n\n"
                 "Regras gerais: use dados concretos (stars, datas, linguagens) quando disponíveis. "
                 "Admita limitações quando a confiança for baixa. Não invente informações. "
-                "Priorize fontes marcadas com [ALTA CONFIANÇA] e trate com cautela as marcadas com [BAIXA — VERIFICAR].\n\n"
+                f"Priorize fontes marcadas com {high_tag} e trate com cautela as marcadas com {low_tag}.\n\n"
                 f"Query: {query}\n"
                 f"Domínio: {metadata.domain}\n"
                 f"Fontes pesquisadas: {', '.join(s for s in metadata.sources if s)}\n"
@@ -506,13 +522,12 @@ class ReportGenerator:
                 "2. recommendation — estrutura obrigatória: (a) Recomendação principal, citando um "
                 "projeto e um dado concreto que a justifique; (b) Alternativa e quando escolhê-la; "
                 "(c) Próximos passos (máximo 3 ações específicas e acionáveis). Dê preferência clara "
-                "a projetos [ALTA CONFIANÇA] e evite recomendar itens [BAIXA — VERIFICAR] como opção primária.\n"
+                f"a projetos {high_tag} e evite recomendar itens {low_tag} como opção primária.\n"
                 "3. trends — 2 a 3 tendências tecnológicas, cada uma citando pelo menos um projeto "
                 "concreto como evidência. Não extrapole além dos dados fornecidos."
             )
 
         data = await self.llm.generate_structured(prompt, schema, temperature=0.35)
-
         sections = {
             "executive_summary": str(data.get("executive_summary") or "").strip(),
             "recommendation": str(data.get("recommendation") or "").strip(),
@@ -532,15 +547,19 @@ class ReportGenerator:
     ) -> str:
         """Gera o resumo executivo da pesquisa usando o LLM."""
         is_english = self._is_query_english(query)
+        tags = self._get_confidence_tags(is_english)
+        high_tag = tags["verified"]
+        low_tag = tags["default"]
+
         top_lines_list = []
         for i, r in enumerate(results[:5]):
             quality = getattr(r, "evidence_quality", "unknown")
             confidence_tag = (
-                "[ALTA CONFIANÇA]"
+                tags["verified"]
                 if quality == "verified"
-                else "[MÉDIA]"
+                else tags["cited"]
                 if quality == "cited"
-                else "[BAIXA — VERIFICAR]"
+                else tags["default"]
             )
             top_lines_list.append(
                 f"{i+1}. {confidence_tag} {r.title or '(sem título)'} ({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n   {(r.description or '')[:200]}..."
@@ -557,13 +576,14 @@ class ReportGenerator:
             if metadata.low_confidence_warnings
             else ""
         )
+
         if is_english:
             prompt = (
                 "You are a senior technical analyst. Write in English.\n"
                 "Generate an executive summary of 3-5 sentences about the main findings.\n\n"
                 "Rules: use concrete data (stars, dates, languages) when available.\n"
                 "Admit limitations when confidence is low. Do not invent information.\n"
-                "Prioritize sources marked with [ALTA CONFIANÇA] and handle with caution sources marked [BAIXA — VERIFICAR].\n\n"
+                f"Prioritize sources marked with {high_tag} and handle with caution sources marked {low_tag}.\n\n"
                 f"Query: {query}\n"
                 f"Domain: {metadata.domain}\n"
                 f"Sources searched: {', '.join(s for s in metadata.sources if s)}\n"
@@ -580,7 +600,7 @@ class ReportGenerator:
                 "Gere um resumo executivo de 3-5 frases sobre os achados principais.\n\n"
                 "Regras: use dados concretos (stars, datas, linguagens) quando disponíveis.\n"
                 "Admita limitações quando a confiança for baixa. Não invente informações.\n"
-                "Priorize fontes marcadas com [ALTA CONFIANÇA] e descarte ou mencione com cautela fontes marcadas com [BAIXA — VERIFICAR].\n\n"
+                f"Priorize fontes marcadas com {high_tag} e descarte ou mencione com cautela fontes marcadas com {low_tag}.\n\n"
                 f"Query: {query}\n"
                 f"Domínio: {metadata.domain}\n"
                 f"Fontes pesquisadas: {', '.join(s for s in metadata.sources if s)}\n"
@@ -591,6 +611,7 @@ class ReportGenerator:
                 f"Top 5 projetos encontrados:\n{top_lines}\n\n"
                 "Resumo executivo:"
             )
+
         try:
             return await self.llm.generate(prompt, temperature=0.4, max_tokens=500)
         except Exception as e:
@@ -612,26 +633,38 @@ class ReportGenerator:
     ) -> str:
         """Gera uma recomendacao estrategica baseada nos resultados da pesquisa."""
         is_english = self._is_query_english(query)
+        tags = self._get_confidence_tags(is_english)
+        high_tag = tags["verified"]
+        low_tag = tags["default"]
+
         if not results:
             return (
                 "No projects found for recommendation."
                 if is_english
-                else "Nenhum projeto encontrado para recomendacao."
+                else "Nenhum projeto encontrado para recomendação."
             )
+
         top_lines_list = []
         for i, r in enumerate(results[:5]):
             quality = getattr(r, "evidence_quality", "unknown")
             confidence_tag = (
-                "[ALTA CONFIANÇA]"
+                tags["verified"]
                 if quality == "verified"
-                else "[MÉDIA]"
+                else tags["cited"]
                 if quality == "cited"
-                else "[BAIXA — VERIFICAR]"
+                else tags["default"]
             )
+
+            if is_english:
+                strong_label, metrics_label = "Strong points", "Metrics"
+            else:
+                strong_label, metrics_label = "Pontos fortes", "Métricas"
+
             top_lines_list.append(
-                f"{i+1}. {confidence_tag} {r.title or '(sem título)'}\n   Pontos fortes: {', '.join(h for h in r.highlights if h)}\n   Metricas: {r.metrics}"
+                f"{i+1}. {confidence_tag} {r.title or '(sem título)'}\n   {strong_label}: {', '.join(h for h in r.highlights if h)}\n   {metrics_label}: {r.metrics}"
             )
         top_lines = "\n".join(top_lines_list)
+
         if is_english:
             prompt = (
                 "You are a technical consultant. Write in English.\n"
@@ -641,7 +674,7 @@ class ReportGenerator:
                 "2. **Alternative** — second best and when to choose it\n"
                 "3. **Next steps** — maximum 3 specific and actionable actions\n\n"
                 "Rules: base every statement on the data below. Do not extrapolate beyond the data.\n"
-                "Give clear preference to [ALTA CONFIANÇA] projects. Avoid recommending [BAIXA — VERIFICAR] as primary option.\n\n"
+                f"Give clear preference to {high_tag} projects. Avoid recommending {low_tag} as primary option.\n\n"
                 f"User query: {query}\n\n"
                 f"Projects (ordered by relevance):\n{top_lines}\n\n"
                 "Final recommendation:"
@@ -655,11 +688,12 @@ class ReportGenerator:
                 "2. **Alternativa** — segundo melhor e quando escolhê-la\n"
                 "3. **Próximos passos** — máximo 3 ações específicas e acionáveis\n\n"
                 "Regras: baseie cada afirmação nos dados abaixo. Não extrapole além dos dados.\n"
-                "Dê preferência clara aos projetos marcados com [ALTA CONFIANÇA]. Evite recomendar itens [BAIXA — VERIFICAR] como opção primária.\n\n"
+                f"Dê preferência clara aos projetos marcados com {high_tag}. Evite recomendar itens {low_tag} como opção primária.\n\n"
                 f"Query do usuário: {query}\n\n"
                 f"Projetos (ordenados por relevância):\n{top_lines}\n\n"
                 "Recomendação final:"
             )
+
         try:
             return await self.llm.generate(prompt, temperature=0.3, max_tokens=800)
         except Exception as e:
@@ -667,7 +701,7 @@ class ReportGenerator:
             top = results[0]
             if is_english:
                 return f"We recommend **{top.title}** as the primary option. {top.description[:200]}..."
-            return f"Recomendamos **{top.title}** como principal opcao. {top.description[:200]}..."
+            return f"Recomendamos **{top.title}** como principal opção. {top.description[:200]}..."
 
     async def _generate_trends(
         self, results: list[SynthesizedResult], query: str | None = None
@@ -678,12 +712,14 @@ class ReportGenerator:
             return (
                 "Few data points for trends analysis."
                 if is_english
-                else "Poucos dados para analise de tendencias."
+                else "Poucos dados para análise de tendências."
             )
+
         project_lines = "\n".join(
             f"- {r.title or '(sem título)'}: {(r.description or '')[:150]}..."
             for r in results[:8]
         )
+
         if is_english:
             prompt = (
                 "Analyze the projects found and identify 2-3 technological trends in English.\n\n"
@@ -700,6 +736,7 @@ class ReportGenerator:
                 f"Projetos:\n{project_lines}\n\n"
                 "Tendências observadas (em Português do Brasil):"
             )
+
         try:
             return await self.llm.generate(prompt, temperature=0.4, max_tokens=400)
         except Exception as e:
@@ -707,7 +744,7 @@ class ReportGenerator:
             return (
                 "Trends analysis not available."
                 if is_english
-                else "Analise de tendencias nao disponivel."
+                else "Análise de tendências não disponível."
             )
 
     def _assemble_report(
@@ -724,6 +761,15 @@ class ReportGenerator:
     ) -> str:
         """Monta o relatorio final unindo todas as secoes geradas."""
         is_english = self._is_query_english(query)
+
+        # Traduz seções dos analisadores se necessário
+        timeline_section = self._translate_analyzer_sections(
+            timeline_section, is_english
+        )
+        sentiment_section = self._translate_analyzer_sections(
+            sentiment_section, is_english
+        )
+
         lines = []
         lines.extend(
             self._build_summary(
@@ -744,10 +790,10 @@ class ReportGenerator:
                 recommendation,
                 sentiment_section,
                 metadata,
+                comparison_section=comparison_section,
                 is_english=is_english,
             )
         )
-
         cleaned_lines = [str(line) for line in lines if line is not None]
         return "\n".join(cleaned_lines)
 
@@ -763,8 +809,7 @@ class ReportGenerator:
     ) -> list[str]:
         """Constroi o bloco de cabecalho e resumo executivo do relatorio."""
         timestamp = metadata.timestamp.strftime("%Y-%m-%d %H:%M")
-
-        exec_summary_clean = str(executive_summary or "").strip()
+        exec_summary_clean = (executive_summary or "").strip()
         if not exec_summary_clean:
             if is_english:
                 exec_summary_clean = (
@@ -799,12 +844,12 @@ class ReportGenerator:
             ]
         else:
             lines = [
-                f"# Relatorio: {query}",
+                f"# Relatório: {query}",
                 "",
                 f"> Gerado em: {timestamp}  ",
                 f"> Fontes pesquisadas: {', '.join(s for s in metadata.sources if s)}  ",
                 f"> Resultados encontrados: {metadata.total_results}  ",
-                f"> Iteracoes de pesquisa: {metadata.iterations}  ",
+                f"> Iterações de pesquisa: {metadata.iterations}  ",
                 f"> Tempo total: {round(metadata.duration_seconds, 1)}s",
                 "",
                 "---",
@@ -826,30 +871,46 @@ class ReportGenerator:
                 "## 2. Discovered Projects / Tools",
                 "",
             ]
+            stars_label, forks_label, comments_label, upvotes_label, updated_label = (
+                "Stars",
+                "Forks",
+                "Comments",
+                "Upvotes",
+                "Updated",
+            )
         else:
             lines = [
                 "## 2. Projetos / Ferramentas Encontradas",
                 "",
             ]
+            stars_label, forks_label, comments_label, upvotes_label, updated_label = (
+                "Stars",
+                "Forks",
+                "Comentários",
+                "Upvotes",
+                "Atualizado",
+            )
 
         for i, r in enumerate(results[:15]):
             metric_parts = []
             if "stars" in r.metrics:
-                metric_parts.append(f"Stars: {r.metrics['stars']}")
+                metric_parts.append(f"{stars_label}: {r.metrics['stars']}")
             if "forks" in r.metrics:
-                metric_parts.append(f"Forks: {r.metrics['forks']}")
+                metric_parts.append(f"{forks_label}: {r.metrics['forks']}")
             if "comments" in r.metrics:
-                metric_parts.append(f"Comments: {r.metrics['comments']}")
+                metric_parts.append(f"{comments_label}: {r.metrics['comments']}")
             elif "upvotes" in r.metrics:
-                metric_parts.append(f"Upvotes: {r.metrics['upvotes']}")
+                metric_parts.append(f"{upvotes_label}: {r.metrics['upvotes']}")
             if "updated_at" in r.metrics:
-                metric_parts.append(f"Updated: {str(r.metrics['updated_at'])[:10]}")
-
+                metric_parts.append(
+                    f"{updated_label}: {str(r.metrics['updated_at'])[:10]}"
+                )
             metrics_str = " | ".join(metric_parts)
+
             highlights_str = "\n".join(f"- {h}" for h in r.highlights if h) or (
                 "- No specific highlights"
                 if is_english
-                else "- Nenhum destaque especifico"
+                else "- Nenhum destaque específico"
             )
             desc_text = (r.description or "")[:300] + (
                 "..." if len(r.description or "") > 300 else ""
@@ -886,6 +947,7 @@ class ReportGenerator:
                     "inferred": "🔍 Inferido (Confiança Baixa)",
                     "unknown": "❓ Desconhecido",
                 }
+
             verdict_display = verdict_icons.get(verdict, verdict)
             quality_display = quality_badges.get(
                 evidence_quality := getattr(r, "evidence_quality", "unknown"),
@@ -937,6 +999,7 @@ class ReportGenerator:
             entry_lines = [
                 f"### 2.{i+1} {r.title or '(sem título)'}",
             ]
+
             if verdict_display:
                 if is_english:
                     entry_lines.append(
@@ -946,6 +1009,7 @@ class ReportGenerator:
                     entry_lines.append(
                         f"> **Veredito:** {verdict_display}  |  ⏱️ ~{read_min} min  |  **Qualidade:** {quality_display}{source_warning}{flags_display}"
                     )
+
             if tldr:
                 entry_lines.append(f"> {tldr}")
 
@@ -962,15 +1026,16 @@ class ReportGenerator:
                     entry_lines.append(f"- **Next Action:** {next_step}")
             else:
                 entry_lines += [
-                    f"- **Descricao:** {desc_text}",
+                    f"- **Descrição:** {desc_text}",
                     f"- **URLs:** {', '.join(u for u in r.urls[:3] if u)}",
                     f"- **Fontes:** {', '.join(s for s in r.sources if s)}",
                     f"- **Score:** {r.combined_score}/100",
-                    f"- **Metricas:** {metrics_str}",
-                    f"- **Highlights:**\n{highlights_str}",
+                    f"- **Métricas:** {metrics_str}",
+                    f"- **Destaques:**\n{highlights_str}",
                 ]
                 if next_step:
-                    entry_lines.append(f"- **Proxima Acao:** {next_step}")
+                    entry_lines.append(f"- **Próxima Ação:** {next_step}")
+
             entry_lines.append("")
             lines += entry_lines
         return lines
@@ -982,10 +1047,11 @@ class ReportGenerator:
         recommendation: str | None,
         sentiment_section: str,
         metadata: ResearchMetadata,
+        comparison_section: str = "",
         is_english: bool = False,
     ) -> list[str]:
         """Constroi o bloco de analise com tendencias, recomendacao e sentimento."""
-        recommendation_clean = str(recommendation or "").strip()
+        recommendation_clean = (recommendation or "").strip()
         if not recommendation_clean:
             if is_english:
                 recommendation_clean = (
@@ -1000,7 +1066,7 @@ class ReportGenerator:
                     "e atividade contínua no repositório. Verifique a tabela de comparação para detalhes adicionais."
                 )
 
-        trends_clean = str(trends or "").strip()
+        trends_clean = (trends or "").strip()
         if not trends_clean:
             if is_english:
                 trends_clean = (
@@ -1013,45 +1079,60 @@ class ReportGenerator:
                     "- **Segurança e Privacidade**: Foco em soluções self-hosted e políticas de RLS/mTLS."
                 )
 
-        if is_english:
-            lines = [
-                "---",
-                "",
-                "## 3. Side-by-Side Comparison",
-                "",
-                "| Project | Stars | Forks | Updated | License | Score | Verdict |",
-                "|---------|-------|-------|-------------|---------|-------|----------|",
-            ]
-        else:
-            lines = [
-                "---",
-                "",
-                "## 3. Comparacao Lado a Lado",
-                "",
-                "| Projeto | Stars | Forks | Atualizacao | Licenca | Score | Veredito |",
-                "|---------|-------|-------|-------------|-------|----------|",
-            ]
-        for r in results[:10]:
-            stars = r.metrics.get("stars", "-")
-            forks = r.metrics.get("forks", "-")
-            updated = str(r.metrics.get("updated_at", "-"))[:10]
-            license_id = r.metrics.get("license", "-")
-            verdict = getattr(r, "verdict", "") or "-"
+        lines = ["---", ""]
+
+        # Seção 3: Comparação (Usa o Comparator se disponível, senão tabela genérica)
+        if comparison_section:
+            # O Comparator já gera um cabeçalho "## ⚖️ Comparação Side-by-Side"
+            # Ajustamos para manter a numeração do relatório
             if is_english:
-                verdict_translations = {
-                    "Foca": "Focus",
-                    "Considera": "Consider",
-                    "Acompanha": "Watch",
-                    "Ignora": "Ignore",
-                }
-                verdict = verdict_translations.get(verdict, verdict)
-            lines.append(
-                f"| {(r.title or '')[:30]} | {stars} | {forks} | {updated} | {license_id} | {r.combined_score} | {verdict} |"
-            )
+                comparison_section = comparison_section.replace(
+                    "## ⚖️ Comparação Side-by-Side", "## 3. ⚖️ Side-by-Side Comparison"
+                )
+            else:
+                comparison_section = comparison_section.replace(
+                    "## ⚖️ Comparação Side-by-Side", "## 3. ⚖️ Comparação Side-by-Side"
+                )
+            lines.append(comparison_section)
+            lines.append("")
+        else:
+            # Fallback: Tabela genérica
+            if is_english:
+                lines += [
+                    "## 3. Side-by-Side Comparison",
+                    "",
+                    "| Project | Stars | Forks | Updated | License | Score | Verdict |",
+                    "|---------|-------|-------|-------------|---------|-------|----------|",
+                ]
+            else:
+                lines += [
+                    "## 3. Comparação Lado a Lado",
+                    "",
+                    "| Projeto | Stars | Forks | Atualização | Licença | Score | Veredito |",
+                    "|---------|-------|-------|-------------|---------|-------|----------|",
+                ]
+
+            for r in results[:10]:
+                stars = r.metrics.get("stars", "-")
+                forks = r.metrics.get("forks", "-")
+                updated = str(r.metrics.get("updated_at", "-"))[:10]
+                license_id = r.metrics.get("license", "-")
+                verdict = getattr(r, "verdict", "") or "-"
+                if is_english:
+                    verdict_translations = {
+                        "Foca": "Focus",
+                        "Considera": "Consider",
+                        "Acompanha": "Watch",
+                        "Ignora": "Ignore",
+                    }
+                    verdict = verdict_translations.get(verdict, verdict)
+                lines.append(
+                    f"| {(r.title or '')[:30]} | {stars} | {forks} | {updated} | {license_id} | {r.combined_score} | {verdict} |"
+                )
+            lines.append("")
 
         if is_english:
             lines += [
-                "",
                 "---",
                 "",
                 "## 4. Identified Technologies / Stacks",
@@ -1059,12 +1140,12 @@ class ReportGenerator:
             ]
         else:
             lines += [
-                "",
                 "---",
                 "",
                 "## 4. Tecnologias / Stacks Identificadas",
                 "",
             ]
+
         languages: dict = {}
         for r in results:
             lang = r.metrics.get("language")
@@ -1092,9 +1173,10 @@ class ReportGenerator:
                 "",
                 "---",
                 "",
-                "## 5. Discussao da Comunidade",
+                "## 5. Discussão da Comunidade",
                 "",
             ]
+
         reddit_results = [r for r in results if "reddit" in r.sources]
         hn_results = [r for r in results if "hackernews" in r.sources]
         if reddit_results:
@@ -1162,6 +1244,7 @@ class ReportGenerator:
                 "## 8. Links e Referências",
                 "",
             ]
+
         seen = set()
         all_urls = []
         for r in results[:20]:
@@ -1179,35 +1262,63 @@ class ReportGenerator:
                 all_dead_links.update(dead)
 
         if all_dead_links:
-            lines += [
-                "",
-                "### Links Inválidos ou Quebrados Detectados",
-                "As seguintes referências citadas pelas fontes originais falharam nos testes de conexão (404, timeouts ou inacessíveis):",
-                "",
-            ]
+            if is_english:
+                lines += [
+                    "",
+                    "### Invalid or Broken Links Detected",
+                    "The following references cited by the original sources failed connection tests (404, timeouts, or inaccessible):",
+                    "",
+                ]
+            else:
+                lines += [
+                    "",
+                    "### Links Inválidos ou Quebrados Detectados",
+                    "As seguintes referências citadas pelas fontes originais falharam nos testes de conexão (404, timeouts ou inacessíveis):",
+                    "",
+                ]
             for url in sorted(all_dead_links):
                 lines.append(f"- ❌ {url}")
 
         if metadata.low_confidence_warnings:
-            lines += [
-                "",
-                "---",
-                "",
-                "## 9. Advertências e Limitações",
-                "",
-            ]
-            for w in metadata.low_confidence_warnings:
-                lines.append(f"- ⚠️ {w}")
-            if metadata.overall_confidence < 0.6:
-                lines.append(
-                    "- ⚠️ Confiança geral abaixo de 60% — pesquisa adicional recomendada."
-                )
+            if is_english:
+                lines += [
+                    "",
+                    "---",
+                    "",
+                    "## 9. Warnings and Limitations",
+                    "",
+                ]
+                for w in metadata.low_confidence_warnings:
+                    lines.append(f"- ⚠️ {w}")
+                if metadata.overall_confidence < 0.6:
+                    lines.append(
+                        "- ⚠️ Overall confidence below 60% — additional research recommended."
+                    )
+            else:
+                lines += [
+                    "",
+                    "---",
+                    "",
+                    "## 9. Advertências e Limitações",
+                    "",
+                ]
+                for w in metadata.low_confidence_warnings:
+                    lines.append(f"- ⚠️ {w}")
+                if metadata.overall_confidence < 0.6:
+                    lines.append(
+                        "- ⚠️ Confiança geral abaixo de 60% — pesquisa adicional recomendada."
+                    )
+
+        if is_english:
+            footer_text = f"*Report generated by Smart Research Agent v2.0 | {metadata.timestamp.strftime('%Y-%m-%d %H:%M')}*"
+        else:
+            footer_text = f"*Relatório gerado por Smart Research Agent v2.0 | {metadata.timestamp.strftime('%Y-%m-%d %H:%M')}*"
 
         lines += [
             "",
             "---",
             "",
-            f"*Relatório gerado por Smart Research Agent v2.0 | {metadata.timestamp.strftime('%Y-%m-%d %H:%M')}*",
+            footer_text,
         ]
         return lines
 
@@ -1218,23 +1329,8 @@ class ReportGenerator:
         output_dir: str = "./reports",
         formats: list[ReportFormat] | None = None,
     ) -> str:
-        """
-        Salva o relatório no disco.
-
-        Args:
-            report: Conteúdo Markdown do relatório.
-            query: Query original da pesquisa (usada para gerar o nome do arquivo).
-            output_dir: Diretório de saída.
-            formats: Lista de formatos adicionais a exportar além do Markdown padrão.
-                     Exemplo: [ReportFormat.PDF, ReportFormat.DOCX]
-                     Se None ou vazia, exporta apenas Markdown.
-
-        Returns:
-            Caminho do arquivo Markdown principal.
-        """
+        """Salva o relatório no disco."""
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        import re
-        import unicodedata
 
         normalized = (
             unicodedata.normalize("NFKD", query)
@@ -1245,16 +1341,15 @@ class ReportGenerator:
         slug = re.sub(r"-+", "-", slug).strip("-")[:50]
         if not slug:
             slug = "report"
+
         base_name = datetime.now().strftime("%Y-%m-%d") + f"-{slug}"
         md_path = os.path.join(output_dir, f"{base_name}.md")
-
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(report)
-        logger.info(f"Relatorio salvo em: {md_path}")
+        logger.info(f"Relatório salvo em: {md_path}")
 
-        # ── Dispatcher de formatos adicionais ─────────────────────────────────────────────────
+        # Dispatcher de formatos adicionais
         extra_formats = set(formats or [])
-
         if ReportFormat.PDF in extra_formats:
             try:
                 from src.exporters.pdf_exporter import PDFExporter

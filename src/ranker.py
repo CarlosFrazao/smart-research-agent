@@ -25,10 +25,11 @@ existentes), o comportamento e identico ao anterior: apenas heuristica por
 fonte + penalidade de desinformacao.
 """
 
+from __future__ import annotations
 import logging
 import math
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 from src.clients.llm_client import LLMClient
 from src.misinformation_detector import MisinformationDetector
@@ -36,6 +37,15 @@ from src.ranking.hybrid_ranker import HybridRanker, SemanticScorer
 from src.types import RankedResult, SearchResult
 
 logger = logging.getLogger(__name__)
+
+# Chaves sempre presentes em `score_breakdown`, independente do caminho
+# (heuristico puro vs hibrido). Mantem o schema estavel para quem consome
+# `RankedResult` a jusante (ConfidenceScorerV2, ConflictDetector, etc.).
+_BREAKDOWN_DEFAULTS: dict[str, Any] = {
+    "heuristic_score": None,
+    "bm25_score": None,
+    "embedding_score": None,
+}
 
 
 class QualityRanker:
@@ -49,8 +59,8 @@ class QualityRanker:
 
     def __init__(
         self,
-        llm_client: LLMClient = None,
-        config: dict[str, Any] = None,
+        llm_client: LLMClient | None = None,
+        config: dict[str, Any] | None = None,
         semantic_scorer: SemanticScorer | None = None,
     ):
         self.llm = llm_client
@@ -62,6 +72,15 @@ class QualityRanker:
         # nunca for chamado com `query`).
         self._semantic_scorer = semantic_scorer
         self._hybrid_ranker: HybridRanker | None = None
+
+        # Despacho por fonte via dict em vez de if/elif — mais facil de
+        # estender (basta registrar um novo par fonte->metodo) e de testar
+        # isoladamente.
+        self._source_scorers: dict[str, Callable[[SearchResult], float]] = {
+            "github": self._github_score,
+            "reddit": self._reddit_score,
+            "hackernews": self._hn_score,
+        }
 
     def _get_hybrid_ranker(self) -> HybridRanker:
         if self._hybrid_ranker is None:
@@ -98,6 +117,11 @@ class QualityRanker:
                 clean = date_str.replace("Z", "+00:00").split("+")[0]
                 date = datetime.strptime(clean, fmt)
                 days_ago = (datetime.now() - date).days
+                # Datas no futuro (clock skew entre APIs, ou timestamp mal
+                # formado) sao tratadas como "recentissimas" em vez de
+                # caírem no branch `return 5.0` por engano mais abaixo.
+                if days_ago < 0:
+                    return 20.0
                 if days_ago < 30:
                     return 20.0
                 elif days_ago < 90:
@@ -107,7 +131,18 @@ class QualityRanker:
                 return 5.0
             except ValueError:
                 continue
+        logger.debug("Nao foi possivel parsear data de recencia: %r", date_str)
         return 5.0
+
+    @staticmethod
+    def _safe_log10(value: float) -> float:
+        """`math.log10` protegido contra valores <= -1.
+
+        Metricas como upvotes do Reddit podem ser negativas (score
+        negativo). Sem esse guard, `math.log10(upvotes + 1)` levanta
+        `ValueError` para `upvotes <= -1` e derruba o ranking inteiro.
+        """
+        return math.log10(max(value, 0) + 1)
 
     def _github_score(self, result: SearchResult) -> float:
         """Calcula score de qualidade para resultados do GitHub.
@@ -120,7 +155,7 @@ class QualityRanker:
         Returns:
             float: Score entre 0 e 100.
         """
-        m = result.metrics
+        m = result.metrics or {}
         stars = m.get("stars", 0)
         forks = m.get("forks", 0)
         updated = m.get("updated_at", "")
@@ -129,8 +164,8 @@ class QualityRanker:
 
         score = min(
             100,
-            math.log10(stars + 1) * 15
-            + math.log10(forks + 1) * 10
+            self._safe_log10(stars) * 15
+            + self._safe_log10(forks) * 10
             + self._recency_score(updated)
             + (15 if license_id else 0)
             + (10 if language else 5),
@@ -148,17 +183,21 @@ class QualityRanker:
         Returns:
             float: Score entre 0 e 100.
         """
-        m = result.metrics
+        m = result.metrics or {}
         upvotes = m.get("upvotes", 0)
         comments = m.get("comments", 0)
         created = m.get("created_at", "")
         sub_rel = m.get("subreddit_relevance", 10)
 
-        engagement_rate = comments / max(upvotes, 1) * 100
+        # `upvotes` pode ser negativo ou zero (posts pouco votados / com
+        # score negativo); usamos max(upvotes, 0) so para o denominador do
+        # engagement, evitando divisao por valor negativo e explosao do
+        # engagement_rate para scores muito negativos.
+        engagement_rate = comments / max(upvotes, 0, 1) * 100
         score = min(
             100,
-            math.log10(upvotes + 1) * 20
-            + math.log10(comments + 1) * 15
+            self._safe_log10(upvotes) * 20
+            + self._safe_log10(comments) * 15
             + self._recency_score(created)
             + sub_rel
             + min(engagement_rate, 20),
@@ -176,15 +215,15 @@ class QualityRanker:
         Returns:
             float: Score entre 0 e 100.
         """
-        m = result.metrics
+        m = result.metrics or {}
         points = m.get("points", 0)
         comments = m.get("comments", 0)
         created = m.get("created_at", "")
 
         score = min(
             100,
-            math.log10(points + 1) * 25
-            + math.log10(comments + 1) * 15
+            self._safe_log10(points) * 25
+            + self._safe_log10(comments) * 15
             + self._recency_score(created)
             + (20 if m.get("url") else 10),
         )
@@ -203,13 +242,8 @@ class QualityRanker:
 
     def _heuristic_score(self, result: SearchResult) -> float:
         """Despacha para a heuristica especifica da fonte do resultado."""
-        if result.source == "github":
-            return self._github_score(result)
-        if result.source == "reddit":
-            return self._reddit_score(result)
-        if result.source == "hackernews":
-            return self._hn_score(result)
-        return self._generic_score(result)
+        scorer = self._source_scorers.get(result.source, self._generic_score)
+        return scorer(result)
 
     async def rank(
         self, results: list[SearchResult], query: str | None = None
@@ -248,6 +282,7 @@ class QualityRanker:
                         hr.result,
                         hr.final_score,
                         {
+                            **_BREAKDOWN_DEFAULTS,
                             "heuristic_score": hr.heuristic_score,
                             "bm25_score": hr.bm25_score,
                             "embedding_score": hr.embedding_score,
@@ -255,18 +290,21 @@ class QualityRanker:
                     )
                     for hr in hybrid_scored
                 ]
-            except Exception as e:
-                logger.warning(
-                    f"QualityRanker: hybrid ranking falhou ({e}); "
+            except Exception:
+                # `logger.exception` preserva o stack trace — essencial
+                # para depurar falhas reais do HybridRanker/SemanticReranker
+                # em producao, em vez de apenas a mensagem da excecao.
+                logger.exception(
+                    "QualityRanker: hybrid ranking falhou; "
                     "usando apenas heuristica por fonte."
                 )
                 base_entries = [
-                    (r, s, {"heuristic_score": s})
+                    (r, s, {**_BREAKDOWN_DEFAULTS, "heuristic_score": s})
                     for r, s in zip(results, heuristic_scores)
                 ]
         else:
             base_entries = [
-                (r, s, {"heuristic_score": s})
+                (r, s, {**_BREAKDOWN_DEFAULTS, "heuristic_score": s})
                 for r, s in zip(results, heuristic_scores)
             ]
 
@@ -294,5 +332,14 @@ class QualityRanker:
                 )
             )
 
-        ranked.sort(key=lambda x: x.score, reverse=True)
+        # Desempate estavel: score desc, depois heuristic_score desc (mais
+        # confiavel/independente de query), depois titulo para determinismo
+        # total quando tudo o resto empata.
+        ranked.sort(
+            key=lambda x: (
+                -x.score,
+                -float(x.score_breakdown.get("heuristic_score") or 0),
+                x.title or "",
+            )
+        )
         return ranked

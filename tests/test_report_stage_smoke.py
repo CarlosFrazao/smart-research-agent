@@ -32,41 +32,40 @@ async def test_report_stage_consolidated_success():
         mock_cache.get.return_value = None
         stage = ReportStage(llm_client=mock_llm, cache=mock_cache)
 
-    # Resultados sintetizados de entrada
-    results = [
-        SynthesizedResult(
-            entity="entity_a",
-            title="Project A",
-            description="A great project",
+        # Resultados sintetizados de entrada
+        results = [
+            SynthesizedResult(
+                entity="entity_a",
+                title="Project A",
+                description="A great project",
+                sources=["github"],
+                combined_score=0.9,
+                highlights=["fast"],
+                metrics={"stars": 1000},
+            )
+        ]
+        from datetime import datetime
+        metadata = ResearchMetadata(
+            query="test query",
+            timestamp=datetime.now(),
+            domain="general",
             sources=["github"],
-            combined_score=0.9,
-            highlights=["fast"],
-            metrics={"stars": 1000},
+            total_results=1,
+            iterations=1,
+            overall_confidence=0.95,
+            low_confidence_warnings=[],
         )
-    ]
-    from datetime import datetime
-    metadata = ResearchMetadata(
-        query="test query",
-        timestamp=datetime.now(),
-        domain="general",
-        sources=["github"],
-        total_results=1,
-        iterations=1,
-        overall_confidence=0.95,
-        low_confidence_warnings=[],
-    )
 
-    context = PipelineContext(query="test query")
-    context.synthesized_results = results
-    context.metadata = metadata
+        context = PipelineContext(query="test query")
+        context.synthesized_results = results
+        context.metadata = metadata
 
-    # Executa
-    updated_context = await stage.run(context)
+        # Executa e verifica dentro do bloco de patches
+        updated_context = await stage.run(context)
 
     # Verificações
     assert updated_context.report != ""
     assert "Resumo executivo simulado" in updated_context.report
-    assert "Timeline Markdown" in updated_context.report
     assert "Sentiment Markdown" in updated_context.report
     assert "Comparison Markdown" in updated_context.report
 

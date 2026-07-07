@@ -2,23 +2,23 @@
 waf_specialist_agent.py — Agente Especialista em Anti-Blocking (WAF/Bot-Detection Evasion)
 
 Responsabilidade:
-  Monitora sinais de bloqueio em responses HTTP durante o pipeline de coleta de dados
-  e aciona automaticamente contramedidas escalonadas:
-
-  Nível 0 (Verde) → Comportamento normal: sem bloqueio detectado.
+Monitora sinais de bloqueio em responses HTTP durante o pipeline de coleta de dados
+e aciona automaticamente contramedidas escalonadas:
+  Nível 0 (Verde)   → Comportamento normal: sem bloqueio detectado.
   Nível 1 (Amarelo) → Rotação de User-Agent e cabeçalhos HTTP.
   Nível 2 (Laranja) → Rotação de perfil TLS via curl_cffi + delays randomizados.
-  Nível 3 (Vermelho) → Desvio para proxy residencial + fingerprint de browser real.
+  Nível 3 (Vermelho)→ Desvio para proxy residencial + fingerprint de browser real.
   Nível 4 (Crítico) → Resolução de CAPTCHA via API externa + reinicialização de sessão.
 
 Integração no Pipeline:
-  - Acoplado ao SearchService via injeção de dependência passiva (wrapper de sessão).
-  - Não bloqueia o pipeline: atua de forma reativa e assíncrona quando detecta sinais.
-  - Métricas de bloqueio por domínio são persistidas em memória Redis (TTL: 1h).
+Acoplado ao SearchService/HTTPClient via injeção de dependência passiva.
+Não bloqueia o pipeline: atua de forma reativa e assíncrona quando detecta sinais.
+Métricas de bloqueio por domínio são persistidas em memória Redis (TTL: 1h).
 
 Dependências Externas Opcionais (graceful degradation se ausentes):
   - curl_cffi: TLS fingerprinting (Nível 2)
   - 2captcha/capsolver: resolução de CAPTCHA (Nível 4)
+  - Redis: persistência de métricas de bloqueio
   - Proxies residenciais: configurados via SRA_PROXY_URL no .env (Nível 3)
 """
 
@@ -26,14 +26,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
+from urllib.parse import urlparse
 
 logger = logging.getLogger("waf_specialist_agent")
-
 
 # ─── Enums e Constantes ────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ class BlockLevel(IntEnum):
 
 # Status HTTP que indicam possível bloqueio
 BLOCKING_STATUS_CODES = {403, 429, 503, 407}
+
 # Padrões em URLs/conteúdo que indicam challenge de bot-detection
 CHALLENGE_PATTERNS = [
     "cloudflare",
@@ -71,7 +73,6 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
 ]
-
 
 # ─── Data Contracts ────────────────────────────────────────────────────────────
 
@@ -126,32 +127,25 @@ class WAFSpecialistAgent:
 
     Monitora responses de forma reativa, classifica o nível de bloqueio detectado
     e aciona contramedidas escalonadas automaticamente, sem interromper o pipeline.
-
-    Uso básico:
-        agent = WAFSpecialistAgent()
-        headers = agent.get_stealth_headers("https://example.com")
-        # ... fazer request com esses headers ...
-        signal = agent.inspect_response(url, status_code, response_body)
-        if signal:
-            await agent.apply_countermeasure(signal)
     """
 
-    def __init__(self, config: Any = None) -> None:
+    def __init__(self, config: Any = None, redis_client: Any = None) -> None:
         self._config = config
         self._report = WAFSpecialistReport()
-        self._domain_block_counts: dict[str, int] = {}
+        self._redis = redis_client  # Redis client for distributed block counts
+        self._domain_block_counts: dict[str, int] = {}  # Fallback in-memory cache
         self._proxy_url: str | None = self._load_proxy_url()
         self._captcha_api_key: str | None = self._load_captcha_key()
+
         logger.info(
             f"WAFSpecialistAgent inicializado. "
             f"Proxy: {'configurado' if self._proxy_url else 'não configurado'}. "
-            f"CAPTCHA API: {'configurada' if self._captcha_api_key else 'não configurada'}."
+            f"CAPTCHA API: {'configurada' if self._captcha_api_key else 'não configurada'}. "
+            f"Redis: {'conectado' if self._redis else 'desconectado (usando memória local)'}."
         )
 
     def _load_proxy_url(self) -> str | None:
         """Carrega URL do proxy residencial da configuração ou variável de ambiente."""
-        import os
-
         proxy = os.getenv("SRA_PROXY_URL")
         if self._config and hasattr(self._config, "proxy_url"):
             proxy = getattr(self._config, "proxy_url", proxy)
@@ -159,35 +153,47 @@ class WAFSpecialistAgent:
 
     def _load_captcha_key(self) -> str | None:
         """Carrega chave de API do serviço de resolução de CAPTCHA."""
-        import os
-
         return os.getenv("SRA_CAPTCHA_API_KEY") or os.getenv("CAPSOLVER_API_KEY")
 
     def _extract_domain(self, url: str) -> str:
         """Extrai o domínio raiz de uma URL."""
         try:
-            from urllib.parse import urlparse
-
             parsed = urlparse(url)
             parts = parsed.netloc.split(".")
             return ".".join(parts[-2:]) if len(parts) >= 2 else parsed.netloc
         except Exception:
             return url[:50]
 
+    async def _get_domain_block_count(self, domain: str) -> int:
+        """Obtém a contagem de bloqueios para um domínio, usando Redis se disponível."""
+        if self._redis:
+            try:
+                count = await self._redis.get(f"waf:block_count:{domain}")
+                if count is not None:
+                    return int(count)
+            except Exception as e:
+                logger.warning(f"Erro ao ler Redis para {domain}: {e}")
+
+        return self._domain_block_counts.get(domain, 0)
+
+    async def _increment_domain_block_count(self, domain: str) -> int:
+        """Incrementa a contagem de bloqueios para um domínio, persistindo no Redis."""
+        if self._redis:
+            try:
+                new_count = await self._redis.incr(f"waf:block_count:{domain}")
+                await self._redis.expire(f"waf:block_count:{domain}", 3600)  # TTL 1h
+                return new_count
+            except Exception as e:
+                logger.warning(f"Erro ao escrever no Redis para {domain}: {e}")
+
+        self._domain_block_counts[domain] = self._domain_block_counts.get(domain, 0) + 1
+        return self._domain_block_counts[domain]
+
     def get_stealth_headers(self, url: str) -> dict[str, str]:
-        """Gera um conjunto de cabeçalhos HTTP de alta fidelidade para evadir detecção.
-
-        Simula comportamento de navegador real com Accept-Language, sec-ch-ua
-        e outros cabeçalhos normalmente ausentes em clientes HTTP simples.
-
-        Args:
-            url: URL de destino (usada para personalizar o Referer).
-
-        Returns:
-            Dicionário de cabeçalhos HTTP prontos para uso na requisição.
-        """
+        """Gera um conjunto de cabeçalhos HTTP de alta fidelidade para evadir detecção."""
         ua = random.choice(USER_AGENTS)
         domain = self._extract_domain(url)
+
         headers = {
             "User-Agent": ua,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -202,9 +208,10 @@ class WAFSpecialistAgent:
             "Sec-Fetch-User": "?1",
             "Cache-Control": "max-age=0",
         }
-        # Adiciona Referer plausível baseado no domínio
+
         if domain:
             headers["Referer"] = f"https://www.google.com/search?q=site:{domain}"
+
         return headers
 
     def inspect_response(
@@ -213,16 +220,7 @@ class WAFSpecialistAgent:
         status_code: int,
         response_body: str = "",
     ) -> BlockingSignal | None:
-        """Inspeciona uma resposta HTTP e determina se há sinal de bloqueio.
-
-        Args:
-            url: URL que foi requisitada.
-            status_code: Código de status HTTP retornado.
-            response_body: Corpo da resposta (primeiros 2KB são suficientes).
-
-        Returns:
-            BlockingSignal se bloqueio detectado, None caso contrário.
-        """
+        """Inspeciona uma resposta HTTP e determina se há sinal de bloqueio."""
         self._report.total_requests += 1
         domain = self._extract_domain(url)
         level = self._classify_block_level(status_code, response_body)
@@ -231,8 +229,6 @@ class WAFSpecialistAgent:
             return None
 
         self._report.blocked_requests += 1
-        self._domain_block_counts[domain] = self._domain_block_counts.get(domain, 0) + 1
-
         if domain not in self._report.domains_blocked:
             self._report.domains_blocked.append(domain)
 
@@ -244,6 +240,7 @@ class WAFSpecialistAgent:
             response_snippet=response_body[:300],
         )
         self._report.signals.append(signal)
+
         logger.warning(
             f"[WAF] Bloqueio detectado: {domain} | HTTP {status_code} | Nível: {level.name}"
         )
@@ -253,19 +250,17 @@ class WAFSpecialistAgent:
         """Classifica o nível de bloqueio com base no status HTTP e corpo da resposta."""
         body_lower = body.lower()
 
-        # Verificar CAPTCHA/challenge JS (mais grave)
+        # 1. Verificar CAPTCHA/challenge JS (Crítico)
         if any(
             p in body_lower for p in ["captcha", "challenge-platform", "just a moment"]
         ):
             return BlockLevel.CRITICAL
 
-        # Verificar proteção WAF conhecida
-        if any(
-            p in body_lower for p in ["cloudflare", "ddos-guard", "datadome", "akamai"]
-        ):
+        # 2. Verificar proteção WAF conhecida (Laranja) - Agora usa CHALLENGE_PATTERNS
+        if any(p in body_lower for p in CHALLENGE_PATTERNS):
             return BlockLevel.ORANGE
 
-        # Bloqueio por IP (403 explícito ou Access Denied)
+        # 3. Bloqueio por IP ou explícito (Vermelho)
         if (
             status_code == 403
             or "access denied" in body_lower
@@ -273,27 +268,25 @@ class WAFSpecialistAgent:
         ):
             return BlockLevel.RED
 
-        # Rate limit
+        # 4. Rate limit (Amarelo)
         if status_code == 429:
             return BlockLevel.YELLOW
 
-        # Service Unavailable em domínio já problemático
+        # 5. Service Unavailable com indícios de bot (Laranja)
         if status_code == 503 and "bot" in body_lower:
             return BlockLevel.ORANGE
+
+        # 6. Fallback para outros status codes suspeitos (Amarelo)
+        if status_code in BLOCKING_STATUS_CODES:
+            return BlockLevel.YELLOW
 
         return BlockLevel.GREEN
 
     async def apply_countermeasure(self, signal: BlockingSignal) -> dict[str, Any]:
-        """Aplica contramedida escalonada baseada no nível do sinal de bloqueio.
-
-        Args:
-            signal: Sinal de bloqueio detectado pelo inspect_response.
-
-        Returns:
-            Dicionário com 'action' (nome da contramedida), 'success' (bool)
-            e 'new_headers' (cabeçalhos recomendados para retry).
-        """
+        """Aplica contramedida escalonada baseada no nível do sinal de bloqueio."""
         self._report.countermeasures_applied += 1
+        await self._increment_domain_block_count(signal.domain)
+
         result: dict[str, Any] = {"action": "", "success": False, "new_headers": {}}
 
         if signal.level == BlockLevel.YELLOW:
@@ -312,14 +305,31 @@ class WAFSpecialistAgent:
         )
         return result
 
+    def apply_countermeasure_to_request(
+        self, countermeasure: dict[str, Any], request_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Aplica as configurações da contramedida aos kwargs de uma requisição aiohttp.
+
+        Permite que o HTTPClient do SRA aplique automaticamente proxies e novos headers.
+        """
+        if "new_headers" in countermeasure and countermeasure["new_headers"]:
+            request_kwargs["headers"] = countermeasure["new_headers"]
+
+        if "proxy_url" in countermeasure and countermeasure["proxy_url"]:
+            # aiohttp usa o parâmetro 'proxy' para roteamento
+            request_kwargs["proxy"] = countermeasure["proxy_url"]
+
+        return request_kwargs
+
     async def _apply_rate_limit_backoff(self, signal: BlockingSignal) -> dict[str, Any]:
         """Nível 1: Aguarda com backoff exponencial + rotação de User-Agent."""
-        delay = random.uniform(2.0, 8.0) * self._domain_block_counts.get(
-            signal.domain, 1
-        )
+        block_count = await self._get_domain_block_count(signal.domain)
+        delay = random.uniform(2.0, 8.0) * max(1, block_count)
         delay = min(delay, 60.0)  # Cap em 60s
+
         logger.info(f"[WAF] Rate limit em {signal.domain}. Aguardando {delay:.1f}s...")
         await asyncio.sleep(delay)
+
         return {
             "action": "rate_limit_backoff",
             "success": True,
@@ -332,7 +342,6 @@ class WAFSpecialistAgent:
         try:
             import curl_cffi  # noqa: F401
 
-            # curl_cffi disponível — usar JA3 fingerprint de Chrome
             impersonation_targets = ["chrome120", "chrome119", "chrome110", "chrome107"]
             chosen = random.choice(impersonation_targets)
             logger.info(f"[WAF] Rotacionando TLS fingerprint → impersonating {chosen}")
@@ -356,13 +365,13 @@ class WAFSpecialistAgent:
         """Nível 3: Roteamento via proxy residencial configurado no .env."""
         if not self._proxy_url:
             logger.warning(
-                f"[WAF] Proxy necessário para {signal.domain} mas SRA_PROXY_URL não configurado. "
-                "Pulando contramedida."
+                f"[WAF] Proxy necessário para {signal.domain} mas SRA_PROXY_URL não configurado."
             )
             return {"action": "proxy_routing_skipped", "success": False}
 
         self._report.proxy_activations += 1
         logger.info(f"[WAF] Roteando {signal.domain} via proxy residencial.")
+
         return {
             "action": "proxy_routing",
             "success": True,
@@ -374,8 +383,7 @@ class WAFSpecialistAgent:
         """Nível 4: Resolução de CAPTCHA via API externa (2captcha/capsolver)."""
         if not self._captcha_api_key:
             logger.warning(
-                f"[WAF] CAPTCHA detectado em {signal.domain} mas SRA_CAPTCHA_API_KEY não configurado. "
-                "Marcando URL para revisão manual."
+                f"[WAF] CAPTCHA detectado em {signal.domain} mas API Key não configurada."
             )
             return {
                 "action": "captcha_skipped",
@@ -385,13 +393,12 @@ class WAFSpecialistAgent:
 
         self._report.captcha_resolutions += 1
         logger.info(f"[WAF] Tentando resolver CAPTCHA em {signal.domain} via API.")
-        # Integração real com capsolver/2captcha ficaria aqui
-        # Por ora: stub que sinaliza a necessidade e retorna graceful degradation
+
         return {
             "action": "captcha_api_requested",
-            "success": False,  # Requer implementação completa de capsolver
+            "success": False,  # Requer implementação completa do SDK capsolver
             "domain": signal.domain,
-            "note": "Integração capsolver pendente. Adicionar CAPSOLVER_API_KEY e SDK ao requirements.txt.",
+            "note": "Integração capsolver pendente.",
         }
 
     def get_report(self) -> WAFSpecialistReport:

@@ -131,7 +131,13 @@ async def test_quality_ranker_without_query_unchanged_behavior():
     results = [make_result("github", "repo", metrics={"stars": 100})]
     ranked = await ranker.rank(results)
     assert ranked[0].score_breakdown["base_score"] == ranked[0].score
-    assert "bm25_score" not in ranked[0].score_breakdown
+    # bm25_score e embedding_score agora SEMPRE existem no breakdown (com
+    # valor None quando nao ha query) — garante schema estavel para quem
+    # consome RankedResult a jusante (ConfidenceScorerV2, ConflictDetector).
+    assert "bm25_score" in ranked[0].score_breakdown
+    assert ranked[0].score_breakdown["bm25_score"] is None
+    assert "embedding_score" in ranked[0].score_breakdown
+    assert ranked[0].score_breakdown["embedding_score"] is None
 
 
 @pytest.mark.asyncio

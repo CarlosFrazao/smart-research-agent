@@ -26,13 +26,20 @@ Integração:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import Any, Awaitable, Callable, Union
 
 logger = logging.getLogger("hitl_dialog_agent")
+
+# Callback opcional invocado sempre que um novo DialogTurn é criado, permitindo
+# ao chamador (API/Streamlit) empurrar a pergunta para a UI via SSE/WebSocket
+# sem que este módulo precise conhecer o transporte usado.
+DialogCallback = Callable[["DialogTurn"], Union[None, Awaitable[None]]]
 
 
 # ─── Enums e Constantes ────────────────────────────────────────────────────────
@@ -110,6 +117,10 @@ class HITLDialogReport:
     auto_resolved_count: int = 0
 
     @property
+    def total_decisions(self) -> int:
+        return len(self.decisions)
+
+    @property
     def total_dialogs(self) -> int:
         return len(self.dialogs)
 
@@ -133,25 +144,68 @@ class HITLDialogAgent:
     ações concretas de pivotamento no pipeline de pesquisa.
 
     Uso básico:
-        agent = HITLDialogAgent(hitl_manager=orchestrator.hitl_manager, llm=orchestrator.llm)
+        agent = HITLDialogAgent(
+            hitl_manager=orchestrator.hitl_manager,
+            llm=orchestrator.llm,
+            dialog_callback=push_to_sse,  # opcional: recebe o DialogTurn assim que criado
+        )
         # Após achado controverso:
         dialog = await agent.evaluate_finding(session_id="abc", finding=achado)
         if dialog:
             decision = await agent.await_user_decision(dialog, timeout=120.0)
             # Aplicar decision.action ao pipeline
+
+    Nota de integração: este módulo ainda não é instanciado em nenhum outro
+    ponto do SRA (nem `Orchestrator`, nem os `PipelineStage`s, nem
+    `mcp_server.py`) — os "achados" produzidos por `conflict_detector.py`,
+    `gap_detector.py` e `misinformation_detector.py` precisam ser passados
+    explicitamente para `evaluate_finding()` a partir do estágio do pipeline
+    correspondente para que este agente entre em ação.
     """
 
-    def __init__(self, hitl_manager: Any = None, llm: Any = None) -> None:
+    def __init__(
+        self,
+        hitl_manager: Any = None,
+        llm: Any = None,
+        dialog_callback: DialogCallback | None = None,
+    ) -> None:
         self._hitl = hitl_manager
         self._llm = llm
+        # Chamado a cada novo DialogTurn para permitir push em tempo real (SSE/WS)
+        # para a UI. Mantém este módulo desacoplado do transporte usado.
+        self._dialog_callback = dialog_callback
         self._active_dialogs: dict[str, DialogTurn] = {}
-        self._dialog_history: list[DialogTurn] = {}  # type: ignore[assignment]
-        self._dialog_history = []
+        self._dialog_history: list[DialogTurn] = []
+        self._decisions_by_session: dict[str, list[DialogDecision]] = {}
+        # HITLManager indexa suspensões por session_id (não por dialog_id), então
+        # diálogos concorrentes na MESMA sessão colidiriam entre si (o segundo
+        # request_approval sobrescreveria o primeiro). Serializamos por sessão
+        # aqui para evitar essa condição de corrida.
+        self._session_locks: dict[str, asyncio.Lock] = {}
         logger.info(
             f"HITLDialogAgent inicializado. "
             f"HITLManager: {'conectado' if hitl_manager else 'ausente (modo passivo)'}. "
             f"LLM: {'disponível' if llm else 'ausente (templates fixos)'}."
         )
+
+    def _get_session_lock(self, session_id: str) -> asyncio.Lock:
+        """Obtém (ou cria) o lock de serialização de diálogos para uma sessão."""
+        lock = self._session_locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._session_locks[session_id] = lock
+        return lock
+
+    async def _notify_dialog_created(self, dialog: DialogTurn) -> None:
+        """Invoca o callback de UI, se configurado, sem jamais interromper o pipeline."""
+        if self._dialog_callback is None:
+            return
+        try:
+            result = self._dialog_callback(dialog)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as e:
+            logger.warning(f"[HITLDialog] dialog_callback falhou (ignorado): {e}")
 
     async def evaluate_finding(
         self,
@@ -195,6 +249,7 @@ class HITLDialogAgent:
             f"[HITLDialog] Diálogo gerado para sessão {session_id}: "
             f"tipo={dialog_type.value}, urgência={urgency:.2f}"
         )
+        await self._notify_dialog_created(dialog)
         return dialog
 
     def _map_finding_to_dialog_type(self, finding_type: str) -> DialogType:
@@ -305,13 +360,29 @@ class HITLDialogAgent:
                     "Formato: PERGUNTA\nOPÇÃO1|OPÇÃO2|OPÇÃO3"
                 )
                 response = await self._llm.complete(prompt, max_tokens=200)
-                lines = response.strip().split("\n")
+                # Descarta linhas em branco e prefixos comuns ("Pergunta:", "1)", "-", etc.)
+                # que modelos costumam adicionar mesmo quando instruídos a não fazê-lo.
+                lines = [
+                    ln.strip() for ln in response.strip().split("\n") if ln.strip()
+                ]
                 if len(lines) >= 2:
-                    question = lines[0].strip()
-                    options_raw = lines[-1].strip()
-                    options = [o.strip() for o in options_raw.split("|") if o.strip()]
+                    question = re.sub(
+                        r"^(pergunta[:\-]?\s*)", "", lines[0], flags=re.IGNORECASE
+                    ).strip()
+                    options_raw = re.sub(
+                        r"^(opç(ão|ões)[:\-]?\s*)", "", lines[-1], flags=re.IGNORECASE
+                    ).strip()
+                    options = [
+                        re.sub(r"^[\d\.\)\-\*\s]+", "", o).strip()
+                        for o in options_raw.split("|")
+                        if o.strip()
+                    ]
+                    options = [o for o in options if o]
                     if question and len(options) >= 2:
                         return question, options[:4]
+                logger.debug(
+                    f"[HITLDialog] Resposta do LLM em formato inesperado, usando template: {response[:200]!r}"
+                )
             except Exception as e:
                 logger.debug(f"[HITLDialog] Falha no LLM ao gerar pergunta: {e}")
 
@@ -339,7 +410,9 @@ class HITLDialogAgent:
             logger.warning(
                 "[HITLDialog] HITLManager não disponível. Auto-resolvendo diálogo."
             )
-            return self._auto_resolve(dialog, reason="hitl_manager_unavailable")
+            decision = self._auto_resolve(dialog, reason="hitl_manager_unavailable")
+            self._record_decision(dialog.session_id, decision)
+            return decision
 
         try:
             data_for_approval = {
@@ -350,29 +423,94 @@ class HITLDialogAgent:
                 "dialog_type": dialog.dialog_type.value,
                 "urgency_score": dialog.urgency_score,
             }
-            response = await self._hitl.request_approval(
-                session_id=dialog.session_id,
-                request_type=f"hitl_dialog_{dialog.dialog_type.value}",
-                data=data_for_approval,
-                timeout=timeout,
-            )
-            dialog.user_response = (
-                str(response) if response != data_for_approval else None
-            )
+            # Serializa por sessão: HITLManager só guarda UMA suspensão pendente por
+            # session_id, então dois diálogos concorrentes na mesma sessão poderiam
+            # sobrescrever o request/response um do outro sem este lock.
+            async with self._get_session_lock(dialog.session_id):
+                response = await self._hitl.request_approval(
+                    session_id=dialog.session_id,
+                    request_type=f"hitl_dialog_{dialog.dialog_type.value}",
+                    data=data_for_approval,
+                    timeout=timeout,
+                )
             dialog.answered_at = time.time()
 
-            if dialog.user_response is None or response == data_for_approval:
-                # Timeout — HITLManager retornou o data original sem modificação
+            # HITLManager devolve, por identidade, o MESMO objeto `data_for_approval`
+            # quando o timeout estoura (ver hitl_manager.py: `return data`). Comparar
+            # por identidade (`is`) em vez de igualdade de valor (`==`) evita marcar
+            # como timeout uma resposta legítima do usuário que coincida em conteúdo
+            # com o payload original.
+            if response is data_for_approval:
                 dialog.was_timeout = True
-                return self._auto_resolve(dialog, reason="timeout")
+                decision = self._auto_resolve(dialog, reason="timeout")
+                self._record_decision(dialog.session_id, decision)
+                return decision
 
+            dialog.user_response = self._extract_response_text(response)
             decision = self._interpret_response(dialog, dialog.user_response)
+            self._record_decision(dialog.session_id, decision)
             self._cleanup_dialog(dialog.dialog_id)
             return decision
 
         except Exception as e:
             logger.error(f"[HITLDialog] Erro ao aguardar decisão do usuário: {e}")
-            return self._auto_resolve(dialog, reason=f"error: {e}")
+            decision = self._auto_resolve(dialog, reason=f"error: {e}")
+            self._record_decision(dialog.session_id, decision)
+            return decision
+
+    @staticmethod
+    def _extract_response_text(response: Any) -> str:
+        """Normaliza a resposta submetida via `HITLManager.submit_response` em texto.
+
+        O endpoint genérico de resume (`/api/v1/hitl/resume/{session_id}`) aceita
+        qualquer JSON em `approved_data`, então a resposta pode chegar como string
+        simples ou como dict (ex.: `{"selected_option": "..."}`). Tenta extrair o
+        texto relevante nas chaves mais prováveis antes de recorrer a `str()`.
+        """
+        if isinstance(response, str):
+            return response
+        if isinstance(response, dict):
+            for key in (
+                "user_response",
+                "response",
+                "selected_option",
+                "option",
+                "answer",
+                "choice",
+            ):
+                value = response.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+        return str(response)
+
+    def _record_decision(self, session_id: str, decision: DialogDecision) -> None:
+        """Registra a decisão no histórico da sessão para uso em `get_report`."""
+        self._decisions_by_session.setdefault(session_id, []).append(decision)
+
+    @staticmethod
+    def _match_option_index(options: list[str], response_lower: str) -> int | None:
+        """Tenta casar a resposta do usuário com o índice de uma das opções oferecidas.
+
+        Cobre o caso comum de UI baseada em botões, em que a resposta enviada
+        é o texto exato (ou muito próximo) de uma das `dialog.options` — o sinal
+        mais confiável disponível, usado antes de qualquer heurística de
+        palavra-chave.
+        """
+        if not options:
+            return None
+        for idx, option in enumerate(options):
+            option_lower = option.lower().strip()
+            if response_lower == option_lower:
+                return idx
+        # Fallback: resposta contém a opção inteira ou vice-versa (texto livre
+        # que reproduz a opção com pequenas variações de pontuação/espaços).
+        for idx, option in enumerate(options):
+            option_lower = option.lower().strip()
+            if option_lower and (
+                option_lower in response_lower or response_lower in option_lower
+            ):
+                return idx
+        return None
 
     def _interpret_response(self, dialog: DialogTurn, response: str) -> DialogDecision:
         """Interpreta a resposta do usuário e converte em uma ação concreta para o pipeline."""
@@ -383,33 +521,53 @@ class HITLDialogAgent:
             "dialog_type": dialog.dialog_type.value,
         }
 
+        # Quando a resposta bate (exata ou por índice) com uma das opções
+        # apresentadas ao usuário, isso é um sinal muito mais confiável do que
+        # keywords soltas — evita ambiguidade quando duas opções do mesmo
+        # diálogo compartilham uma palavra (ex.: "contradição" aparece tanto em
+        # "Incluir a contradição no relatório" quanto no contexto de
+        # "aprofundar a investigação da contradição").
+        exact_index = self._match_option_index(dialog.options, response_lower)
+
         if dialog.dialog_type == DialogType.PIVOT_DECISION:
-            if (
-                "contradição" in response_lower
-                or "investigar" in response_lower
-                or "aprofundar" in response_lower
+            if exact_index == 2 or (
+                exact_index is None
+                and ("aprofundar" in response_lower or "investigar" in response_lower)
             ):
                 action = "pivot_to_contradiction"
                 params["additional_query"] = (
                     f"evidência contradição: {dialog.context[:100]}"
                 )
-            elif "ignorar" in response_lower or "manter" in response_lower:
+            elif exact_index == 1 or (
+                exact_index is None
+                and ("ignorar" in response_lower or "manter" in response_lower)
+            ):
                 action = "maintain_original_scope"
             else:
                 action = "include_with_note"
 
         elif dialog.dialog_type == DialogType.SOURCE_VETO:
-            if "excluir" in response_lower:
+            if exact_index == 1 or (
+                exact_index is None and "excluir" in response_lower
+            ):
                 action = "exclude_source"
-            elif "ressalva" in response_lower:
+            elif exact_index == 0 or (
+                exact_index is None and "ressalva" in response_lower
+            ):
                 action = "include_with_caveat"
             else:
                 action = "find_alternative_sources"
 
         elif dialog.dialog_type == DialogType.DEPTH_CONTROL:
-            if "encerrar" in response_lower or "gerar" in response_lower:
+            if exact_index == 0 or (
+                exact_index is None
+                and ("encerrar" in response_lower or "gerar" in response_lower)
+            ):
                 action = "finalize_report"
-            elif "custo" in response_lower or "continuar" in response_lower:
+            elif exact_index == 2 or (
+                exact_index is None
+                and ("custo" in response_lower or "continuar" in response_lower)
+            ):
                 action = "extend_budget"
             else:
                 action = "focus_top_subtopic"
@@ -418,9 +576,13 @@ class HITLDialogAgent:
             action = "prioritize_critical_finding"
 
         elif dialog.dialog_type == DialogType.SCOPE_CLARIFICATION:
-            if "expandir" in response_lower:
+            if exact_index == 1 or (
+                exact_index is None and "expandir" in response_lower
+            ):
                 action = "expand_scope"
-            elif "separada" in response_lower:
+            elif exact_index == 2 or (
+                exact_index is None and "separada" in response_lower
+            ):
                 action = "create_separate_research"
             else:
                 action = "maintain_original_scope"
@@ -469,6 +631,7 @@ class HITLDialogAgent:
         return HITLDialogReport(
             session_id=session_id,
             dialogs=session_dialogs,
+            decisions=list(self._decisions_by_session.get(session_id, [])),
             total_wait_time_seconds=total_wait,
             auto_resolved_count=auto_resolved,
         )
@@ -478,7 +641,7 @@ class HITLDialogAgent:
         session_id: str,
         alert_message: str,
         urgency: float = 0.95,
-    ) -> DialogTurn:
+    ) -> DialogTurn | None:
         """Atalho para criar um alerta crítico imediato sem avaliação de achado.
 
         Args:

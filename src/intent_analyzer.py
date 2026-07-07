@@ -14,10 +14,11 @@ import logging
 import re
 import time
 from collections import deque
+from datetime import UTC, datetime
 
 from src.clients.llm_client import LLMClient
 from src.query_expander import QueryExpander
-from src.types import Domain, ExpandedQuery, Intention, IntentResult
+from src.types import Domain, ExpandedQuery, Intention, IntentResult, UrgencyFlag
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,40 @@ class IntentAnalyzer:
         "que",
         "qual",
     }
+    # Verbos/interrogativos comuns no inicio de queries (ex.: "Compare X vs
+    # Y", "Explain Docker", "Install Kubernetes"). Sao capitalizados apenas
+    # por abrirem a frase, nao por serem entidades — usados so para filtrar
+    # `_extract_entities_heuristic`, distinto de `_STOPWORDS` (que serve ao
+    # cache de similaridade).
+    _ENTITY_FALSE_POSITIVES = {
+        "compare",
+        "explain",
+        "describe",
+        "tell",
+        "list",
+        "show",
+        "review",
+        "install",
+        "setup",
+        "configure",
+        "deploy",
+        "why",
+        "when",
+        "where",
+        "should",
+        "does",
+        "do",
+        "can",
+        "will",
+        "would",
+        "could",
+        "explique",
+        "compare",
+        "instale",
+        "configure",
+        "mostre",
+        "liste",
+    }
 
     def __init__(
         self,
@@ -189,7 +224,7 @@ class IntentAnalyzer:
             for kw in keywords:
                 if kw in query_lower:
                     scores[domain] += 1
-        best = max(scores, key=scores.get)
+        best = max(scores, key=lambda k: scores[k])
         return best if scores[best] > 0 else Domain.GENERAL
 
     def _heuristic_intention(self, query: str) -> Intention:
@@ -208,7 +243,7 @@ class IntentAnalyzer:
                     return intention
         return Intention.DISCOVER
 
-    def _heuristic_urgency(self, query: str) -> str:
+    def _heuristic_urgency(self, query: str) -> UrgencyFlag:
         """Detecta se a query tem carater de urgencia ou busca por novidades recentes.
 
         Args:
@@ -217,8 +252,6 @@ class IntentAnalyzer:
         Returns:
             str: ``"sim"`` se a query indica urgencia ou recencia, ``"nao"`` caso contrario.
         """
-        from datetime import UTC, datetime
-
         curr_year = datetime.now(UTC).year
         urgent = [
             str(curr_year),
@@ -235,17 +268,37 @@ class IntentAnalyzer:
     def _extract_entities_heuristic(self, query: str) -> list[str]:
         """Extrai entidades da query usando expressoes regulares.
 
-        Captura palavras em CamelCase e padroes `org/repo` do GitHub.
+        Captura palavras em CamelCase/PascalCase e padroes `org/repo` do
+        GitHub. Descarta falsos positivos comuns: palavras que so aparecem
+        capitalizadas por estarem no inicio da frase (ex.: "What", "How",
+        "Qual") e pares `x/y` onde ambos os lados sao stopwords (ex.:
+        "and/or", "e/ou"), que nao sao entidades reais.
 
         Args:
             query: Query do usuario.
 
         Returns:
-            list[str]: Lista deduplicada de entidades identificadas.
+            list[str]: Lista deduplicada de entidades identificadas, na
+            ordem em que aparecem na query.
         """
-        entities = re.findall(r"\b[A-Z][a-zA-Z0-9]+\b", query)
-        repos = re.findall(r"\b[\w-]+/[\w-]+\b", query)
-        return list(set(entities + repos))
+        candidates = re.findall(r"\b[A-Z][a-zA-Z0-9]+\b", query)
+        entities = [
+            word
+            for word in candidates
+            if word.lower() not in self._STOPWORDS
+            and word.lower() not in self._ENTITY_FALSE_POSITIVES
+        ]
+
+        repo_candidates = re.findall(r"\b[\w-]+/[\w-]+\b", query)
+        repos = [
+            repo
+            for repo in repo_candidates
+            if not all(part.lower() in self._STOPWORDS for part in repo.split("/"))
+        ]
+
+        # dict.fromkeys em vez de set() para preservar a ordem de aparicao
+        # na query (facilita depuracao e mantem o prompt determinístico).
+        return list(dict.fromkeys(entities + repos))
 
     # ── Cache de intencao por similaridade ──────────────────────────────────
 
@@ -482,13 +535,31 @@ class IntentAnalyzer:
             return intent, self.query_expander.fallback_expand(query, intent)
 
         if need_intent_llm:
-            intent = IntentResult(
-                domain=Domain(result.get("domain", domain.value)),
-                entities=result.get("entities", entities),
-                intention=Intention(result.get("intention", intention.value)),
-                urgency=result.get("urgency", urgency),
-                confidence=result.get("confidence", "media"),
-            )
+            try:
+                intent = IntentResult(
+                    domain=Domain(result.get("domain", domain.value)),
+                    entities=result.get("entities", entities),
+                    intention=Intention(result.get("intention", intention.value)),
+                    urgency=result.get("urgency", urgency),
+                    confidence=result.get("confidence", "media"),
+                )
+            except (ValueError, TypeError) as e:
+                # Mesma rede de seguranca de `analyze()`: se o LLM devolver um
+                # valor fora do enum (ex.: domain="consumer_tech") ou um tipo
+                # invalido, nao deixamos a excecao escapar e quebrar o
+                # pipeline — cai de volta para a classificacao heuristica
+                # ja calculada acima.
+                logger.warning(
+                    f"IntentAnalyzer.analyze_and_expand: resposta do LLM "
+                    f"invalida para intent, usando heuristica: {e}"
+                )
+                intent = IntentResult(
+                    domain=domain,
+                    entities=entities,
+                    intention=intention,
+                    urgency=urgency,
+                    confidence="media",
+                )
 
         self._store_cached_intent(intent_query, intent)
 

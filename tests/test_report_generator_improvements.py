@@ -127,7 +127,7 @@ async def test_url_deduplication_and_headers_localization():
     # 1. Verificar títulos estruturais em inglês
     assert "## 1. Executive Summary" in report
     assert "## 2. Discovered Projects / Tools" in report
-    assert "## 3. Side-by-Side Comparison" in report
+    assert "## 3. ⚖️ Side-by-Side Comparison" in report
     assert "## 4. Identified Technologies / Stacks" in report
     assert "## 8. Links and References" in report
 

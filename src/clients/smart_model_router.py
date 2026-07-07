@@ -159,16 +159,16 @@ class SmartModelRouter:
             model_map = _GROQ_MODELS
         elif provider == "ollama":
             model_map = _OLLAMA_MODELS
-            model_id = model_map[tier]
-            if tier in ("sonnet", "opus"):
-                code_keywords = r"\b(code|python|java|c#|cpp|rust|html|css|js|ts|query|sql|api|rest|graphql|docker|git|develop|program|script|bug|error|exception)\w*\b"
-                if re.search(code_keywords, query.lower()) or _COMPLEXITY_RE.search(
-                    query
-                ):
-                    model_id = "qwen2.5-coder:3b"
         else:
             model_map = _ANTHROPIC_MODELS
-            model_id = model_map[tier]
+
+        model_id = model_map[tier]
+
+        # Sobrescrita específica para o Ollama em tarefas de programação complexas
+        if provider == "ollama" and tier in ("sonnet", "opus"):
+            code_keywords = r"\b(code|python|java|c#|cpp|rust|html|css|js|ts|query|sql|api|rest|graphql|docker|git|develop|program|script|bug|error|exception)\w*\b"
+            if re.search(code_keywords, query.lower()) or _COMPLEXITY_RE.search(query):
+                model_id = "qwen2.5-coder:3b"
 
         reason = self._build_reason(score, task_type, query, context_tokens, tier)
         logger.debug(f"SmartModelRouter: {reason}")

@@ -21,6 +21,7 @@ Skill: adversarial-debate-engine (Auto-crítica adversária sistemática)
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -48,6 +49,15 @@ DEFAULT_AUDIT_BUDGET_USD = 0.15
 # Estimativa conservadora de custo por query de re-pesquisa de gap (busca +
 # scoring downstream). Não é exata — é um teto de segurança, não um medidor.
 ESTIMATED_COST_PER_GAP_QUERY_USD = 0.01
+
+# Cobertura mínima (fração de keywords da claim encontradas em título+
+# descrição, ponderada) para considerar um resultado como evidência da claim.
+KEYWORD_COVERAGE_THRESHOLD = 0.15
+
+# Limites de volume por iteração — controlam custo e mantêm o loop previsível.
+MAX_GAPS_PER_ITERATION = 5  # claims com gap re-pesquisadas por iteração
+MAX_RESULTS_PER_GAP_QUERY = 5  # resultados aproveitados por gap re-pesquisado
+MAX_FALLBACK_CLAIMS = 5  # claims extraídas via regex quando o LLM falha
 
 
 # ─── Data Contracts ──────────────────────────────────────────────────────────
@@ -129,6 +139,16 @@ class ResearchAuditor:
             se o orçamento da auditoria se esgotar.
         """
         logger.info("ResearchAuditor: iniciando auditoria...")
+
+        if max_iterations < 1:
+            logger.warning(
+                f"ResearchAuditor: max_iterations={max_iterations} inválido "
+                "(precisa de ao menos 1 passada de validação) — usando 1. "
+                "Sem isso, claims ficariam com status default e "
+                "gaps_detected reportaria vazio mesmo sem nenhuma "
+                "validação real ter ocorrido."
+            )
+            max_iterations = 1
 
         all_results = list(existing_results or [])
 
@@ -256,10 +276,9 @@ class ResearchAuditor:
             logger.warning(f"ResearchAuditor: falha na extração de claims: {e}")
 
         # Fallback: extrai frases que começam com dados numéricos ou termos factuais
-        import re
-
         sentences = re.findall(r"[A-Z][^.!?\n]{20,150}[.!?]", report_text)
         filtered_sentences = []
+        seen = set()
         for s in sentences:
             s_clean = s.strip()
             if (
@@ -267,12 +286,14 @@ class ResearchAuditor:
                 or "##" in s_clean
                 or "---" in s_clean
                 or not s_clean
+                or s_clean in seen
             ):
                 continue
+            seen.add(s_clean)
             filtered_sentences.append(s_clean)
         return [
-            AuditClaim(text=s) for s in filtered_sentences[:5]
-        ]  # máx 5 claims para economizar LLM calls
+            AuditClaim(text=s) for s in filtered_sentences[:MAX_FALLBACK_CLAIMS]
+        ]  # limite para economizar LLM calls downstream (extração de claims)
 
     # ── Validação de Claims ──────────────────────────────────────────────────
 
@@ -301,8 +322,6 @@ class ResearchAuditor:
             "que",
             "dos",
             "das",
-            "como",
-            "para",
             "with",
             "from",
             "that",
@@ -315,7 +334,6 @@ class ResearchAuditor:
             "when",
             "some",
             "into",
-            "their",
             "them",
             "then",
             "than",
@@ -330,7 +348,6 @@ class ResearchAuditor:
             "no",
             "na",
             "um",
-            "uma",
         }
 
         for claim in claims:
@@ -360,18 +377,17 @@ class ResearchAuditor:
                     continue
 
                 # Verifica similaridade baseada em palavras-chave no título/descrição
-                title_matches = sum(
-                    1 for kw in keywords if kw.lower() in r.title.lower()
-                )
-                desc_matches = sum(
-                    1 for kw in keywords if kw.lower() in r.description.lower()
-                )
+                # (guard contra None: alguns searchers podem retornar campos vazios)
+                title_lower = (r.title or "").lower()
+                desc_lower = (r.description or "").lower()
+                title_matches = sum(1 for kw in keywords if kw.lower() in title_lower)
+                desc_matches = sum(1 for kw in keywords if kw.lower() in desc_lower)
                 total_matches = title_matches + desc_matches
 
                 # Cobertura ponderada
                 coverage = total_matches / (len(keywords) * 2)
 
-                if coverage >= 0.15:
+                if coverage >= KEYWORD_COVERAGE_THRESHOLD:
                     # Encontrou evidência!
                     unique_urls.add(r.url)
                     unique_sources.add(r.source)
@@ -384,14 +400,21 @@ class ResearchAuditor:
                     claim.supporting_urls.append(r.url)
                     claim.supporting_sources.append(r.source)
 
-            # Classifica o claim baseado na abundância de fontes distintas
-            num_sources = len(unique_urls)
-            if num_sources >= 2:
-                claim.confidence = min(0.95, 0.6 + num_sources * 0.1)
+            # Classifica o claim baseado na diversidade de PROVEDORES distintos
+            # (github/reddit/hackernews/...), não de URLs. Duas URLs do mesmo
+            # provedor (ex.: dois repositórios GitHub) não constituem
+            # corroboração independente — é exatamente isso que o status
+            # "verified" precisa garantir para um auditor fact-checking ter
+            # sentido. `unique_urls` ainda importa: mais evidências dentro da
+            # mesma faixa de status aumentam a confiança.
+            num_urls = len(unique_urls)
+            num_distinct_sources = len(unique_sources)
+            if num_distinct_sources >= 2:
+                claim.confidence = min(0.95, 0.6 + num_urls * 0.1)
                 claim.status = "verified"
                 claim.needs_recheck = False
-            elif num_sources == 1:
-                claim.confidence = 0.55
+            elif num_urls >= 1:
+                claim.confidence = LOW_CONFIDENCE_THRESHOLD
                 claim.status = "single_source"
                 claim.needs_recheck = False
             else:
@@ -419,17 +442,18 @@ class ResearchAuditor:
 
         new_results: list[SearchResult] = []
 
-        for claim in gaps[:5]:  # Limita a 5 claims por iteração para controle de custo
+        for claim in gaps[:MAX_GAPS_PER_ITERATION]:
             if audit_budget is not None and audit_budget.is_over_session_budget():
                 logger.warning(
                     "ResearchAuditor: orçamento esgotado — interrompendo gaps restantes desta iteração."
                 )
                 break
 
-            gap_query = self._claim_to_query(claim.text)
-            logger.info(f"ResearchAuditor: re-pesquisando gap → '{gap_query[:60]}'")
-
+            gap_query = ""
             try:
+                gap_query = self._claim_to_query(claim.text)
+                logger.info(f"ResearchAuditor: re-pesquisando gap → '{gap_query[:60]}'")
+
                 expanded = [
                     ExpandedQuery(
                         query=gap_query,
@@ -449,7 +473,7 @@ class ResearchAuditor:
                 results = await self.orchestrator._parallel_search(
                     expanded, source_plan, intent
                 )
-                new_results.extend(results[:5])
+                new_results.extend(results[:MAX_RESULTS_PER_GAP_QUERY])
 
                 if audit_budget is not None:
                     audit_budget.record(

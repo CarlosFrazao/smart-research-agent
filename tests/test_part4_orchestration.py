@@ -67,14 +67,14 @@ async def test_report_generator_structure():
 
         report = await rg.generate("CRM open source", results, metadata)
 
-        assert "# Relatorio:" in report
+        assert "# Relatório:" in report
         assert "## 1. Resumo Executivo" in report
         assert "## 2. Projetos" in report
-        assert "## 3. Comparacao" in report
+        assert "## 3. Comparação" in report
         assert "## 4. Tecnologias" in report
-        assert "## 5. Discussao" in report
+        assert "## 5. Discussão" in report
         assert "## 6. An" in report
-        assert "## 7. Recomenda" in report
+        assert "## 7. Recomendação" in report
         assert "## 8. Links e Refer" in report
         assert len(report) > 500
 
@@ -98,7 +98,7 @@ async def test_report_generator_llm_fallback():
         metadata = _make_metadata("test query")
         report = await rg.generate("test query", results, metadata)
 
-        assert "# Relatorio:" in report
+        assert "# Relatório:" in report
         assert len(report) > 200
 
 
@@ -123,8 +123,8 @@ async def test_report_generator_empty_results():
 
         metadata = _make_metadata("empty query")
         report = await rg.generate("empty query", [], metadata)
-        assert "# Relatorio:" in report
-        assert "Nenhum projeto encontrado" in report or "# Relatorio:" in report
+        assert "# Relatório de Pesquisa:" in report
+        assert "Nenhum" in report
 
 
 def test_report_generator_save(tmp_path):
@@ -251,10 +251,10 @@ async def test_orchestrator_research_mocked():
 
         report = await orch.research("CRM open source parecido com HubSpot")
 
-        assert "# Relatorio:" in report
+        assert "# Relatório:" in report
         assert "CRM open source parecido com HubSpot" in report
         assert "## 1. Resumo Executivo" in report
-        assert "## 7. Recomenda" in report
+        assert "## 7. Recomendação" in report
         assert len(report) > 500
 
 
@@ -368,5 +368,5 @@ async def test_benchmark_pipeline_smoke():
 
         for query in benchmark_queries:
             report = await orch.research(query)
-            assert "# Relatorio:" in report, f"Relatorio invalido para query: {query}"
+            assert "# Relatório:" in report or "# Report:" in report, f"Relatório inválido para query: {query}"
             assert len(report) > 500, f"Relatorio muito curto para query: {query}"

@@ -2,40 +2,68 @@
 graph_explorer_agent.py — Agente de Travessia e Análise de Densidade do Grafo
 
 Responsabilidade:
-  Atravessa o Grafo de Conhecimento (KuzuDB/Neo4j) de forma autônoma para:
-  1. Detectar "ilhas de conhecimento" — nós sem conexões suficientes.
-  2. Calcular a densidade de conexões entre comunidades temáticas (Leiden/Louvain).
-  3. Identificar pontes semânticas fracas que precisam de mais pesquisa.
+  Atravessa o Grafo de Conhecimento semântico do SRA (`src.knowledge_graph.
+  SemanticKnowledgeGraph`, backend KuzuDB) de forma autônoma para:
+  1. Detectar "ilhas de conhecimento" — entidades sem conexões suficientes.
+  2. Calcular a densidade de conexões entre comunidades temáticas (Louvain).
+  3. Identificar pontes semânticas fracas (baixa confiança) entre comunidades.
   4. Gerar "gap queries" direcionadas para preencher os espaços estruturais do grafo.
 
 Pipeline:
-  traverse(session_id) → analisa subgrafo → retorna GraphGapReport com queries sugeridas
-  O orchestrator pode consumir o GraphGapReport para reabrir o ciclo de busca
-  com as queries de gap, enriquecendo o grafo de forma iterativa.
+  traverse(session_id) → analisa o grafo → retorna GraphGapReport com queries sugeridas
+  `GraphGapReport.to_expanded_queries()` converte o resultado para `src.types.
+  ExpandedQuery` (type="graph_gap"), o mesmo contrato usado por `GapDetector`
+  (type="gap_fill"), `ConflictDetector` (type="fact_check") e
+  `DebateOrchestrator` (type="debate_hypothesis") — permitindo que o
+  orchestrator injete essas queries de volta no `QueryExpander`/loop de busca
+  sem conversão manual.
 
-Integração:
-  - Chamado pelo Orchestrator após a etapa de Knowledge Graph (Etapa 6).
-  - Depende de `src.memory.knowledge_graph.KnowledgeGraph` como fonte de dados.
-  - Resultados de gap são passados como ExpandedQuery extras ao QueryExpander.
+Integração e limitações conhecidas (leia antes de usar):
+  - Este agente espera um objeto com a interface de
+    `src.knowledge_graph.SemanticKnowledgeGraph` (método `query_graph()` →
+    `list[Triple]`, e opcionalmente `detect_communities()`). Essa é a única
+    implementação do repositório com detecção de comunidade real (Louvain via
+    networkx); ela hoje só é instanciada dentro de `OrvixMemory`, que por sua
+    vez só é usada em testes — NÃO é o `orchestrator.knowledge_graph` padrão
+    (esse é `src.memory.knowledge_graph.KnowledgeGraph`, um wrapper fino de
+    Neo4j sem `query_graph`/listagem de nós/comunidades). Se `knowledge_graph`
+    for passado sem essa interface, o agente loga o motivo e devolve um
+    relatório vazio em vez de falhar silenciosamente.
+  - O grafo atual (em qualquer backend) NÃO armazena `session_id` por nó/
+    relação. Não existe hoje um jeito real de isolar "o subgrafo desta
+    sessão" — `session_id` é usado apenas para logging e para contextualizar
+    as gap queries geradas, não como filtro de dados. Se precisar de
+    isolamento real por sessão, o schema de `add_triple`/`add_fact` precisa
+    ganhar essa coluna primeiro.
+  - Antes desta correção, o agente chamava métodos que não existem em nenhum
+    backend real do projeto (`get_session_nodes`, `.query()` com Cypher cru,
+    `get_communities`) e por isso sempre retornava um relatório vazio sem
+    nunca lançar erro — e não estava conectado ao Orchestrator em lugar
+    nenhum do pipeline (`grep` confirma zero referências fora deste arquivo).
+    Este arquivo corrige a busca de dados para usar a interface real; a
+    integração no pipeline (registrar como stage em
+    `src/pipeline/stage_factory.py`) ainda precisa ser feita à parte.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger("graph_explorer_agent")
 
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
 
-# Número mínimo de conexões para um nó ser considerado "conectado"
+# Número mínimo de conexões para uma entidade ser considerada "conectada"
 MIN_EDGE_COUNT_THRESHOLD = 2
-# Score mínimo de similaridade semântica para uma aresta ser considerada "forte"
+# Confiança mínima de aresta para uma ponte entre comunidades ser "forte"
 MIN_EDGE_WEIGHT_THRESHOLD = 0.60
 # Número máximo de gap queries geradas por chamada (budget control)
 MAX_GAP_QUERIES = 5
+# task_type usado no LLMClient.complete() para roteamento/orçamento corretos
+LLM_TASK_TYPE = "gap_query"
 
 
 # ─── Data Contracts ────────────────────────────────────────────────────────────
@@ -47,7 +75,7 @@ class KnowledgeNode:
 
     node_id: str
     label: str
-    node_type: str  # "concept", "entity", "claim", "source"
+    node_type: str = "entity"  # "concept", "entity", "claim", "source"
     edge_count: int = 0
     community_id: int = -1
     embedding_available: bool = False
@@ -60,7 +88,7 @@ class KnowledgeBridge:
     community_a: int
     community_b: int
     bridge_node_id: str
-    edge_weight: float  # 0.0-1.0
+    edge_weight: float  # 0.0-1.0 — confiança real da aresta (Triple.confidence)
     gap_query_suggestion: str = ""
 
 
@@ -93,6 +121,42 @@ class GraphGapReport:
             return "medium"
         return "high"
 
+    def to_expanded_queries(
+        self, priority: Literal["alta", "media", "baixa"] = "media"
+    ) -> list[Any]:
+        """Converte `gap_queries` para `src.types.ExpandedQuery`.
+
+        Usa o mesmo contrato (`query`, `type`, `priority`, `rationale`) já
+        consumido por `GapDetector`/`ConflictDetector`/`DebateOrchestrator`,
+        para que o orchestrator possa injetar essas queries de volta no
+        `QueryExpander`/loop de busca sem conversão manual.
+
+        Import de `ExpandedQuery` é feito de forma tardia (lazy) para não
+        acoplar este módulo a `src.types` quando usado de forma standalone
+        (ex.: testes unitários sem o resto do pacote `src` disponível).
+        """
+        try:
+            from src.types import ExpandedQuery
+        except ImportError:
+            logger.warning(
+                "[GraphExplorer] src.types.ExpandedQuery indisponível; "
+                "retornando lista vazia em to_expanded_queries()."
+            )
+            return []
+
+        return [
+            ExpandedQuery(
+                query=q,
+                type="graph_gap",
+                priority=priority,
+                rationale=(
+                    f"Gap estrutural detectado no grafo de conhecimento "
+                    f"(sessão {self.session_id}, severidade {self.gap_severity})."
+                ),
+            )
+            for q in self.gap_queries
+        ]
+
 
 # ─── Agente Principal ──────────────────────────────────────────────────────────
 
@@ -100,15 +164,22 @@ class GraphGapReport:
 class GraphExplorerAgent:
     """Agente autônomo de análise de densidade e gaps no Grafo de Conhecimento do SRA.
 
-    Percorre o subgrafo de uma sessão de pesquisa, detecta nós isolados, pontes
-    semânticas fracas e clusters desconexos, e sugere queries de preenchimento.
+    Percorre o Grafo de Conhecimento, detecta entidades isoladas, pontes
+    semânticas fracas entre comunidades (via Louvain) e sugere queries de
+    preenchimento.
+
+    Backend esperado: `src.knowledge_graph.SemanticKnowledgeGraph` (ou
+    qualquer objeto duck-typed com `query_graph()` retornando `list[Triple]`
+    e, opcionalmente, `detect_communities()`). Veja as limitações de
+    `session_id` e de backend no docstring do módulo.
 
     Uso básico:
-        agent = GraphExplorerAgent(knowledge_graph=orchestrator.knowledge_graph)
+        from src.knowledge_graph import SemanticKnowledgeGraph
+        kg = SemanticKnowledgeGraph(kuzu_conn=orchestrator_memory.kuzu_conn)
+        agent = GraphExplorerAgent(knowledge_graph=kg, llm=orchestrator.llm)
         report = await agent.traverse(session_id="abc123", query_topic="machine learning")
         if report.has_gaps:
-            for gap_q in report.gap_queries:
-                # Adiciona ao pipeline de busca
+            novas_queries = report.to_expanded_queries()  # -> list[ExpandedQuery]
     """
 
     def __init__(self, knowledge_graph: Any = None, llm: Any = None) -> None:
@@ -125,10 +196,13 @@ class GraphExplorerAgent:
         query_topic: str = "",
         max_nodes: int = 200,
     ) -> GraphGapReport:
-        """Traversa o subgrafo de uma sessão e detecta gaps estruturais.
+        """Analisa o Grafo de Conhecimento e detecta gaps estruturais.
 
         Args:
-            session_id: ID da sessão de pesquisa para filtrar os nós relevantes.
+            session_id: ID da sessão de pesquisa. Usado apenas para logging e
+                para contextualizar as gap queries — o grafo atual não
+                armazena session_id por nó/relação, então isto NÃO filtra os
+                dados analisados (ver limitações no docstring do módulo).
             query_topic: Tema central da pesquisa (usado para contextualizar gap queries).
             max_nodes: Limite de nós analisados para controle de custo computacional.
 
@@ -137,13 +211,14 @@ class GraphExplorerAgent:
         """
         report = GraphGapReport(session_id=session_id)
         logger.info(
-            f"[GraphExplorer] Iniciando traversal do grafo para sessão {session_id}."
+            f"[GraphExplorer] Iniciando análise do grafo (contexto sessão={session_id})."
         )
 
-        nodes = await self._fetch_nodes(session_id, max_nodes)
+        nodes = await self._fetch_nodes(max_nodes)
         if not nodes:
             logger.info(
-                "[GraphExplorer] Grafo vazio ou não disponível. Retornando relatório vazio."
+                "[GraphExplorer] Grafo vazio, indisponível, ou backend sem "
+                "interface suportada. Retornando relatório vazio."
             )
             return report
 
@@ -169,17 +244,28 @@ class GraphExplorerAgent:
         )
 
         logger.info(
-            f"[GraphExplorer] Traversal concluído: {report.total_nodes_analyzed} nós, "
+            f"[GraphExplorer] Análise concluída: {report.total_nodes_analyzed} nós, "
             f"{len(report.isolated_nodes)} isolados, {len(report.weak_bridges)} pontes fracas, "
             f"{len(report.gap_queries)} gap queries geradas. "
             f"Severidade: {report.gap_severity}."
         )
         return report
 
-    async def _fetch_nodes(
-        self, session_id: str, max_nodes: int
-    ) -> list[KnowledgeNode]:
-        """Busca nós do Grafo de Conhecimento para a sessão especificada."""
+    async def _fetch_nodes(self, max_nodes: int) -> list[KnowledgeNode]:
+        """Busca nós reais do Grafo de Conhecimento e computa grau/comunidade.
+
+        Ordem de tentativa:
+          1. `get_session_nodes` — mantido para compatibilidade com mocks/
+             testes e para um futuro backend com scoping real de sessão.
+          2. `query_graph()` — interface real de `SemanticKnowledgeGraph`.
+             Constrói grau (edge_count) e comunidade (Louvain) a partir das
+             triplas retornadas, já que o backend não expõe isso pronto por
+             nó.
+        Não há mais fallback de Cypher cru (`.query()` com f-string): além de
+        não existir em nenhum backend real do projeto, montava a query por
+        interpolação de string — risco de injeção caso algum backend viesse
+        a expor esse método no futuro.
+        """
         if self._kg is None:
             logger.debug(
                 "[GraphExplorer] KnowledgeGraph não conectado. Usando stub vazio."
@@ -187,11 +273,8 @@ class GraphExplorerAgent:
             return []
 
         try:
-            # Tenta chamar a interface real do KnowledgeGraph
             if hasattr(self._kg, "get_session_nodes"):
-                raw_nodes = await self._kg.get_session_nodes(
-                    session_id, limit=max_nodes
-                )
+                raw_nodes = await self._kg.get_session_nodes(limit=max_nodes)
                 return [
                     KnowledgeNode(
                         node_id=n.get("id", ""),
@@ -203,25 +286,68 @@ class GraphExplorerAgent:
                     )
                     for n in raw_nodes
                 ]
-            # Fallback: interface genérica do KuzuDB
-            if hasattr(self._kg, "query"):
-                cypher = (
-                    f"MATCH (n) WHERE n.session_id = '{session_id}' "
-                    f"RETURN n LIMIT {max_nodes}"
-                )
-                results = await self._kg.query(cypher)
-                return [
-                    KnowledgeNode(
-                        node_id=str(r.get("n", {}).get("id", i)),
-                        label=str(r.get("n", {}).get("label", f"node_{i}")),
-                        node_type=r.get("n", {}).get("type", "concept"),
-                        edge_count=r.get("n", {}).get("edge_count", 0),
-                    )
-                    for i, r in enumerate(results)
-                ]
+
+            if hasattr(self._kg, "query_graph"):
+                return self._build_nodes_from_triples(max_nodes)
+
+            logger.warning(
+                "[GraphExplorer] Backend de KnowledgeGraph não expõe "
+                "get_session_nodes() nem query_graph(); nenhuma entidade "
+                "pode ser listada (ex.: KnowledgeGraph do Neo4j em "
+                "src/memory/knowledge_graph.py só suporta add_fact/query_entity)."
+            )
         except Exception as e:
             logger.warning(f"[GraphExplorer] Erro ao buscar nós do grafo: {e}")
         return []
+
+    def _build_nodes_from_triples(self, max_nodes: int) -> list[KnowledgeNode]:
+        """Constrói `KnowledgeNode`s a partir de `SemanticKnowledgeGraph.query_graph()`.
+
+        Calcula edge_count real (grau) contando ocorrências de cada entidade
+        como sujeito/objeto, e community_id real via Louvain (mesma técnica
+        usada em `SemanticKnowledgeGraph.detect_communities()`), sem
+        depender de nenhum dado fabricado.
+        """
+        triples = self._kg.query_graph()
+        if not triples:
+            return []
+
+        degree: dict[str, int] = {}
+        for t in triples:
+            degree[t.subject] = degree.get(t.subject, 0) + 1
+            degree[t.object] = degree.get(t.object, 0) + 1
+
+        community_of: dict[str, int] = {}
+        try:
+            import networkx as nx
+            from networkx.algorithms.community import louvain_communities
+
+            graph = nx.Graph()
+            for t in triples:
+                graph.add_edge(t.subject, t.object)
+            communities = louvain_communities(graph)
+            for idx, community in enumerate(communities):
+                for entity in community:
+                    community_of[entity] = idx
+        except ImportError:
+            logger.debug(
+                "[GraphExplorer] networkx indisponível; community_id "
+                "permanecerá -1 para todas as entidades."
+            )
+        except Exception as e:
+            logger.warning(f"[GraphExplorer] Falha na detecção de comunidades: {e}")
+
+        nodes = [
+            KnowledgeNode(
+                node_id=entity,
+                label=entity,
+                node_type="entity",
+                edge_count=count,
+                community_id=community_of.get(entity, -1),
+            )
+            for entity, count in degree.items()
+        ]
+        return nodes[:max_nodes]
 
     def _calculate_density(self, nodes: list[KnowledgeNode]) -> float:
         """Calcula a densidade do grafo como proporção de nós bem conectados."""
@@ -235,47 +361,47 @@ class GraphExplorerAgent:
     async def _detect_weak_bridges(
         self, nodes: list[KnowledgeNode]
     ) -> list[KnowledgeBridge]:
-        """Detecta nós que fazem pontes fracas entre comunidades distintas.
+        """Detecta entidades que fazem pontes fracas entre comunidades distintas.
 
-        Uma ponte fraca é um nó que conecta duas comunidades diferentes mas
-        com peso de aresta abaixo do threshold mínimo de similaridade semântica.
+        Uma ponte fraca é uma aresta que conecta duas comunidades diferentes
+        com confiança (`Triple.confidence`) abaixo de MIN_EDGE_WEIGHT_THRESHOLD.
+        Quando o backend expõe `query_graph()`, usa a confiança real das
+        triplas em vez de estimar peso a partir do grau (heurística antiga,
+        que confundia "conexão fraca" com "nó pouco conectado").
         """
         bridges: list[KnowledgeBridge] = []
         if self._kg is None:
             return bridges
 
+        community_of = {n.node_id: n.community_id for n in nodes if n.community_id >= 0}
+        if not community_of:
+            return bridges
+
         try:
-            communities = {}
-            for node in nodes:
-                if node.community_id >= 0:
-                    communities.setdefault(node.community_id, []).append(node)
-
-            community_ids = list(communities.keys())
-            for i in range(len(community_ids)):
-                for j in range(i + 1, len(community_ids)):
-                    com_a = community_ids[i]
-                    com_b = community_ids[j]
-                    # Busca o nó com mais conexões entre as duas comunidades
-                    bridge_candidates = [
-                        n
-                        for n in nodes
-                        if n.community_id in (com_a, com_b) and n.edge_count >= 1
-                    ]
-                    if not bridge_candidates:
+            if hasattr(self._kg, "query_graph"):
+                triples = self._kg.query_graph()
+                seen_pairs: set[tuple[int, int]] = set()
+                for t in triples:
+                    com_a = community_of.get(t.subject)
+                    com_b = community_of.get(t.object)
+                    if com_a is None or com_b is None or com_a == com_b:
                         continue
-                    # Heurística: menor edge_count relativo ao total indica ponte fraca
-                    weakest = min(bridge_candidates, key=lambda n: n.edge_count)
-                    max_edges = max(n.edge_count for n in nodes) or 1
-                    edge_weight = weakest.edge_count / max_edges
-
-                    if edge_weight < MIN_EDGE_WEIGHT_THRESHOLD:
-                        suggestion = f"conexão entre {com_a} e {com_b}: {weakest.label}"
+                    pair = (min(com_a, com_b), max(com_a, com_b))
+                    if pair in seen_pairs:
+                        continue
+                    confidence = float(getattr(t, "confidence", 1.0))
+                    if confidence < MIN_EDGE_WEIGHT_THRESHOLD:
+                        seen_pairs.add(pair)
+                        suggestion = (
+                            f"conexão entre comunidades {pair[0]} e {pair[1]}: "
+                            f"{t.subject} -[{t.relation}]-> {t.object}"
+                        )
                         bridges.append(
                             KnowledgeBridge(
-                                community_a=com_a,
-                                community_b=com_b,
-                                bridge_node_id=weakest.node_id,
-                                edge_weight=round(edge_weight, 4),
+                                community_a=pair[0],
+                                community_b=pair[1],
+                                bridge_node_id=t.subject,
+                                edge_weight=round(confidence, 4),
                                 gap_query_suggestion=suggestion,
                             )
                         )
@@ -306,7 +432,9 @@ class GraphExplorerAgent:
                         "para encontrar fontes que conectem esse conceito ao contexto geral. "
                         "Responda APENAS com a query, sem explicações."
                     )
-                    response = await self._llm.complete(prompt, max_tokens=60)
+                    response = await self._llm.complete(
+                        prompt, task_type=LLM_TASK_TYPE, max_tokens=60
+                    )
                     query = response.strip().strip('"').strip("'")
                     if query:
                         queries.append(query)
@@ -335,6 +463,12 @@ class GraphExplorerAgent:
         try:
             if hasattr(self._kg, "get_communities"):
                 return await self._kg.get_communities()
+            if hasattr(self._kg, "detect_communities"):
+                communities = self._kg.detect_communities()
+                return {
+                    idx: {"size": len(members), "members": list(members)[:10]}
+                    for idx, members in enumerate(communities)
+                }
         except Exception as e:
             logger.warning(f"[GraphExplorer] Erro ao buscar resumo de comunidades: {e}")
         return {}

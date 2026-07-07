@@ -16,7 +16,7 @@ async def test_peer_review_structured_success():
                     "category": "unsupported_claim",
                     "severity": "minor",
                     "description": "Falta de fonte primária na intro.",
-                    "location": "Esta é uma afirmação sem fonte.",
+                    "location": "Esta é uma afirmação não comprovada.",
                     "suggestion": "Adicionar citação.",
                 }
             ],
@@ -26,7 +26,7 @@ async def test_peer_review_structured_success():
     )
 
     agent = PeerReviewAgent(llm_client=llm_mock)
-    report = "# Relatório de Teste\nEsta é uma afirmação sem fonte. É a melhor ferramenta do mercado."
+    report = "# Relatório de Teste\nEsta é uma afirmação não comprovada. É a melhor ferramenta do mercado."
 
     review_report = await agent.review(report, results=[], query="test")
 

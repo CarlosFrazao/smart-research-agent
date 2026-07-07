@@ -56,9 +56,10 @@ def test_llm_client_init_ollama_api_key():
                 "api_key": "my-ollama-key",
             },
         )
-        MockOpenAI.assert_called_with(
-            base_url="http://localhost:11434/v1", api_key="my-ollama-key"
-        )
+        MockOpenAI.assert_called_once()
+        call_kwargs = MockOpenAI.call_args.kwargs
+        assert call_kwargs["base_url"] == "http://localhost:11434/v1"
+        assert call_kwargs["api_key"] == "my-ollama-key"
 
     with patch("openai.AsyncOpenAI") as MockOpenAI:
         # Testa sem api_key (deve usar fallback ollama-local)
@@ -66,9 +67,10 @@ def test_llm_client_init_ollama_api_key():
             LLMProvider.OLLAMA,
             {"base_url": "http://localhost:11434", "model": "llama3"},
         )
-        MockOpenAI.assert_called_with(
-            base_url="http://localhost:11434/v1", api_key="ollama-local"
-        )
+        MockOpenAI.assert_called_once()
+        call_kwargs = MockOpenAI.call_args.kwargs
+        assert call_kwargs["base_url"] == "http://localhost:11434/v1"
+        assert call_kwargs["api_key"] == "ollama-local"
 
 
 def test_llm_client_invalid_provider():
