@@ -26,6 +26,8 @@ dependencies = [
     "watchdog>=4.0",
     "structlog>=24.1.0",
     "sentence-transformers",
+    "pyarrow",
+    "streamlit",
 ]
 
 [project.optional-dependencies]
