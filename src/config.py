@@ -202,6 +202,29 @@ class Config(BaseSettings):
     log_level: str = "INFO"
     operation_mode: str = "cirurgia"
 
+    # ── Orquestração dinâmica (Fase 3A — ReAct Loop) ──────────────────────────
+    # Chave de alternância: quando False (default), o Orchestrator usa o
+    # pipeline sequencial clássico (DAG fixo) para máxima estabilidade.
+    # Quando True, o ReActOrchestrator decide dinamicamente quais etapas
+    # executar com base no contexto (confiança, lacunas, claims pendentes).
+    enable_dynamic_loop: bool = Field(
+        default=False,
+        description="Ativa a orquestração dinâmica via loop ReAct em vez do pipeline sequencial clássico.",
+    )
+    # Orçamento máximo de iterações do loop ReAct (evita exploração infinita).
+    react_max_iterations: int = Field(
+        default=10,
+        gt=0,
+        description="Número máximo de iterações do loop ReAct antes de forçar a finalização.",
+    )
+    # Limiar de confiança (0-100) abaixo do qual o loop ReAct força gap-fill.
+    react_confidence_threshold: float = Field(
+        default=50.0,
+        ge=0.0,
+        le=100.0,
+        description="Score de confiança abaixo do qual o loop ReAct executa gap-fill dinâmico.",
+    )
+
     # Budgets de pesquisa
     budget_tokens_per_query: int = Field(default=100000)
     budget_cost_per_query_usd: float = Field(default=10.0)

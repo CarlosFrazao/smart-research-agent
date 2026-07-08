@@ -6,6 +6,27 @@ Refatorei a camada `src/search/` para eliminar a duplicação de:
 HTTP client, rate limiting, cache e circuit breaker — que antes cada
 searcher reimplementava por conta própria.
 
+## Migração do Neo4j para KuzuDB (Fase 0 — Dívida Técnica)
+
+### Estado Final
+O **KuzuDB foi eleito como o backend definitivo** para o Grafo de Conhecimento do SRA. A migração foi concluída na versão 6.2.0 com as seguintes mudanças:
+
+**Arquivos modificados:**
+- `src/memory/knowledge_graph.py` — Refactored `KnowledgeGraph` to inherit from `SemanticKnowledgeGraph`, replacing Neo4j remote server with embedded KuzuDB.
+- `src/knowledge_graph.py` — Main `SemanticKnowledgeGraph` class with KuzuDB native queries (Cypher-compatible syntax).
+- `src/orchestrator.py` — Updated to use `KnowledgeGraph` which wraps KuzuDB transparently.
+- `src/pipeline/stage_factory.py` — Already integrated to the unified `KnowledgeGraph`.
+- `README.md` — Updated architecture diagram and installation instructions.
+- `CHANGELOG.md` — Documented migration in version 6.2.0.
+- `docker-compose.yml` — Neo4j service marked as legacy/optional; KuzuDB stores data locally in `./kuzu_data/`.
+
+### Migração Concluída
+1. ✅ Unificação do Grafo de Conhecimento: Neo4j removido, KuzuDB como backend único.
+2. ✅ `KnowledgeGraph` (wrapper legado) herda de `SemanticKnowledgeGraph` (KuzuDB).
+3. ✅ Todos os consumidores (`orchestrator.py`, `stage_factory.py`) apontam para KuzuDB.
+4. ✅ Testes de unificação passaram: 29/29 em `tests/test_knowledge_graph.py`.
+5. ✅ Zero regressões na API pública — retrocompatibilidade mantida.
+
 Novo esqueleto:
 
 ```

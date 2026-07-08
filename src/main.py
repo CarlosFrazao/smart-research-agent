@@ -51,6 +51,11 @@ def create_parser() -> argparse.ArgumentParser:
         "--formats",
         help="Formatos de relatorio adicionais a exportar, separados por virgula (ex: pdf,docx,pptx)",
     )
+    research_parser.add_argument(
+        "--sync-obsidian",
+        action="store_true",
+        help="Synchronize the generated report with Obsidian Vault automatically",
+    )
 
     from src.operation_modes import OperationModes
 
@@ -172,6 +177,31 @@ async def cmd_research(args):
             print("\n" + "=" * 60)
             sys.stdout.buffer.write((report + "\n").encode("utf-8", errors="replace"))
             sys.stdout.buffer.flush()
+
+        # ── Obsidian sync opcional ─────────────────────────────────────────────
+        if getattr(args, "sync_obsidian", False):
+            import glob as _g
+            import os as _o
+            import shutil as _s
+            _vault = getattr(config, "obsidian_vault_path", None)
+            if _vault:
+                _candidates = sorted(
+                    _g.glob(_o.path.join("reports", "*.md")),
+                    key=_o.path.getmtime,
+                    reverse=True,
+                )
+                if _candidates:
+                    try:
+                        _o.makedirs(_vault, exist_ok=True)
+                        _dest = _o.path.join(_vault, _o.path.basename(_candidates[0]))
+                        _s.copy2(_candidates[0], _dest)
+                        print(f"Sincronizado com Obsidian: {_dest}")
+                    except Exception as _e:
+                        print(f"Erro ao sincronizar com Obsidian: {_e}")
+                else:
+                    print("Erro: Nenhum relatório recente encontrado em reports/")
+            else:
+                print("Erro: OBSIDIAN_VAULT_PATH não configurado no .env")
     except Exception:
         logger.exception("Erro durante pesquisa")
         sys.exit(1)

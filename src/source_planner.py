@@ -15,32 +15,32 @@ logger = logging.getLogger(__name__)
 
 DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
     "saas_b2b": {
-        "primary": ["github", "producthunt", "reddit", "searxng"],
-        "secondary": ["hackernews", "awesome", "firecrawl", "stackoverflow"],
+        "primary": ["github", "producthunt", "notion", "confluence", "searxng"],
+        "secondary": ["hackernews", "sharepoint", "awesome", "firecrawl", "stackoverflow"],
     },
     "dev_tools": {
-        "primary": ["github", "hackernews", "reddit", "stackoverflow"],
-        "secondary": ["awesome", "arxiv", "firecrawl", "searxng", "wayback"],
+        "primary": ["github", "confluence", "notion", "stackoverflow"],
+        "secondary": ["awesome", "arxiv", "sharepoint", "firecrawl", "searxng", "wayback"],
     },
     "ai_ml": {
-        "primary": ["arxiv", "github", "hackernews", "rss", "searxng"],
-        "secondary": ["reddit", "firecrawl", "producthunt", "stackoverflow"],
+        "primary": ["arxiv", "github", "notion", "rss", "searxng"],
+        "secondary": ["reddit", "confluence", "sharepoint", "firecrawl", "producthunt"],
     },
     "automation": {
-        "primary": ["github", "reddit", "producthunt", "stackoverflow"],
+        "primary": ["github", "confluence", "notion", "sharepoint"],
         "secondary": ["hackernews", "awesome", "firecrawl", "rss", "searxng"],
     },
     "infrastructure": {
-        "primary": ["github", "hackernews", "awesome", "stackoverflow"],
+        "primary": ["github", "confluence", "sharepoint", "awesome"],
         "secondary": ["reddit", "arxiv", "firecrawl", "searxng", "wayback"],
     },
     "open_source": {
         "primary": ["github", "awesome", "hackernews", "searxng"],
-        "secondary": ["reddit", "producthunt", "firecrawl", "stackoverflow"],
+        "secondary": ["notion", "confluence", "sharepoint", "reddit", "producthunt"],
     },
     "general": {
-        "primary": ["github", "reddit", "hackernews", "firecrawl", "searxng"],
-        "secondary": ["producthunt", "arxiv", "awesome", "stackoverflow", "wayback"],
+        "primary": ["github", "notion", "confluence", "searxng"],
+        "secondary": ["sharepoint", "producthunt", "arxiv", "awesome", "stackoverflow", "wayback"],
     },
 }
 

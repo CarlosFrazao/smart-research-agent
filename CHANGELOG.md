@@ -2,6 +2,13 @@
 
 All notable changes to the Smart Research Agent (SRA) project will be documented in this file.
 
+## [6.2.0] - 2026-07-07
+
+### Changed
+- **Knowledge Graph Unification (KuzuDB)**: Removed the dual Neo4j backend, consolidating all knowledge graph persistence and query operations on KuzuDB as the single definitive engine. `src/memory/knowledge_graph.py` (legacy `KnowledgeGraph`) now inherits from `SemanticKnowledgeGraph` and operates on the local embedded KuzuDB file instead of a remote Neo4j server.
+- **Documentation Alignment**: Updated `README.md`, `docker-compose.yml` and related docs to reflect KuzuDB as the official graph backend (no external Neo4j server required).
+- **Config Cleanup**: Deprecated `neo4j_uri`, `neo4j_user` and `neo4j_password` settings. The system now uses `KUZU_DATA_PATH` (default `kuzu_data/`) for local graph storage.
+
 ## [6.0.0] - 2026-07-03
 
 ### Added
@@ -15,7 +22,7 @@ All notable changes to the Smart Research Agent (SRA) project will be documented
 ## [5.0.0] - 2026-07-02
 
 ### Added
-- **Neo4j Knowledge Graph**: Triple extraction and Cypher query persistence.
+- **Neo4j Knowledge Graph**: Triple extraction and Cypher query persistence ( migrou para KuzuDB na versão 6.2.0).
 - **Hybrid Search Engine**: Combined lexical (BM25) and dense embeddings vector search (ChromaDB) with Reciprocal Rank Fusion (RRF) and Cohere Reranking.
 - **Celery & Redis Worker**: Asynchronous queue processing infrastructure.
 - **Multilingual Searcher**: Dynamic query translation via LLM.

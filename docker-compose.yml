@@ -3,24 +3,25 @@
 # ═══════════════════════════════════════════════════════════════════════════
 # PERFIS DISPONÍVEIS (docker compose --profile <nome> up -d)
 #
-#   (nenhum)    → apenas o SRA. Todas as integrações (Redis, ChromaDB, Neo4j,
+#   (nenhum)    → apenas o SRA. Todas as integrações (Redis, ChromaDB, KuzuDB,
 #                 Firecrawl, SearXNG) são opcionais no código (fallback
 #                 automático para memória/instância efêmera quando ausentes),
 #                 então o serviço sobe sozinho sem quebrar.
 #   dev         → SRA + SearXNG (stack mínima para desenvolvimento local).
 #                 Use ./start-dev.sh para subir com um único comando.
 #   chromadb    → adiciona ChromaDB (busca híbrida / vetorial persistente).
-#   neo4j       → adiciona Neo4j (grafo de conhecimento persistente).
+#   kuzudb      → NOTA: KuzuDB é embutido no SRA (./kuzu_data/). Não é mais
+#                 necessário um serviço separado. O perfil legado "neo4j" está
+#                 mantido apenas para compatibilidade retroativa.
 #   redis       → adiciona Redis (SmartCache TTL e broker do Celery).
 #   firecrawl   → adiciona Firecrawl self-hosted (scraping).
 #   full        → sobe TODOS os serviços auxiliares (equivalente ao stack
 #                 completo original). Combine perfis livremente, ex.:
 #                 docker compose --profile dev --profile redis up -d
 #
-# Todas as variáveis de conexão usam o padrão ${VAR:-default-local}, portanto
-# valores definidos no seu .env sempre têm prioridade sobre os defaults dos
-# serviços locais abaixo (ex.: para apontar para uma stack Firecrawl/SearXNG
-# externa já existente, basta definir FIRECRAWL_BASE_URL/SEARXNG_URL no .env).
+# NOTA DE Migração (v6.2.0): O backend Neo4j foi removido em favor do KuzuDB
+# embutido localmente. O serviço "neo4j" no compose é mantido apenas como
+# referência histórica e pode ser removido em futuras versões.
 # ═══════════════════════════════════════════════════════════════════════════
 
 x-restart-policy: &restart-policy

@@ -208,6 +208,7 @@ class StageFactory:
             "search",
             "rank",
             "score",
+            "verification",   # ← NOVA LINHA
             "graph_explorer",
             "gap",
             "synthesize",
@@ -478,6 +479,9 @@ class StageFactory:
         # Audit Stage
         self.register("audit", self._create_audit_stage, lazy=True)
 
+        # Verification Stage (Fase 1A — sandbox de código)
+        self.register("verification", self._create_verification_stage, lazy=True)
+
     def _create_intent_stage(self) -> PipelineStage:
         """Factory para IntentStage."""
         from src.pipeline.stages.intent_stage import IntentStage
@@ -604,6 +608,21 @@ class StageFactory:
         from src.pipeline.stages import SanitizationStage
 
         return SanitizationStage()
+
+    def _create_verification_stage(self) -> PipelineStage:
+        """Factory para VerificationStage (sandbox Docker de código)."""
+        from src.pipeline.stages.verification_stage import VerificationStage
+        from src.services.code_execution_agent import CodeExecutionAgent
+
+        code_agent = self._deps.get("code_execution_agent")
+        if code_agent is None:
+            code_agent = CodeExecutionAgent()
+            self._deps["code_execution_agent"] = code_agent
+
+        return VerificationStage(
+            code_agent=code_agent,
+            llm_client=self._deps.get("llm_client"),
+        )
 
     # ── Helpers internos ────────────────────────────────────────────────────
 

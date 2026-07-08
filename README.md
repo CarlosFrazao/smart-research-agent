@@ -26,7 +26,7 @@ flowchart TD
 
     subgraph Data_Storage [Persistência e Cache]
         D -->|Busca Híbrida RRF| VectorDB[ChromaDB Vector Store]
-        D -->|Persistência Cypher| GraphDB[Neo4j Graph Database]
+        D -->|Persistência Cypher| GraphDB[KuzuDB Embedded Graph]
         D -->|Smart Cache TTL| CacheDB[(Redis / Memória)]
     end
 ```
@@ -37,22 +37,22 @@ flowchart TD
 
 ### 1. Pré-requisitos
 - Python 3.11 ou superior
-- Docker & Docker Compose (para Redis e Neo4j)
+- Docker & Docker Compose (para Redis, ChromaDB e serviços auxiliares)
 
 ### 2. Instalar Dependências Python
 ```powershell
 pip install -r requirements.txt
 # Ou instale manualmente as dependências principais:
-pip install fastapi uvicorn streamlit typer rich structlog prometheus-client celery redis neo4j chromadb rank-bm25 cohere sentence-transformers
+pip install fastapi uvicorn streamlit typer rich structlog prometheus-client celery redis chromadb rank-bm25 cohere sentence-transformers kuzu
 ```
 
-### 3. Subir Serviços Auxiliares (Redis & Neo4j)
+### 3. Subir Serviços Auxiliares (Redis, ChromaDB & Auxiliares)
 ```powershell
 docker-compose up -d
 ```
 
 ### 4. Configurar Variáveis de Ambiente (`.env`)
-Configure chaves de API, endereços de bancos de dados e credenciais no arquivo `.env`.
+Configure chaves de API, endereços de bancos de dados (Redis, ChromaDB, KuzuDB) e credenciais no arquivo `.env`.
 
 ---
 

@@ -1,7 +1,6 @@
 """Interface Web Interativa do Smart Research Agent (Streamlit).
 
-Refatorada para o SRA Upgrade v3.0 com estética premium,
-tabs para o Lab Mode, Monitor do Swarm de Agentes e aprovações HITL.
+Refatorada para o SRA Upgrade v6.2.0 com visualização melhorada do EvidenceGraph.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from datetime import datetime
 
 # Configuração da página Streamlit com estética premium
 st.set_page_config(
-    page_title="Smart Research Agent Studio v3.0",
+    page_title="Smart Research Agent Studio v6.2.0",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -92,13 +91,52 @@ st.markdown(
             100% { opacity: 0.7; }
         }
 
-        /* Badges de Confiança */
-        .confidence-badge {
-            background-color: #ebf8ff;
-            color: #2b6cb0;
+        /* Estilo da aba do grafo */
+        .graph-container {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background-color: #ffffff;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .graph-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .graph-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e3c72;
+        }
+
+        .graph-stats {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.9rem;
+            color: #718096;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-value {
+            font-size: 1.3rem;
             font-weight: 600;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
+            color: #2a5298;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #718096;
         }
     </style>
     """,
@@ -109,8 +147,8 @@ st.markdown(
 st.markdown(
     """
     <div class="top-bar">
-        <h1>🛡️ Smart Research Agent Studio <span style="font-size:1.2rem; vertical-align:middle; background:#00c6ff; padding:2px 8px; border-radius:4px;">v3.0</span></h1>
-        <p>Plataforma de pesquisa corporativa com multi-agentes, sandboxing e GraphRAG</p>
+        <h1>🛡️ Smart Research Agent Studio <span style="font-size:1.2rem; vertical-align:middle; background:#00c6ff; padding:2px 8px; border-radius:4px;">v6.2.0</span></h1>
+        <p>Plataforma de pesquisa corporativa com análise de grafos em tempo real (EvidenceGraph) e insights baseados em AI</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -129,20 +167,23 @@ with st.sidebar:
         "Idiomas de Busca", ["en", "pt", "es", "zh"], default=["en", "pt"]
     )
     st.divider()
-    st.markdown("### 🧬 Recursos Ativos")
+    st.markdown("### 🧬 Recursos Avançados")
     st.checkbox("Habilitar Docker Sandbox", value=True)
     st.checkbox("Habilitar GraphRAG (KuzuDB)", value=True)
     st.checkbox("Habilitar Análise de Contradições", value=True)
+    st.checkbox("Chat com a Pesquisa (RAG)", value=True)
+    st.checkbox("Data Analysis com Pandas", value=True)
+    st.checkbox("Exportação de Citações (BibTeX/RIS)", value=True)
     st.divider()
-    st.info("SRA v3.0 com resiliência total e economia de tokens integrada.")
+    st.info("SRA v6.2.0 — Super Ferramenta de Pesquisa completa com suporte a EvidenceGraph.")
 
 # Abas de navegação principal (Lab Mode)
 tab_search, tab_swarm, tab_gate, tab_graph = st.tabs(
     [
         "🔎 Console de Pesquisa",
-        "🤖 Monitor do Swarm",
+        "🤖 Chat com a Pesquisa",
         "🚦 Gatekeeping (HITL)",
-        "📊 Grafo de Conhecimento",
+        "📊 EvidenceGraph (Grafo de Conhecimento)",
     ]
 )
 
@@ -200,6 +241,9 @@ with tab_search:
                 # Roda a orquestração assíncrona
                 result = loop.run_until_complete(orch.research(query))
 
+                # Salva a instância do orquestrador para uso em outras abas (ex: Grafo)
+                st.session_state["orch"] = orch
+
                 status_bar.progress(100)
                 status_text.success("Orquestração concluída!")
 
@@ -212,69 +256,74 @@ with tab_search:
             except Exception as e:
                 st.error(f"Erro no pipeline: {e}")
 
-# ---- ABA 2: MONITOR DO SWARM ----
+# ---- ABA 2: CHAT COM A PESQUISA ----
 with tab_swarm:
-    st.markdown("### 🤖 Monitoramento do Swarm de Agentes")
+    st.markdown("### 🤖 Chat com a Pesquisa (RAG pós-relatório)")
     st.write(
-        "Acompanhe o estado de execução em tempo real de cada agente especializado:"
+        "Faça perguntas de acompanhamento sobre o relatório do grafo de conhecimento, "
+        "baseado em dados e evidências já coletadas."
     )
 
-    # Grid de Agentes com CSS Customizado
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown(
-            """
-            <div class="agent-card">
-                <div class="agent-name">🧠 Intent Analyzer Agent</div>
-                <div class="agent-status status-active">ATIVO</div>
-                <p style="margin-top:0.5rem; color:#4a5568; font-size:0.9rem;">
-                    Identifica domínios, conceitos fundamentais e a urgência do problema de busca do usuário.
-                </p>
-            </div>
-            <div class="agent-card">
-                <div class="agent-name">🔎 Query Expander Agent</div>
-                <div class="agent-status status-idle">AGUARDANDO</div>
-                <p style="margin-top:0.5rem; color:#4a5568; font-size:0.9rem;">
-                    Bifurca o tópico em sub-queries sob diferentes perspectivas (STORM style) para máxima cobertura.
-                </p>
-            </div>
-            <div class="agent-card">
-                <div class="agent-name">⚖️ Quality Ranker Agent</div>
-                <div class="agent-status status-idle">AGUARDANDO</div>
-                <p style="margin-top:0.5rem; color:#4a5568; font-size:0.9rem;">
-                    Ordena e descarta fontes baseado em autoridade, frescor e relevância de domínio.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
+    _orch = st.session_state.get("orch")
+
+    # Histórico de chat simples
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+
+    # Exibe histórico
+    for msg in st.session_state["chat_history"]:
+        if msg["role"] == "user":
+            st.markdown(f"**Você:** {msg['content']}")
+        else:
+            st.markdown(f"**Assistente:** {msg['content']}")
+
+    # Área de entrada
+    user_question = st.chat_input("Faça uma pergunta sobre a pesquisa...")
+
+    if user_question:
+        # Adiciona mensagem do usuário
+        st.session_state["chat_history"].append(
+            {"role": "user", "content": user_question}
         )
-    with col_b:
-        st.markdown(
-            """
-            <div class="agent-card">
-                <div class="agent-name">🛡️ Research Auditor Agent</div>
-                <div class="agent-status status-idle">AGUARDANDO</div>
-                <p style="margin-top:0.5rem; color:#4a5568; font-size:0.9rem;">
-                    Verifica alegações "claim-by-claim", identificando gaps e emitindo contra-argumentações.
-                </p>
-            </div>
-            <div class="agent-card">
-                <div class="agent-name">📦 Docker Sandbox Execution Agent</div>
-                <div class="agent-status status-idle">AGUARDANDO</div>
-                <p style="margin-top:0.5rem; color:#4a5568; font-size:0.9rem;">
-                    Roda trechos de código em containers descartáveis e isolados para comprovação lógica segura.
-                </p>
-            </div>
-            <div class="agent-card">
-                <div class="agent-name">🖋️ Synthesis & Report Agent</div>
-                <div class="agent-status status-idle">AGUARDANDO</div>
-                <p style="margin-top:0.5rem; color:#4a5568; font-size:0.9rem;">
-                    Consolida os achados e formata citações bibliográficas de acordo com o domínio do problema.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+
+        # Simula uma resposta baseada no contexto do orquestrador
+        if _orch:
+            try:
+                from src.chat_session import ChatSession
+
+                chat = ChatSession(orchestrator=_orch)
+                # Requer método start_session com session_id, mas temos orquestrador
+                chat.start_session(session_id="streamlit_" + str(hash(user_question)), query=user_question, context={
+                    "report": st.session_state.get("orch_result", ""),
+                    "evidence_graph": getattr(_orch, "evidence_graph", None),
+                    "ranked_results": getattr(_orch, "ranked_results", []) if hasattr(_orch, "ranked_results") else []
+                })
+
+                answer = chat.ask(user_question)
+
+                st.session_state["chat_history"].append(
+                    {"role": "assistant", "content": answer}
+                )
+
+                # Atualiza o orquestrador no estado de sessão se resultado estiver disponível
+                if hasattr(_orch, "research"):
+                    # Guarda resultado do orquestrador para uso posterior
+                    if "orch_result" not in st.session_state:
+                        try:
+                            loop = asyncio.new_event_loop()
+                            st.session_state["orch_result"] = loop.run_until_complete(
+                                _orch.research(user_question)
+                            )
+                        except:
+                            st.session_state["orch_result"] = "(Relatório de pesquisa não disponível)"
+                    else:
+                        pass
+
+            except Exception as e:
+                st.error(f"Erro no chat RAG: {e}")
+
+        else:
+            st.error("Nenhum orquestrador carregado. Execute uma pesquisa primeiro.")
 
 # ---- ABA 3: GATEKEEPING (HITL) ----
 with tab_gate:
@@ -307,41 +356,139 @@ with tab_gate:
     with col_rej:
         st.button("❌ Rejeitar e Regenerar")
 
-# ---- ABA 4: GRAFO DE CONHECIMENTO ----
+# ---- ABA 4: EVIDENCEGRAPH (GRAFO DE CONHECIMENTO) ----
 with tab_graph:
-    st.markdown("### 📊 Visualização do Grafo de Conhecimento (GraphRAG)")
-    st.write("Entidades e relações identificadas no corpus de conhecimento coletado:")
+    st.markdown("### 📊 EvidenceGraph - Visualização Interativa D3.js")
 
-    # Tabela Simulada de Relacionamentos do Grafo
-    relationships = [
-        {
-            "Origem": "Python 3.12",
-            "Relação": "INTRODUCES",
-            "Destino": "PEP 709",
-            "Confiança": "95%",
-        },
-        {
-            "Origem": "PEP 709",
-            "Relação": "OPTIMIZES",
-            "Destino": "Inline Comprehensions",
-            "Confiança": "98%",
-        },
-        {
-            "Origem": "Inline Comprehensions",
-            "Relação": "REDUCES",
-            "Destino": "Interpreter Overhead",
-            "Confiança": "85%",
-        },
-        {
-            "Origem": "Python 3.12",
-            "Relação": "IMPROVES",
-            "Destino": "Garbage Collector Speed",
-            "Confiança": "90%",
-        },
-    ]
-    st.table(relationships)
+    _orch = st.session_state.get("orch")
+    _eg = getattr(_orch, "evidence_graph", None) if _orch else None
 
-    st.markdown("### 🔍 Gaps de Conhecimento Detectados no Grafo")
-    st.warning(
-        "O algoritmo de travessia do Grafo identificou que a relação **'PEP 709 -> WSL2 Memory Impact'** possui baixa densidade de evidências nas fontes atuais. Sugere-se expandir buscas para este gap."
-    )
+    if _eg and hasattr(_eg, "export_d3_json") and callable(_eg.export_d3_json):
+        import json as _json
+        import streamlit.components.v1 as _components
+        try:
+            _d3_data = _eg.export_d3_json()
+            _d3_json_str = _json.dumps(_d3_data)
+
+            _html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body {{ margin: 0; background: #f7fafc; font-family: sans-serif; overflow: hidden; }}
+  .link {{ stroke: #a0aec0; stroke-opacity: 0.5; stroke-width: 1.5px; }}
+  .node {{ stroke: #fff; stroke-width: 1.5px; cursor: pointer; }}
+  .label {{ font-size: 10px; fill: #2d3748; pointer-events: none; }}
+  .tooltip {{
+    position: absolute; padding: 8px 10px;
+    background: rgba(255,255,255,0.96); border: 1px solid #cbd5e0;
+    border-radius: 6px; font-size: 11px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    pointer-events: none; max-width: 280px; z-index: 9999;
+  }}
+</style>
+</head>
+<body>
+<div id="graph"></div>
+<script>
+const data = {_d3_json_str};
+const W = window.innerWidth || 800, H = 500;
+
+const svg = d3.select("#graph").append("svg")
+  .attr("width", W).attr("height", H)
+  .call(d3.zoom().on("zoom", e => g.attr("transform", e.transform)));
+
+const g = svg.append("g");
+
+const sim = d3.forceSimulation(data.nodes)
+  .force("link", d3.forceLink(data.links).id(d => d.id).distance(110))
+  .force("charge", d3.forceManyBody().strength(-180))
+  .force("center", d3.forceCenter(W / 2, H / 2))
+  .force("collide", d3.forceCollide(20));
+
+const link = g.append("g").selectAll("line")
+  .data(data.links).join("line").attr("class", "link");
+
+const color = d3.scaleOrdinal(d3.schemeTableau10);
+
+const tooltip = d3.select("body").append("div")
+  .attr("class", "tooltip").style("opacity", 0);
+
+const node = g.append("g").selectAll("circle")
+  .data(data.nodes).join("circle")
+  .attr("class", "node").attr("r", 9)
+  .attr("fill", d => color(d.source || "default"))
+  .call(d3.drag()
+    .on("start", (e, d) => {{ if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
+    .on("drag", (e, d) => {{ d.fx = e.x; d.fy = e.y; }})
+    .on("end", (e, d) => {{ if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }}))
+  .on("mouseover", (e, d) => {{
+    tooltip.transition().duration(150).style("opacity", 0.95);
+    const conf = d.confidence != null ? (d.confidence * 100).toFixed(1) + "%" : "N/A";
+    tooltip.html(`<strong>Fonte:</strong> ${{d.source || "—"}}<br>`
+      + `<strong>Claim:</strong> ${{d.label || "—"}}<br>`
+      + `<strong>Confiança:</strong> ${{conf}}`)
+      .style("left", (e.pageX + 12) + "px").style("top", (e.pageY - 30) + "px");
+  }})
+  .on("mouseout", () => tooltip.transition().duration(400).style("opacity", 0));
+
+const label = g.append("g").selectAll("text")
+  .data(data.nodes).join("text")
+  .attr("class", "label")
+  .text(d => (d.label || "").substring(0, 22) + ((d.label || "").length > 22 ? "…" : ""));
+
+sim.on("tick", () => {{
+  link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+  node.attr("cx", d => d.x).attr("cy", d => d.y);
+  label.attr("x", d => d.x + 11).attr("y", d => d.y + 4);
+}});
+</script>
+</body>
+</html>
+"""
+            _components.html(_html, height=500, scrolling=False)
+        except Exception as e:
+            st.error(f"Erro ao renderizar visualização D3: {e}")
+
+    # Painel de estatísticas do grafo
+    if _eg:
+        confirms = len([r for r in getattr(_eg, "relations", []) if getattr(r, "relation_type", None) == "CONFIRMS"])
+        contradicts = len([r for r in getattr(_eg, "relations", []) if getattr(r, "relation_type", None) == "CONTRADICTS"])
+        claims_count = len(getattr(_eg, "claims", []))
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"""
+                <div class="graph-stats">
+                    <div class="stat-item">
+                        <span class="stat-value">{claims_count}</span>
+                        <span class="stat-label">Claims</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+                <div class="graph-stats">
+                    <div class="stat-item">
+                        <span class="stat-value">{confirms}</span>
+                        <span class="stat-label">Confirmações</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col3:
+            st.markdown(f"""
+                <div class="graph-stats">
+                    <div class="stat-item">
+                        <span class="stat-value">{contradicts}</span>
+                        <span class="stat-label">Contradições</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+    if not _eg:
+        st.info(
+            "📊 Nenhum grafo de evidências disponível. Execute uma pesquisa para gerar as relações semânticas.\n\n"
+            "O EvidenceGraph conectará claims de fontes diferentes (confirmando ou contradizendo)."
+        )
