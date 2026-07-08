@@ -43,7 +43,9 @@ class ReActOrchestrator(Orchestrator):
         self._react_enabled = getattr(self.config, "enable_dynamic_loop", False)
         self._decision_engine = DynamicDecisionEngine(
             config=self.config,
-            confidence_threshold=getattr(self.config, "react_confidence_threshold", 50.0),
+            confidence_threshold=getattr(
+                self.config, "react_confidence_threshold", 50.0
+            ),
             max_iterations=getattr(self.config, "react_max_iterations", 10),
             operation_mode=getattr(self.config, "operation_mode", "cirurgia"),
         )
@@ -73,7 +75,9 @@ class ReActOrchestrator(Orchestrator):
         logger.info(
             "ReActOrchestrator: iniciando loop ReAct para query='%s' (modo=%s).",
             query,
-            self.operation_mode.name if hasattr(self.operation_mode, "name") else self.config.operation_mode,
+            self.operation_mode.name
+            if hasattr(self.operation_mode, "name")
+            else self.config.operation_mode,
         )
 
         # Reset do motor de decisão para nova execução
@@ -119,7 +123,10 @@ class ReActOrchestrator(Orchestrator):
                 report_stage, context, progress_callback, session_id
             )
 
-        logger.info("ReActOrchestrator: loop concluído após %d iterações.", self._decision_engine._iteration)
+        logger.info(
+            "ReActOrchestrator: loop concluído após %d iterações.",
+            self._decision_engine._iteration,
+        )
         return context.report
 
     async def _execute_stage_with_progress(

@@ -98,16 +98,16 @@ class RISExporter:
                     fields["SP"] = parts[0]  # Start Page
                     fields["EP"] = parts[1]  # End Page
                 else:
-                    fields["SP"] = parts[0] if parts else ""  # Single page or just first part
+                    fields["SP"] = (
+                        parts[0] if parts else ""
+                    )  # Single page or just first part
 
         fields["DA"] = datetime.now().strftime("%Y/%m/%d")  # Date Created
 
         return RISEntry(ref_type=ris_type, fields=fields)
 
     @staticmethod
-    def export_batch(
-        results: list[dict[str, Any]], filename: str | None = None
-    ) -> str:
+    def export_batch(results: list[dict[str, Any]], filename: str | None = None) -> str:
         """
         Exporta múltiplas referências para um único arquivo .ris.
 
@@ -134,7 +134,9 @@ class RISExporter:
 
         if filename:
             Path(filename).write_text(content, encoding="utf-8")
-            logger.info("RISExporter: exportado %d entradas para %s", len(entries), filename)
+            logger.info(
+                "RISExporter: exportado %d entradas para %s", len(entries), filename
+            )
 
         return content
 
@@ -178,7 +180,11 @@ class RISExporter:
                 # Se só tiver uma palavra, use como está
                 formatted.append(author_str)
 
-        return filtered if (filtered := [f for f in formatted if f]) else ["Autor Desconhecido"]
+        return (
+            filtered
+            if (filtered := [f for f in formatted if f])
+            else ["Autor Desconhecido"]
+        )
 
     @staticmethod
     def _determine_ris_type(source: str, result: dict[str, Any]) -> str:

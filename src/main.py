@@ -183,6 +183,7 @@ async def cmd_research(args):
             import glob as _g
             import os as _o
             import shutil as _s
+
             _vault = getattr(config, "obsidian_vault_path", None)
             if _vault:
                 _candidates = sorted(

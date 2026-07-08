@@ -175,7 +175,9 @@ with st.sidebar:
     st.checkbox("Data Analysis com Pandas", value=True)
     st.checkbox("Exportação de Citações (BibTeX/RIS)", value=True)
     st.divider()
-    st.info("SRA v6.2.0 — Super Ferramenta de Pesquisa completa com suporte a EvidenceGraph.")
+    st.info(
+        "SRA v6.2.0 — Super Ferramenta de Pesquisa completa com suporte a EvidenceGraph."
+    )
 
 # Abas de navegação principal (Lab Mode)
 tab_search, tab_swarm, tab_gate, tab_graph = st.tabs(
@@ -293,11 +295,17 @@ with tab_swarm:
 
                 chat = ChatSession(orchestrator=_orch)
                 # Requer método start_session com session_id, mas temos orquestrador
-                chat.start_session(session_id="streamlit_" + str(hash(user_question)), query=user_question, context={
-                    "report": st.session_state.get("orch_result", ""),
-                    "evidence_graph": getattr(_orch, "evidence_graph", None),
-                    "ranked_results": getattr(_orch, "ranked_results", []) if hasattr(_orch, "ranked_results") else []
-                })
+                chat.start_session(
+                    session_id="streamlit_" + str(hash(user_question)),
+                    query=user_question,
+                    context={
+                        "report": st.session_state.get("orch_result", ""),
+                        "evidence_graph": getattr(_orch, "evidence_graph", None),
+                        "ranked_results": getattr(_orch, "ranked_results", [])
+                        if hasattr(_orch, "ranked_results")
+                        else [],
+                    },
+                )
 
                 answer = chat.ask(user_question)
 
@@ -315,7 +323,9 @@ with tab_swarm:
                                 _orch.research(user_question)
                             )
                         except:
-                            st.session_state["orch_result"] = "(Relatório de pesquisa não disponível)"
+                            st.session_state["orch_result"] = (
+                                "(Relatório de pesquisa não disponível)"
+                            )
                     else:
                         pass
 
@@ -366,6 +376,7 @@ with tab_graph:
     if _eg and hasattr(_eg, "export_d3_json") and callable(_eg.export_d3_json):
         import json as _json
         import streamlit.components.v1 as _components
+
         try:
             _d3_data = _eg.export_d3_json()
             _d3_json_str = _json.dumps(_d3_data)
@@ -454,38 +465,59 @@ sim.on("tick", () => {{
 
     # Painel de estatísticas do grafo
     if _eg:
-        confirms = len([r for r in getattr(_eg, "relations", []) if getattr(r, "relation_type", None) == "CONFIRMS"])
-        contradicts = len([r for r in getattr(_eg, "relations", []) if getattr(r, "relation_type", None) == "CONTRADICTS"])
+        confirms = len(
+            [
+                r
+                for r in getattr(_eg, "relations", [])
+                if getattr(r, "relation_type", None) == "CONFIRMS"
+            ]
+        )
+        contradicts = len(
+            [
+                r
+                for r in getattr(_eg, "relations", [])
+                if getattr(r, "relation_type", None) == "CONTRADICTS"
+            ]
+        )
         claims_count = len(getattr(_eg, "claims", []))
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.markdown(f"""
+            st.markdown(
+                f"""
                 <div class="graph-stats">
                     <div class="stat-item">
                         <span class="stat-value">{claims_count}</span>
                         <span class="stat-label">Claims</span>
                     </div>
                 </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
         with col2:
-            st.markdown(f"""
+            st.markdown(
+                f"""
                 <div class="graph-stats">
                     <div class="stat-item">
                         <span class="stat-value">{confirms}</span>
                         <span class="stat-label">Confirmações</span>
                     </div>
                 </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
         with col3:
-            st.markdown(f"""
+            st.markdown(
+                f"""
                 <div class="graph-stats">
                     <div class="stat-item">
                         <span class="stat-value">{contradicts}</span>
                         <span class="stat-label">Contradições</span>
                     </div>
                 </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
     if not _eg:
         st.info(

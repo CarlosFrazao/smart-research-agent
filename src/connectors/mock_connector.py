@@ -87,7 +87,7 @@ class MockNotionClient(BaseMockConnector):
 
     def __init__(self, **kwargs):
         # Extract cache before calling super
-        self.cache = kwargs.pop('cache', None)
+        self.cache = kwargs.pop("cache", None)
         super().__init__("notion", **kwargs)
 
     async def search(self, query: str, **kwargs) -> List[SearchResult]:
@@ -168,7 +168,12 @@ class MockConfluenceClient(BaseMockConnector):
                     "space": "TECH",
                     "author": "dev-team",
                 },
-                raw={"mock": True, "space_key": "TECH", "content_type": "blogpost", "query": query},
+                raw={
+                    "mock": True,
+                    "space_key": "TECH",
+                    "content_type": "blogpost",
+                    "query": query,
+                },
             ),
         ]
 
@@ -237,7 +242,9 @@ def create_mock_connector(source: str, **kwargs) -> BaseMockConnector:
     }
 
     if source not in mocks:
-        raise ValueError(f"Fonte desconhecida: {source}. Disponíveis: {list(mocks.keys())}")
+        raise ValueError(
+            f"Fonte desconhecida: {source}. Disponíveis: {list(mocks.keys())}"
+        )
 
     return mocks[source](**kwargs)
 

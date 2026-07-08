@@ -66,7 +66,9 @@ class ConfluenceClient(BaseConnectorImplementation):
         """
         # Atlassian usa Basic Auth com username:api_token
         self.api_key = f"{username}:{api_token}" if username and api_token else None
-        super().__init__(api_key=self.api_key, base_url=base_url, timeout=timeout, cache=cache)
+        super().__init__(
+            api_key=self.api_key, base_url=base_url, timeout=timeout, cache=cache
+        )
         self.max_results = max_results
         self.enabled = enabled and bool(self.api_key)
 
@@ -147,7 +149,9 @@ class ConfluenceClient(BaseConnectorImplementation):
                 "expand": "content,metadata,history",
             }
 
-            response = await client.get("/rest/api/content/search", headers=self._get_headers(), params=params)
+            response = await client.get(
+                "/rest/api/content/search", headers=self._get_headers(), params=params
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -155,7 +159,9 @@ class ConfluenceClient(BaseConnectorImplementation):
 
             await self._cache_set(cache_key, results)
 
-            logger.info("ConfluenceClient: %d resultados para '%s'", len(results), query)
+            logger.info(
+                "ConfluenceClient: %d resultados para '%s'", len(results), query
+            )
             return results
 
         except Exception as e:
@@ -200,7 +206,9 @@ class ConfluenceClient(BaseConnectorImplementation):
                     url=content.get("_links", {}).get("webui", ""),
                     description=content.get("excerpt", "") or content.get("title", ""),
                     metrics={
-                        "last_modified": content.get("history", {}).get("lastUpdated", {}).get("createdAt"),
+                        "last_modified": content.get("history", {})
+                        .get("lastUpdated", {})
+                        .get("createdAt"),
                         "content_id": content.get("id"),
                         "content_type": content.get("type"),
                         "space_key": content.get("space", {}).get("key"),
@@ -232,7 +240,11 @@ class ConfluenceClient(BaseConnectorImplementation):
         try:
             client = await self._get_http_client()
             params = {"limit": self.max_results, "filename": query}
-            response = await client.get(f"/rest/api/content/{page_id}/child/attachment", headers=self._get_headers(), params=params)
+            response = await client.get(
+                f"/rest/api/content/{page_id}/child/attachment",
+                headers=self._get_headers(),
+                params=params,
+            )
             response.raise_for_status()
 
             results: List[SearchResult] = []

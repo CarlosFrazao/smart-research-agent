@@ -179,6 +179,14 @@ class LLMClient:
         if self._api_keys:
             self.config["api_key"] = self._api_keys[0]
 
+        # Inicializa a lista de modelos com suporte a rotação dinâmica
+        model_raw = self.config.get("model") or ""
+        if isinstance(model_raw, str) and "," in model_raw:
+            self._models = [m.strip() for m in model_raw.split(",") if m.strip()]
+        else:
+            self._models = [model_raw] if model_raw else []
+        self._current_model_idx = 0
+
         self._init_providers_safely()
         self._init_client()
         from src.token_economy import TokenEconomy
@@ -227,6 +235,23 @@ class LLMClient:
             f"[RotaçãoChaves] Falha na chave anterior. Rotacionando para chave "
             f"{self._current_key_idx + 1}/{len(self._api_keys)} do provedor '{self.provider.value}'."
         )
+        self._init_client()
+        return True
+
+    def _rotate_model(self) -> bool:
+        """Rotaciona o modelo ativo para o próximo na lista de modelos.
+        Retorna True se a rotação ocorreu (há modelos adicionais disponíveis)."""
+        if len(self._models) <= 1:
+            return False
+        self._current_model_idx = (self._current_model_idx + 1) % len(self._models)
+        self.model = self._models[self._current_model_idx]
+        logger.warning(
+            f"[RotaçãoModelos] Falha no modelo anterior. Rotacionando para modelo: '{self.model}' "
+            f"({self._current_model_idx + 1}/{len(self._models)})."
+        )
+        # O cliente OpenAI não precisa ser reiniciado pois passamos o model na chamada,
+        # mas para provedores como Gemini, Anthropic ou Ollama que amarram o model
+        # na inicialização do SDK client, nós re-inicializamos o client.
         self._init_client()
         return True
 
@@ -442,11 +467,16 @@ class LLMClient:
                     response = await asyncio.wait_for(coro, timeout=30.0)
                     return response.text or ""
             except Exception as exc:
-                if (
-                    not isinstance(exc, (TypeError, ValueError, NameError, KeyError))
-                    and self._rotate_key()
-                ):
-                    continue
+                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)):
+                    if self._rotate_key():
+                        continue
+                    if self._rotate_model():
+                        # Ao mudar o modelo, resetamos as chaves para tentar novamente do início
+                        self._current_key_idx = 0
+                        if self._api_keys:
+                            self.config["api_key"] = self._api_keys[0]
+                        self._init_client()
+                        continue
                 raise
         return ""
 
@@ -795,11 +825,16 @@ class LLMClient:
                         raw = raw[:-3]
                     return raw.strip()
             except Exception as exc:
-                if (
-                    not isinstance(exc, (TypeError, ValueError, NameError, KeyError))
-                    and self._rotate_key()
-                ):
-                    continue
+                if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)):
+                    if self._rotate_key():
+                        continue
+                    if self._rotate_model():
+                        # Ao mudar o modelo, resetamos as chaves para tentar novamente do início
+                        self._current_key_idx = 0
+                        if self._api_keys:
+                            self.config["api_key"] = self._api_keys[0]
+                        self._init_client()
+                        continue
                 raise
         return ""
 

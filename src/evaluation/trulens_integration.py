@@ -59,7 +59,11 @@ class TruLensRecorder:
     - Fornece callbacks de alerta para regressões de qualidade.
     """
 
-    def __init__(self, enabled: bool = True, alert_callback: Optional[Callable[[str, Dict], None]] = None):
+    def __init__(
+        self,
+        enabled: bool = True,
+        alert_callback: Optional[Callable[[str, Dict], None]] = None,
+    ):
         """Inicializa o gravador.
 
         Args:
@@ -212,7 +216,9 @@ class QualityAppraiser:
         metrics["answer_relevance"] = overlap / len(query_words) if query_words else 0.5
 
         # 3. Context Recall
-        metrics["context_recall"] = min(1.0, len(sources) / 5.0)  # Baseline: 5 fontes ideais
+        metrics["context_recall"] = min(
+            1.0, len(sources) / 5.0
+        )  # Baseline: 5 fontes ideais
 
         # Registrar avaliação
         self.recorder.record("synthesize", metrics)
@@ -288,9 +294,7 @@ def export_trulens_report(recorder: TruLensRecorder) -> Dict[str, Any]:
             if isinstance(v, (int, float)):
                 metrics_by_stage.setdefault(k, []).append(v)
 
-    avg_by_stage = {
-        k: sum(v) / len(v) for k, v in metrics_by_stage.items()
-    }
+    avg_by_stage = {k: sum(v) / len(v) for k, v in metrics_by_stage.items()}
 
     return {
         "total_evaluations": total,

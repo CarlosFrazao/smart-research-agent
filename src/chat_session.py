@@ -58,7 +58,9 @@ class ChatSession:
         self.query_topic = query
         self.context = context or {}
         self.history.clear()
-        logger.info("ChatSession: sessão iniciada para '%s' (session=%s)", query, session_id)
+        logger.info(
+            "ChatSession: sessão iniciada para '%s' (session=%s)", query, session_id
+        )
 
     def ask(self, question: str) -> str:
         """
@@ -98,7 +100,11 @@ class ChatSession:
 
         # Formata as fontes
         sources = [r.get("url", "") for r in ranked_results[:5] if r.get("url")]
-        source_list = "\n".join(f"- {s}" for s in sources) if sources else "- Nenhuma fonte específica"
+        source_list = (
+            "\n".join(f"- {s}" for s in sources)
+            if sources
+            else "- Nenhuma fonte específica"
+        )
 
         # Formata o histórico
         history_text = "\n".join(
@@ -125,4 +131,7 @@ class ChatSession:
 
     def get_history(self) -> list[dict[str, str]]:
         """Retorna o histórico como lista de dicionários."""
-        return [{"role": m.role, "content": m.content, "sources": m.sources} for m in self.history]
+        return [
+            {"role": m.role, "content": m.content, "sources": m.sources}
+            for m in self.history
+        ]

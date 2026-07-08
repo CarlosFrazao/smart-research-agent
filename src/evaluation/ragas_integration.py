@@ -33,6 +33,7 @@ MetricsDict = Dict[str, Any]
 
 class EvaluatorProtocol(Protocol):
     """Interface mínima para avaliadores de qualidade."""
+
     def evaluate(self, context: PipelineContext) -> MetricsDict:
         """Avalia a execução do pipeline com contexto atual.
         Deve retornar um dicionário de métricas acionáveis.
@@ -67,9 +68,7 @@ class RagasEvaluator:
         if not self.enabled:
             logger.debug("RagasEvaluator: desativado; avaliações serão negligenciadas.")
 
-    async def evaluate(
-        self, context: PipelineContext
-    ) -> MetricsDict:
+    async def evaluate(self, context: PipelineContext) -> MetricsDict:
         """Avalia a qualidade da pipeline usando RAGAS.
 
         Este método é projetado para ser chamado após eventos críticos:
@@ -105,10 +104,16 @@ class RagasEvaluator:
         # A importação real ocorre aqui para evitar falha módulo em ambiente onde RAGAS não está instalado
         try:
             from langchain.retrieval import ContextualCompressionRetriever
-            from langchain.evaluation import qa_relevance, faithfulness, source_precision
+            from langchain.evaluation import (
+                qa_relevance,
+                faithfulness,
+                source_precision,
+            )
             from langchain.schema import Generation
         except ImportError as e:
-            logger.warning("RAGAS: Condições mínimas de avaliação não satisfeitas: %s", str(e))
+            logger.warning(
+                "RAGAS: Condições mínimas de avaliação não satisfeitas: %s", str(e)
+            )
             return {}
 
         # Realização de métricas de avaliação (exemplo simplificado)
@@ -125,7 +130,9 @@ class RagasEvaluator:
         metrics["overall_score"] = 0.80
 
         # 2. Timestamp e detectação de anomalias
-        metrics["latency_seconds"] = time.time() - context.started_at.replace(microsecond=0).timestamp()
+        metrics["latency_seconds"] = (
+            time.time() - context.started_at.replace(microsecond=0).timestamp()
+        )
         if metrics["overall_score"] < 0.6:
             metrics["warnings"] = ["Score geral baixo; ver pipeline de avaliação."]
         else:
@@ -211,7 +218,9 @@ class StageEvaluator:
         # 4. Retornar context (não mutacional para preservar integridade)
         return context
 
-    def _generate_stage_metrics(self, stage_name: str, context: PipelineContext) -> Dict[str, Any]:
+    def _generate_stage_metrics(
+        self, stage_name: str, context: PipelineContext
+    ) -> Dict[str, Any]:
         """Gera métricas específicas da etapa baseadas no nome e estado atual.
 
         Implementa heurísticas para colocar métricas *sensatas* por tipo de etapa.
@@ -247,7 +256,13 @@ class StageEvaluator:
             }
         elif stage_name in {"verification"}:
             # Para verificação, avaliamos taxa de sucesso de claims
-            verified = len([c for c in (context.extra.get("verified_claims") or []) if c.get("status") == "verified"])
+            verified = len(
+                [
+                    c
+                    for c in (context.extra.get("verified_claims") or [])
+                    if c.get("status") == "verified"
+                ]
+            )
             total_checked = len(context.extra.get("verified_claims") or [])
             verification_rate = (verified / total_checked) if total_checked else 0.0
             return {
@@ -304,7 +319,9 @@ async def ragas_pipeline(
             return context
     """
     evaluator_result = await evaluator.evaluate(context)
-    stage_metrics = StageEvaluator(evaluator)._generate_stage_metrics(stage_name, context)
+    stage_metrics = StageEvaluator(evaluator)._generate_stage_metrics(
+        stage_name, context
+    )
     # Atualizar context.extra com métricas específicas da etapa
     if not context.extra.get("ragas_metrics"):
         context.extra["ragas_metrics"] = {}
@@ -316,7 +333,9 @@ async def ragas_pipeline(
 
 
 # ── Avaliações Importação/Exportação ─────────────────────────────────────
-async def store_eval_metrics(context: PipelineContext, metrics: MetricsDict) -> PipelineContext:
+async def store_eval_metrics(
+    context: PipelineContext, metrics: MetricsDict
+) -> PipelineContext:
     """Função utilitária para armazenar métricas obtidas durante avaliação.
 
     Permite ao usuário final acoplar outros sistemas de observabilidade
@@ -376,7 +395,12 @@ async def validate_ragas_quality(
     else:
         # Filtrar por métricas críticas gerais
         for stage_metrics in ragas_metrics.values():
-            for key in {"overall_score", "faithfulness", "answer_relevance", "claim_verification_rate"}:
+            for key in {
+                "overall_score",
+                "faithfulness",
+                "answer_relevance",
+                "claim_verification_rate",
+            }:
                 if key in stage_metrics:
                     critical_metrics[key] = stage_metrics[key]
 

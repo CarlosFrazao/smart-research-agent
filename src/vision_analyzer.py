@@ -31,7 +31,14 @@ from typing import Any, Awaitable, Callable
 logger = logging.getLogger("vision_analyzer")
 
 # Provider/SDK OpenAI-compatible (compartilham a mesma interface chat.completions)
-_OPENAI_COMPATIBLE = {"openai", "openrouter", "ollama", "groq", "deepseek", "github_models"}
+_OPENAI_COMPATIBLE = {
+    "openai",
+    "openrouter",
+    "ollama",
+    "groq",
+    "deepseek",
+    "github_models",
+}
 
 # Timeout de captura de tela em segundos
 _SCREENSHOT_TIMEOUT_S = 45.0
@@ -109,9 +116,7 @@ class VisionAnalyzer:
                             {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime};base64,{image_b64}"
-                                },
+                                "image_url": {"url": f"data:{mime};base64,{image_b64}"},
                             },
                         ],
                     }
@@ -147,10 +152,7 @@ class VisionAnalyzer:
             return None
 
         if output_path is None:
-            safe = (
-                "".join(c if c.isalnum() else "_" for c in url)[:60]
-                + ".png"
-            )
+            safe = "".join(c if c.isalnum() else "_" for c in url)[:60] + ".png"
             output_path = os.path.join(self.screenshot_dir, safe)
 
         try:

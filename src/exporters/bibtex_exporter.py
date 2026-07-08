@@ -42,7 +42,9 @@ class BibTeXExporter:
     """Exportador de referências para formato BibTeX."""
 
     @staticmethod
-    def from_search_result(result: dict[str, Any], index: int = 0) -> BibTeXEntry | None:
+    def from_search_result(
+        result: dict[str, Any], index: int = 0
+    ) -> BibTeXEntry | None:
         """
         Cria uma entrada BibTeX a partir de um SearchResult.
 
@@ -96,9 +98,7 @@ class BibTeXExporter:
         return BibTeXEntry(key=key, entry_type=entry_type, fields=fields)
 
     @staticmethod
-    def export_batch(
-        results: list[dict[str, Any]], filename: str | None = None
-    ) -> str:
+    def export_batch(results: list[dict[str, Any]], filename: str | None = None) -> str:
         """
         Exporta múltiplas referências para um único arquivo .bib.
 
@@ -125,7 +125,9 @@ class BibTeXExporter:
 
         if filename:
             Path(filename).write_text(content, encoding="utf-8")
-            logger.info("BibTeXExporter: exportado %d entradas para %s", len(entries), filename)
+            logger.info(
+                "BibTeXExporter: exportado %d entradas para %s", len(entries), filename
+            )
 
         return content
 

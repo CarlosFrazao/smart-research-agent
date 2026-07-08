@@ -155,7 +155,9 @@ class DataAnalyzer:
             return llm_script
         return self._fallback_script(data_paths, question)
 
-    def _generate_script_with_llm(self, data_paths: list[str], question: str) -> str | None:
+    def _generate_script_with_llm(
+        self, data_paths: list[str], question: str
+    ) -> str | None:
         """Usa o LLM para gerar um script Pandas autocontido que responde à pergunta."""
         if not self.llm:
             return None
@@ -219,7 +221,7 @@ class DataAnalyzer:
             "    print(f'--- Arquivo {idx} (shape={df.shape}) ---')\n"
             "    print(df.head(10).to_string())\n"
             "    print()\n"
-            "    print(df.describe(include=\"all\").to_string())\n"
+            '    print(df.describe(include="all").to_string())\n'
             "    print()\n"
             "print('=== Colunas disponíveis ===')\n"
             "for idx, df in enumerate(dfs):\n"

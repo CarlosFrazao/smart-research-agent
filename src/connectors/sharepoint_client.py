@@ -81,10 +81,14 @@ class SharePointClient(BaseConnectorImplementation):
 
         # API key é o token combinado
         api_key = f"{tenant_id}:{client_id}" if tenant_id and client_id else None
-        super().__init__(api_key=api_key, base_url=self.GRAPH_API_BASE, timeout=timeout, cache=cache)
+        super().__init__(
+            api_key=api_key, base_url=self.GRAPH_API_BASE, timeout=timeout, cache=cache
+        )
 
         self.max_results = max_results
-        self.enabled = enabled and bool(tenant_id and (client_id or certificate_thumbprint))
+        self.enabled = enabled and bool(
+            tenant_id and (client_id or certificate_thumbprint)
+        )
 
         self._http_client = None
         self._access_token: Optional[str] = None
@@ -108,7 +112,9 @@ class SharePointClient(BaseConnectorImplementation):
             import httpx
             import aiohttp
 
-            token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+            token_url = (
+                f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+            )
 
             data = {
                 "client_id": self.client_id,
@@ -124,7 +130,9 @@ class SharePointClient(BaseConnectorImplementation):
                     "Autenticação com certificado ainda não implementada. Use client_secret."
                 )
             else:
-                raise ValueError("Nenhuma credencial fornecida (client_secret ou certificate_thumbprint)")
+                raise ValueError(
+                    "Nenhuma credencial fornecida (client_secret ou certificate_thumbprint)"
+                )
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(token_url, data=data)
@@ -199,7 +207,9 @@ class SharePointClient(BaseConnectorImplementation):
                 "count": kwargs.get("limit", self.max_results),
             }
 
-            response = await client.get(endpoint, headers=self._get_headers(), params=search_params)
+            response = await client.get(
+                endpoint, headers=self._get_headers(), params=search_params
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -207,7 +217,9 @@ class SharePointClient(BaseConnectorImplementation):
 
             await self._cache_set(cache_key, results)
 
-            logger.info("SharePointClient: %d resultados para '%s'", len(results), query)
+            logger.info(
+                "SharePointClient: %d resultados para '%s'", len(results), query
+            )
             return results
 
         except Exception as e:
@@ -288,7 +300,9 @@ class SharePointClient(BaseConnectorImplementation):
             return results
 
         except Exception as e:
-            logger.warning("SharePointClient: falha na busca site %s: %s", site_id, str(e))
+            logger.warning(
+                "SharePointClient: falha na busca site %s: %s", site_id, str(e)
+            )
             return []
 
     async def close(self) -> None:

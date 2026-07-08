@@ -26,7 +26,10 @@ from .notion_client import NotionClient
 from .confluence_client import ConfluenceClient
 from .sharepoint_client import SharePointClient
 
-from .mock_connector import create_mock_connector, create_all_mocks  # Exporta factory functions
+from .mock_connector import (
+    create_mock_connector,
+    create_all_mocks,
+)  # Exporta factory functions
 
 logger = logging.getLogger("connectors.package")
 

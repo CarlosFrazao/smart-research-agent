@@ -106,7 +106,9 @@ class BaseConnectorImplementation:
         Returns:
             List[SearchResult]: Resultados da busca.
         """
-        raise NotImplementedError(f"{self.__class__.__name__}.search() não implementado")
+        raise NotImplementedError(
+            f"{self.__class__.__name__}.search() não implementado"
+        )
 
     async def close(self) -> None:
         """Libera recursos. Chame este método quando o conector não for mais necessário."""
@@ -115,7 +117,9 @@ class BaseConnectorImplementation:
         self._closed = True
         logger.debug("%s: recursos liberados.", self.__class__.__name__)
 
-    def _normalize_result(self, raw_result: dict[str, Any], source_name: str) -> SearchResult:
+    def _normalize_result(
+        self, raw_result: dict[str, Any], source_name: str
+    ) -> SearchResult:
         """Normaliza um resultado bruto para SearchResult.
 
         Args:
@@ -145,7 +149,9 @@ class BaseConnectorImplementation:
             return await self.cache.get(key)
         return None
 
-    async def _cache_set(self, key: str, results: List[SearchResult], ttl: int = 300) -> None:
+    async def _cache_set(
+        self, key: str, results: List[SearchResult], ttl: int = 300
+    ) -> None:
         """Armazena resultados no cache se disponível."""
         if self.cache:
             await self.cache.set(key, results, ttl=ttl)

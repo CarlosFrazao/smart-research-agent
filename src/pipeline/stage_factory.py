@@ -208,7 +208,7 @@ class StageFactory:
             "search",
             "rank",
             "score",
-            "verification",   # ← NOVA LINHA
+            "verification",  # ← NOVA LINHA
             "graph_explorer",
             "gap",
             "synthesize",

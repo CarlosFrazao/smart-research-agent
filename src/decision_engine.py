@@ -123,7 +123,9 @@ class DynamicDecisionEngine:
             for stage_metrics in eval_metrics.values():
                 if isinstance(stage_metrics, dict):
                     for metric_name, value in stage_metrics.items():
-                        if "relevance" in metric_name and isinstance(value, (int, float)):
+                        if "relevance" in metric_name and isinstance(
+                            value, (int, float)
+                        ):
                             if value < 0.5:
                                 base_conf = max(0.0, base_conf - 10.0)
 
@@ -167,9 +169,13 @@ class DynamicDecisionEngine:
         # Guard: iteração máxima atingida → forçar síntese+relatório
         if self._iteration > self.max_iterations:
             if "synthesize" not in self._executed_stages:
-                return self._make_decision("synthesize", "Iteração máxima atingida; forçando síntese.")
+                return self._make_decision(
+                    "synthesize", "Iteração máxima atingida; forçando síntese."
+                )
             if "report" not in self._executed_stages:
-                return self._make_decision("report", "Iteração máxima atingida; forçando relatório.")
+                return self._make_decision(
+                    "report", "Iteração máxima atingida; forçando relatório."
+                )
             return self._make_decision(None, "Iteração máxima atingida; finalizando.")
 
         # 1. Sem intent → deve começar com intent
@@ -178,11 +184,15 @@ class DynamicDecisionEngine:
 
         # 2. Sem plano de fontes → expand (ou storm se enable_storm)
         if not context.source_plan and "expand" not in self._executed_stages:
-            return self._make_decision("expand", "Plano de fontes ausente; expandindo queries.")
+            return self._make_decision(
+                "expand", "Plano de fontes ausente; expandindo queries."
+            )
 
         # 3. Sem resultados → search
         if not context.raw_results and "search" not in self._executed_stages:
-            return self._make_decision("search", "Resultados ausentes; executando busca.")
+            return self._make_decision(
+                "search", "Resultados ausentes; executando busca."
+            )
 
         # 4. Sem ranqueamento → rank
         if not context.ranked_results and "rank" not in self._executed_stages:
@@ -200,7 +210,10 @@ class DynamicDecisionEngine:
 
         # 6. Confiança baixa → gap-fill (se não executado recentemente)
         confidence = self._aggregate_confidence(context)
-        if confidence < self.confidence_threshold and "gap" not in self._executed_stages:
+        if (
+            confidence < self.confidence_threshold
+            and "gap" not in self._executed_stages
+        ):
             return self._make_decision(
                 "gap",
                 f"Confiança agregada ({confidence:.1f}) abaixo do limiar "
@@ -211,17 +224,24 @@ class DynamicDecisionEngine:
         gap_analysis = context.gap_analysis
         if gap_analysis and not getattr(gap_analysis, "is_complete", True):
             missing = getattr(gap_analysis, "missing_aspects", [])
-            if missing and "expand" not in self._executed_stages[-3:]:  # Não repetir muito
+            if (
+                missing and "expand" not in self._executed_stages[-3:]
+            ):  # Não repetir muito
                 return self._make_decision(
-                    "expand", f"Lacunas detectadas ({len(missing)}); expandindo novamente."
+                    "expand",
+                    f"Lacunas detectadas ({len(missing)}); expandindo novamente.",
                 )
 
         # 8. Modo guerrilha → pular etapas não-críticas
         if self.operation_mode == "guerrilha":
             if "synthesize" not in self._executed_stages:
-                return self._make_decision("synthesize", "Modo guerrilha; síntese direta.")
+                return self._make_decision(
+                    "synthesize", "Modo guerrilha; síntese direta."
+                )
             if "report" not in self._executed_stages:
-                return self._make_decision("report", "Modo guerrilha; relatório direto.")
+                return self._make_decision(
+                    "report", "Modo guerrilha; relatório direto."
+                )
             return self._make_decision(None, "Modo guerrilha; pesquisa concluída.")
 
         # 9. Fluxo padrão: graph_explorer → synthesize → report
@@ -241,7 +261,9 @@ class DynamicDecisionEngine:
 
         # 10. Completude → finalizar
         if self._is_complete(context):
-            return self._make_decision(None, "Pesquisa completa; finalizando loop ReAct.")
+            return self._make_decision(
+                None, "Pesquisa completa; finalizando loop ReAct."
+            )
 
         # Fallback: síntese+relatório para garantir saída
         if "synthesize" not in self._executed_stages:

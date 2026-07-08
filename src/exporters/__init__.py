@@ -10,4 +10,10 @@ from src.exporters.pptx_exporter import PPTXExporter
 from src.exporters.bibtex_exporter import BibTeXExporter
 from src.exporters.ris_exporter import RISExporter
 
-__all__ = ["PDFExporter", "DOCXExporter", "PPTXExporter", "BibTeXExporter", "RISExporter"]
+__all__ = [
+    "PDFExporter",
+    "DOCXExporter",
+    "PPTXExporter",
+    "BibTeXExporter",
+    "RISExporter",
+]

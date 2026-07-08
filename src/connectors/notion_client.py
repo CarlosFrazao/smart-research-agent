@@ -66,7 +66,9 @@ class NotionClient(BaseConnectorImplementation):
             max_results: Máximo de resultados por busca.
             enabled: Se False, o cliente ignora chamadas de busca.
         """
-        super().__init__(api_key=api_key, base_url=base_url, timeout=timeout, cache=cache)
+        super().__init__(
+            api_key=api_key, base_url=base_url, timeout=timeout, cache=cache
+        )
         self.max_results = max_results
         self.enabled = enabled and bool(api_key)
 
@@ -196,7 +198,9 @@ class NotionClient(BaseConnectorImplementation):
         title = ""
         if isinstance(title_prop, dict):
             title_parts = title_prop.get("title", [])
-            title = "".join(t.get("plain_text", "") for t in title_parts) or "Notion Page"
+            title = (
+                "".join(t.get("plain_text", "") for t in title_parts) or "Notion Page"
+            )
 
         # Extrair URL
         url = page.get("url", "")
@@ -266,7 +270,9 @@ class NotionClient(BaseConnectorImplementation):
             return results
 
         except Exception as e:
-            logger.warning("NotionClient: falha na busca database %s: %s", database_id, str(e))
+            logger.warning(
+                "NotionClient: falha na busca database %s: %s", database_id, str(e)
+            )
             return []
 
     async def close(self) -> None:

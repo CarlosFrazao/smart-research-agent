@@ -6,6 +6,7 @@ executa em sandbox Docker isolada via CodeExecutionAgent, armazenando os
 resultados em `context.extra["verified_claims"]` para uso no estágio de
 síntese e no relatório final.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -56,7 +57,9 @@ class VerificationStage(PipelineStage):
 
         results = context.ranked_results or []
         if not results:
-            logger.info("VerificationStage: nenhum resultado rankeado disponível. Pulando.")
+            logger.info(
+                "VerificationStage: nenhum resultado rankeado disponível. Pulando."
+            )
             context.extra["verified_claims"] = []
             return
 
@@ -65,8 +68,7 @@ class VerificationStage(PipelineStage):
 
         for res in top_results:
             source_text = (
-                f"Title: {res.title or ''}\n"
-                f"Description: {res.description or ''}"
+                f"Title: {res.title or ''}\n" f"Description: {res.description or ''}"
             )
 
             # Extração de código: LLM primeiro, regex como fallback

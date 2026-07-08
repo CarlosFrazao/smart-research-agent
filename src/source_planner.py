@@ -16,11 +16,24 @@ logger = logging.getLogger(__name__)
 DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
     "saas_b2b": {
         "primary": ["github", "producthunt", "notion", "confluence", "searxng"],
-        "secondary": ["hackernews", "sharepoint", "awesome", "firecrawl", "stackoverflow"],
+        "secondary": [
+            "hackernews",
+            "sharepoint",
+            "awesome",
+            "firecrawl",
+            "stackoverflow",
+        ],
     },
     "dev_tools": {
         "primary": ["github", "confluence", "notion", "stackoverflow"],
-        "secondary": ["awesome", "arxiv", "sharepoint", "firecrawl", "searxng", "wayback"],
+        "secondary": [
+            "awesome",
+            "arxiv",
+            "sharepoint",
+            "firecrawl",
+            "searxng",
+            "wayback",
+        ],
     },
     "ai_ml": {
         "primary": ["arxiv", "github", "notion", "rss", "searxng"],
@@ -40,7 +53,14 @@ DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
     },
     "general": {
         "primary": ["github", "notion", "confluence", "searxng"],
-        "secondary": ["sharepoint", "producthunt", "arxiv", "awesome", "stackoverflow", "wayback"],
+        "secondary": [
+            "sharepoint",
+            "producthunt",
+            "arxiv",
+            "awesome",
+            "stackoverflow",
+            "wayback",
+        ],
     },
 }
 

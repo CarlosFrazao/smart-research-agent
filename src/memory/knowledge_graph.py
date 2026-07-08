@@ -5,6 +5,7 @@ Mantém a API pública original (add_fact, query_entity, close) mas opera sobre
 o KuzuDB local em vez do Neo4j remoto, eliminando a dependência de servidor externo
 e unificando os dois backends de grafo do SRA numa única base de dados local.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,6 +17,8 @@ from typing import Any
 from src.knowledge_graph import SemanticKnowledgeGraph, Triple
 
 logger = logging.getLogger(__name__)
+
+
 class KnowledgeGraph(SemanticKnowledgeGraph):
     """
     Wrapper compatível com a interface legada de KnowledgeGraph (Neo4j),
@@ -54,14 +57,16 @@ class KnowledgeGraph(SemanticKnowledgeGraph):
         try:
             # Import condicional para compatibilidade com Windows
             import fcntl
+
             # Linux/macOS style file locking
-            with open(lock_file, 'w') as f:
+            with open(lock_file, "w") as f:
                 try:
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                     lock_acquired = True
 
                     # Lock adquirido, prosseguir com inicialização
                     import kuzu
+
                     self.kuzu_db = kuzu.Database(str(db_dir / "kuzu.db"))
                     self.kuzu_conn = kuzu.Connection(self.kuzu_db)
                     super().__init__(kuzu_conn=self.kuzu_conn, llm_client=None)
@@ -99,7 +104,7 @@ class KnowledgeGraph(SemanticKnowledgeGraph):
             while attempt < max_attempts:
                 try:
                     # Tentar abrir o arquivo de lock em modo exclusivo
-                    with open(lock_file, 'x') as f:
+                    with open(lock_file, "x") as f:
                         # Arquivo criado com sucesso, temos o lock
                         lock_acquired = True
                         break
@@ -115,6 +120,7 @@ class KnowledgeGraph(SemanticKnowledgeGraph):
                 try:
                     # Lock adquirido, prosseguir com inicialização
                     import kuzu
+
                     self.kuzu_db = kuzu.Database(str(db_dir / "kuzu.db"))
                     self.kuzu_conn = kuzu.Connection(self.kuzu_db)
                     super().__init__(kuzu_conn=self.kuzu_conn, llm_client=None)
