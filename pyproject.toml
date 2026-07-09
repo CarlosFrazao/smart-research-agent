@@ -76,6 +76,9 @@ include = ["src*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "benchmark: benchmarks de performance em alto volume (ex: deduplicação com 20+ fontes)",
+]
 
 [tool.pyright]
 extraPaths = ["."]

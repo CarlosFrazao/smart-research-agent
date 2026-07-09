@@ -235,6 +235,7 @@ class Config(BaseSettings):
     serpapi_enabled: bool = Field(default=True)
 
     # Neo4j — banco de grafos para conhecimento persistente
+    # LEGACY: Neo4j mantido como backend opcional via Docker profile 'neo4j'
     neo4j_uri: str | None = Field(default=None)
     neo4j_user: str = Field(default="neo4j")
     neo4j_password: str = Field(default="password123")

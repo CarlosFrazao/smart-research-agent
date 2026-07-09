@@ -38,6 +38,12 @@ _task_lock = asyncio.Lock()
 # Broker de progresso compartilhado por todas as rotas assíncronas/streaming.
 _progress_broker = ProgressBroker()
 
+# Tracker de custo por fonte/sessão (Fase 5 — Observabilidade). Instância única
+# em memória compartilhada por todas as rotas que registram custo de busca.
+from src.monitoring.budget_tracker import BudgetTracker
+
+budget_tracker = BudgetTracker()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -312,3 +318,21 @@ async def get_circuit_breakers():
     from src.utils.circuit_breaker import CircuitBreakerRegistry
 
     return CircuitBreakerRegistry.status_all()
+
+
+@app.get("/api/source-costs/{session_id}")
+async def get_source_costs(session_id: str):
+    """Retorna custo e performance por fonte de busca para uma sessão.
+
+    Útil para observabilidade fina: identifica fontes lentas ou caras que
+    podem estar degradando a experiência de uma pesquisa específica.
+    """
+    summary = budget_tracker.get_source_cost_summary(session_id)
+    return {
+        "session_id": session_id,
+        "sources": summary,
+        "total_requests": sum(s["requests"] for s in summary.values()),
+        "slowest_source": max(
+            summary, key=lambda k: summary[k]["avg_latency_ms"], default=None
+        ),
+    }

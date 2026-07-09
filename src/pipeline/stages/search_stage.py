@@ -55,6 +55,57 @@ UNTRUSTED_SOURCES = frozenset({
 })
 
 
+# ── SLAs de Timeout Diferenciados por Categoria de Fonte (FASE 5) ───────────────
+# Timeouts em segundos. APIs estruturadas rápidas recebem SLA curto; fontes de
+# scraping/agentes recebem SLA maior. Fontes não mapeadas caem no default por
+# categoria (confiável → _default_api, não-confiável/scraping → _default_scraping).
+
+SOURCE_TIMEOUT_MAP: dict[str, float] = {
+    # APIs estruturadas rápidas
+    "github": 8.0,
+    "arxiv": 8.0,
+    "hackernews": 6.0,
+    "wikipedia": 5.0,
+    "duckduckgo": 5.0,
+    "npm": 5.0,
+    "pypi": 5.0,
+    "cratesio": 5.0,
+    "appstore": 5.0,
+    "newsapi": 8.0,
+    "courtlistener": 10.0,
+    "sec_edgar": 12.0,
+    # Agregadores e fontes médias
+    "reddit": 10.0,
+    "producthunt": 10.0,
+    "rss": 8.0,
+    "mercadolivre": 10.0,
+    # Scraping/agentes — timeout maior
+    "firecrawl": 30.0,
+    "spider": 25.0,
+    "steel": 25.0,
+    "quora": 20.0,
+    "google_patents": 20.0,
+    "discourse": 15.0,
+    # Default para fontes não mapeadas
+    "_default_api": 10.0,
+    "_default_scraping": 25.0,
+}
+
+
+def get_timeout_for_source(source_name: str) -> float:
+    """Retorna o timeout (em segundos) para uma fonte específica.
+
+    Resolve o SLA por categoria: fontes mapeadas explicitamente usam seu valor;
+    fontes não mapeadas caem no default de scraping (se não-confiáveis) ou no
+    default de API (caso contrário).
+    """
+    if source_name in SOURCE_TIMEOUT_MAP:
+        return SOURCE_TIMEOUT_MAP[source_name]
+    if source_name in UNTRUSTED_SOURCES:
+        return SOURCE_TIMEOUT_MAP["_default_scraping"]
+    return SOURCE_TIMEOUT_MAP["_default_api"]
+
+
 @dataclass
 class SearchStageConfig:
     """Configuração fina do SearchStage."""
@@ -397,8 +448,13 @@ class SearchStage(PipelineStage):
     async def _search_with_timeout(
         self, searcher: Any, query: str, domain: str, source_name: str
     ) -> List[SearchResult]:
-        """Executa busca com timeout e fallback do próprio searcher."""
-        timeout = getattr(searcher, "timeout", 30)
+        """Executa busca com timeout e fallback do próprio searcher.
+
+        O timeout é resolvido por categoria de fonte via
+        ``get_timeout_for_source`` (SLA diferenciado da Fase 5), em vez do
+        valor fixo do atributo ``searcher.timeout``.
+        """
+        timeout = get_timeout_for_source(source_name)
         if not isinstance(timeout, (int, float)):
             timeout = 30.0
         try:

@@ -2,6 +2,12 @@
 
 All notable changes to the Smart Research Agent (SRA) project will be documented in this file.
 
+### Backend Neo4j (Legado Opcional)
+O backend Neo4j foi substituído pelo KuzuDB (v6.2.0) como padrão.
+As referências ao Neo4j mantidas no código são intencionais e habilitadas
+via Docker Compose profile `neo4j` para usuários que precisam de compatibilidade.
+Para ativar: `docker-compose --profile neo4j up`
+
 ## [6.2.0] - 2026-07-07
 
 ### Changed

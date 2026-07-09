@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 
 from src.types import Domain, ExpandedQuery, Intention, IntentResult, SearchResult
+from src.utils.deduplicator import Deduplicator
 
 logger = logging.getLogger("conflict_detector")
 
@@ -354,3 +355,35 @@ class ConflictDetector:
             )
 
         return "\n".join(lines)
+
+    def deduplicate(self, results: list) -> list:
+        """Remove resultados duplicados em alto volume (20+ fontes).
+
+        Delega à rotina compartilhada de deduplicação por URL e similaridade de
+        título (``Deduplicator``), normalizando entradas que cheguem como
+        dicionários (chaves ``url``/``title``/``description``/``source``) para
+        ``SearchResult`` antes do processamento.
+
+        Args:
+            results: Lista de ``SearchResult`` ou dicionários com os campos de
+                busca.
+
+        Returns:
+            Lista sem duplicatas (mesma ordem de primeira aparição).
+        """
+        normalized = [self._as_search_result(r) for r in results]
+        return Deduplicator.deduplicate(normalized)
+
+    @staticmethod
+    def _as_search_result(item) -> SearchResult:
+        """Normaliza um dicionário cru para ``SearchResult`` quando necessário."""
+        if isinstance(item, dict):
+            return SearchResult(
+                url=item.get("url", ""),
+                title=item.get("title", ""),
+                description=item.get("description", ""),
+                # Fonte obrigatória (min_length=1); ausente em payloads de
+                # benchmark → deriva do host ou usa placeholder determinístico.
+                source=item.get("source") or "unknown",
+            )
+        return item
