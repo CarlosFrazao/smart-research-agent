@@ -1,32 +1,27 @@
 domains:
   saas_b2b:
     primary: [github, producthunt, reddit]
-    secondary: [hackernews, awesome, firecrawl]
+    secondary: [hackernews, sharepoint, awesome, firecrawl, stackoverflow]
     github_qualifiers: "stars:>50 sort:stars"
   dev_tools:
-    primary: [github, hackernews, reddit]
-    secondary: [awesome, arxiv, firecrawl]
+    primary: [github, confluence, notion, stackoverflow]
+    secondary: [awesome, arxiv, sharepoint, firecrawl, searxng, wayback]
     github_qualifiers: "stars:>100 sort:updated"
   ai_ml:
-    primary: [arxiv, github, hackernews]
-    secondary: [reddit, firecrawl, producthunt]
-    github_qualifiers: "stars:>200 sort:stars"
+    primary: [arxiv, github, notion, rss, searxng]
+    secondary: [reddit, confluence, sharepoint, firecrawl, producthunt]
   automation:
-    primary: [github, reddit, producthunt]
-    secondary: [hackernews, awesome, firecrawl]
-    github_qualifiers: "stars:>30 sort:stars"
+    primary: [github, confluence, notion, sharepoint]
+    secondary: [hackernews, awesome, firecrawl, rss, searxng]
   infrastructure:
-    primary: [github, hackernews, awesome]
-    secondary: [reddit, arxiv, firecrawl]
-    github_qualifiers: "stars:>100 sort:updated"
+    primary: [github, confluence, sharepoint, awesome]
+    secondary: [reddit, arxiv, firecrawl, searxng, wayback]
   open_source:
-    primary: [github, awesome, hackernews]
-    secondary: [reddit, producthunt, firecrawl]
-    github_qualifiers: "stars:>10 sort:stars"
+    primary: [github, awesome, hackernews, searxng]
+    secondary: [notion, confluence, sharepoint, reddit, producthunt]
   general:
-    primary: [github, reddit, hackernews, firecrawl]
-    secondary: [producthunt, arxiv, awesome]
-    github_qualifiers: "sort:stars"
+    primary: [github, notion, confluence, searxng]
+    secondary: [sharepoint, producthunt, arxiv, awesome, stackoverflow, wayback]
   universal:
     description: "Busca de propósito geral — internet ampla, fatos, notícias, cultura"
     primary:
@@ -45,4 +40,4 @@ domains:
       - web
     secondary:
       - multilingual
-    fallback_enabled: true
+      - scraping

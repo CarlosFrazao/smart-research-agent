@@ -5,13 +5,26 @@ de searchers primarios e secundários, e distribui as queries expandidas
 entre os searchers mais compativel com cada tipo de busca.
 """
 
+import asyncio
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from src.types import ExpandedQuery, IntentResult, SourcePlan
 
 logger = logging.getLogger(__name__)
+
+# Prompt embutido de fallback para o Universal Router (Fase 2)
+UNIVERSAL_PLANNER_PROMPT = """Você é um planejador de fontes de pesquisa.
+
+Query: {query}
+Domínio detectado: {domain}
+Intenção: {intent}
+Fontes disponíveis: {available_sources}
+
+Liste as 3-6 fontes mais relevantes para responder esta query.
+Responda APENAS com os nomes das fontes separados por vírgula, ex: wikipedia, duckduckgo, reddit
+Sem explicação, sem markdown."""
 
 DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
     "saas_b2b": {
@@ -73,9 +86,33 @@ class SourcePlanner:
     tipo de pesquisa detectado pelo `IntentAnalyzer`.
     """
 
-    def __init__(self, config: dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None, llm: Any = None):
         self.config = config or {}
+        self.llm = llm
         self.domain_map = self._load_domain_map()
+
+    @staticmethod
+    def _run_async(coro: Any) -> Any:
+        """Executa uma coroutine a partir de contexto sincrono de forma segura.
+
+        O ``plan()`` e o ``_plan_universal_with_llm()`` sao sincronos (chamados
+        por estagios do pipeline), mas o roteamento LLM e assincrono. Este
+        helper permite aguardar a coroutine sem quebrar se ja houver um loop de
+        eventos ativo (roda a coroutine em uma thread dedicada com seu proprio
+        loop, evitando deadlock).
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is None:
+            return asyncio.run(coro)
+        # Ja estamos dentro de um loop ativo: roda em thread separada.
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(lambda: asyncio.run(coro))
+            return future.result()
 
     def _load_domain_map(self) -> dict:
         """Carrega o mapeamento de dominios para fontes do arquivo YAML de config.
@@ -101,6 +138,11 @@ class SourcePlanner:
     def plan(self, intent: IntentResult, queries: list[ExpandedQuery]) -> SourcePlan:
         """Gera um plano de buscas priorizando as fontes mais relevantes para o dominio.
 
+        Aplica roteamento estático para dominios tecnicos conhecidos e
+        roteamento dinamico via LLM para o dominio ``universal`` (ou quando o
+        dominio detectado nao consta no mapa). O LLM é sempre complementar à
+        tabela estatica: a lista resultante é mesclada com as fontes do yaml.
+
         Args:
             intent: Resultado da analise de intencao contendo o dominio detectado.
             queries: Lista de queries expandidas geradas pelo `QueryExpander`.
@@ -121,6 +163,12 @@ class SourcePlanner:
         if domain_key not in self.domain_map:
             domain_key = "general"
 
+        # Roteamento dinâmico (LLM-driven) para o domínio universal ou quando
+        # o domínio cai no fallback universal. Domínios técnicos mantêm o
+        # roteamento estático (comportamento atual preservado).
+        if domain_key == "universal" and self.llm is not None:
+            return self._plan_universal_with_llm(intent, queries, domain_key)
+
         mapping = self.domain_map.get(domain_key, DOMAIN_SOURCES["general"])
 
         primary = mapping.get("primary", [])
@@ -131,6 +179,133 @@ class SourcePlanner:
             plan[source] = self._select_queries_for_source(queries, source, intent)
 
         return SourcePlan(sources=plan, primary=primary, secondary=secondary)
+
+    def _plan_universal_with_llm(
+        self, intent: IntentResult, queries: list[ExpandedQuery], domain_key: str
+    ) -> SourcePlan:
+        """Planeia o dominio universal usando LLM + fallback em cascata.
+
+        Tenta obter fontes via LLM (``_plan_with_llm``) e mescla o resultado
+        com as fontes estaticas do yaml para ``universal``. Se o LLM falhar ou
+        retornar vazio, usa as fontes do yaml como está.
+        """
+        yaml_mapping = self.domain_map.get(domain_key, {})
+        yaml_primary = yaml_mapping.get("primary", [])
+        yaml_secondary = yaml_mapping.get("secondary", [])
+
+        llm_sources: list[str] = []
+        try:
+            llm_sources = self._run_async(
+                self._plan_with_llm(intent, queries[0].query if queries else "")
+            )
+        except Exception as e:
+            logger.warning("Universal Router LLM falhou: %s — usando yaml", e)
+
+        # Mescla LLM (primário) com fontes do yaml (fallback/complemento)
+        merged = list(llm_sources)
+        for src in yaml_primary + yaml_secondary:
+            if src not in merged:
+                merged.append(src)
+
+        # Se o LLM não retornou nada, garante ao menos as fontes do yaml
+        if not llm_sources:
+            merged = yaml_primary + yaml_secondary
+
+        primary = merged[: max(len(yaml_primary), 1)] if llm_sources else yaml_primary
+        secondary = [s for s in merged if s not in (primary or merged[:1])]
+
+        plan: dict[str, list[ExpandedQuery]] = {}
+        for source in merged:
+            plan[source] = self._select_queries_for_source(queries, source, intent)
+
+        return SourcePlan(sources=plan, primary=primary, secondary=secondary)
+
+    async def _plan_with_llm(self, intent: IntentResult, query: str) -> list[str]:
+        """Roteamento dinâmico via LLM para o dominio universal.
+
+        Lê o prompt de ``prompts/source_planner.md`` (com fallback para
+        :data:`UNIVERSAL_PLANNER_PROMPT` se o arquivo nao existir) e pede ao LLM
+        a lista de 3-6 fontes mais relevantes. A resposta é validada contra as
+        fontes realmente registradas no ``SearcherFactory`` — nomes inexistentes
+        são descartados silenciosamente.
+
+        Args:
+            intent: Resultado da analise de intencao (dominio + intencao).
+            query: Query original do usuario.
+
+        Returns:
+            list[str]: Nomes de searchers validos sugeridos pelo LLM. Lista
+                vazia se o LLM falhar ou nao retornar fontes validas.
+        """
+        if self.llm is None:
+            logger.debug("Sem LLM configurado — Universal Router pulado")
+            return []
+
+        # Lista de fontes realmente disponíveis no SearcherFactory
+        try:
+            from src.search.factory import SearcherFactory
+
+            available = set(SearcherFactory.get_available_searchers())
+        except Exception:
+            available = set()
+
+        # Carrega o prompt (arquivo ou fallback embutido)
+        prompt = self._load_planner_prompt().format(
+            query=query,
+            domain=getattr(intent.domain, "value", str(intent.domain)),
+            intent=getattr(intent, "intent", ""),
+            available_sources=", ".join(sorted(available)) if available else "wikipedia, duckduckgo, searxng, web, reddit, hackernews, github, arxiv",
+        )
+
+        try:
+            response = await self.llm.generate(prompt)
+        except Exception as e:
+            logger.warning("Falha na geracao LLM do SourcePlanner: %s", e)
+            return []
+
+        return self._parse_llm_sources(response, available)
+
+    def _load_planner_prompt(self) -> str:
+        """Retorna o prompt do Universal Router.
+
+        Lê ``prompts/source_planner.md`` se existir; caso contrario usa o
+        :data:`UNIVERSAL_PLANNER_PROMPT` embutido.
+        """
+        prompt_path = Path(__file__).parent.parent / "prompts" / "source_planner.md"
+        if prompt_path.exists():
+            try:
+                return prompt_path.read_text(encoding="utf-8")
+            except Exception as e:
+                logger.warning("Erro ao ler prompts/source_planner.md: %s", e)
+        return UNIVERSAL_PLANNER_PROMPT
+
+    @staticmethod
+    def _parse_llm_sources(response: str, available: set[str]) -> list[str]:
+        """Extrai e valida nomes de searchers da resposta do LLM.
+
+        Aceita tanto formato CSV simples quanto tenta tolerar ruido (markdown,
+        bullets). Remove duplicatas e nomes que nao existem no ``available``.
+        """
+        if not response:
+            return []
+
+        # Tolerância: pega só a primeira linha se houver quebras
+        first_line = response.strip().splitlines()[0] if response.strip() else ""
+        # Remove bullets/markdown comuns
+        cleaned = first_line.replace("- ", "").replace("* ", "").strip()
+        parts = [p.strip().lower() for p in cleaned.split(",") if p.strip()]
+
+        seen: set[str] = set()
+        result: list[str] = []
+        for name in parts:
+            name = name.strip().strip("`").strip()
+            if not name or name in seen:
+                continue
+            if available and name not in available:
+                continue
+            seen.add(name)
+            result.append(name)
+        return result
 
     def _select_queries_for_source(
         self, queries: list[ExpandedQuery], source: str, intent: IntentResult

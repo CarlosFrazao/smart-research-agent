@@ -252,3 +252,49 @@ class SearcherFactory:
                 logger.warning("Falha ao auto-registrar '%s': %s", _name, _e)
 
         return searchers
+
+    @classmethod
+    def get_available_searchers(cls) -> set[str]:
+        """Retorna o conjunto de nomes de searchers reconhecidos pelo factory.
+
+        Nao instancia nenhum searcher (evita exigir API keys/network no boot),
+        apenas lista os nomes validos para validacao de roteamento (ex: usado
+        pelo Universal Router do ``SourcePlanner`` para descartar nomes
+        inexistentes sugeridos pelo LLM).
+
+        Returns:
+            set[str]: Nomes de searchers registrados (manual + @register_searcher).
+        """
+        # Searchers registrados manualmente em create_searchers()
+        known = {
+            "github",
+            "reddit",
+            "hackernews",
+            "awesome",
+            "arxiv",
+            "web",
+            "rss",
+            "searxng",
+            "stackoverflow",
+            "wayback",
+            "producthunt",
+            "firecrawl",
+            "jina",
+            "spider",
+            "steel",
+            "semantic_scholar",
+            "pubmed",
+            "youtube",
+            "playwright",
+            "serpapi",
+            "multilingual",
+            "scraping",
+        }
+        # Searchers auto-descobertos via @register_searcher
+        try:
+            from src.search.registry import get_registry
+
+            known.update(get_registry().keys())
+        except Exception:
+            pass
+        return known
