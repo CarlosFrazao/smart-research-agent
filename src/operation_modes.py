@@ -8,7 +8,7 @@ Integrado ao Orchestrator, CLI (main.py) e MCP Server para seleção dinâmica.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,8 @@ class OperationConfig:
     cost_optimization: bool
     # Bloco 3.1 — Multi-Agent Debate
     enable_debate: bool = False
+    # Bloco 3.2 — Active Personas
+    active_personas: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -48,6 +50,7 @@ class OperationConfig:
             "timeout_seconds": self.timeout_seconds,
             "cost_optimization": self.cost_optimization,
             "enable_debate": self.enable_debate,
+            "active_personas": self.active_personas,
         }
 
 
@@ -75,6 +78,7 @@ class OperationModes:
             cache_strategy="aggressive",
             timeout_seconds=30,
             cost_optimization=True,
+            active_personas=[],
         ),
         "cirurgia": OperationConfig(
             name="cirurgia",
@@ -98,6 +102,7 @@ class OperationModes:
             cache_strategy="minimal",
             timeout_seconds=300,
             cost_optimization=False,
+            active_personas=["prism_scientist"],
         ),
         "radar": OperationConfig(
             name="radar",
@@ -112,7 +117,8 @@ class OperationModes:
             proxy_strategy="rotate_fast",
             cache_strategy="aggressive",
             timeout_seconds=60,
-            cost_optimization=True,
+            cost_optimization=False,
+            active_personas=["sage_strategy"],
         ),
         "arqueologia": OperationConfig(
             name="arqueologia",
@@ -128,6 +134,7 @@ class OperationModes:
             cache_strategy="permanent",
             timeout_seconds=120,
             cost_optimization=True,
+            active_personas=["scout_explorer"],
         ),
         "concorrencia": OperationConfig(
             name="concorrencia",
@@ -148,7 +155,8 @@ class OperationModes:
             proxy_strategy="rotate_fast",
             cache_strategy="moderate",
             timeout_seconds=90,
-            cost_optimization=True,
+            cost_optimization=False,
+            active_personas=["sage_strategy", "scout_explorer"],
         ),
         "black_ops": OperationConfig(
             name="black_ops",
@@ -184,6 +192,7 @@ class OperationModes:
             cache_strategy="minimal",
             timeout_seconds=600,
             cost_optimization=False,
+            active_personas=["sage_strategy", "prism_scientist", "scout_explorer"],
         ),
         # ── Bloco 3.1 ─────────────────────────────────────────────────────────
         "debate": OperationConfig(
@@ -210,6 +219,7 @@ class OperationModes:
             timeout_seconds=240,
             cost_optimization=False,
             enable_debate=True,
+            active_personas=["prism_scientist"],
         ),
     }
 

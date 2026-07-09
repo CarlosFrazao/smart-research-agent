@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any
 
 from src.cache.shared_cache import SharedCache
+from src.agent_persona_loader import AgentPersonaLoader
 from src.types import ResearchMetadata, SynthesizedResult
 from src.pipeline.pipeline import PipelineContext, PipelineStage
 
@@ -105,6 +106,9 @@ class ReportStage(PipelineStage):
         self.sentiment_analyzer = SentimentAnalyzer()
         self.comparator = Comparator()
 
+        # Persona loader for agent injection
+        self.persona_loader = AgentPersonaLoader()
+
     @property
     def llm(self) -> Any:
         if self.orchestrator is not None:
@@ -144,6 +148,15 @@ class ReportStage(PipelineStage):
 
         # Monta relatório final em Markdown
         report_md = self.assemble_report(query, metadata, results, sections)
+
+        # Seção de arquiteturas de repositórios (gerada pelo VerificationStage com Scout)
+        repo_architectures = context.extra.get("repo_architectures", []) if hasattr(context, "extra") else []
+        if repo_architectures:
+            arch_section = "\n## 🔍 Mapa de Arquitetura dos Concorrentes (Scout)\n\n"
+            for repo in repo_architectures:
+                arch_section += f"### {repo.get('url', 'Repositório')}\n\n"
+                arch_section += repo.get("architecture_map", "_Não disponível._") + "\n\n"
+            report_md += arch_section
 
         # Salva resultados no contexto do pipeline
         context.report = report_md
@@ -410,6 +423,17 @@ INSTRUÇÕES ESPECÍFICAS POR SEÇÃO:
 RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
 {{"executive_summary": "...", "recommendation": "...", "trends": "..."}}
 """
+
+        # Injeta Sage se o modo for estratégico e custo não for otimizado
+        if self.orchestrator:
+            op_config = getattr(self.orchestrator, "operation_config", None)
+            if op_config:
+                op_name = getattr(op_config, "name", "")
+                cost_opt = getattr(op_config, "cost_optimization", False)
+                if not cost_opt and op_name in ("concorrencia", "radar", "black_ops"):
+                    prompt = self.persona_loader.build_enhanced_prompt(prompt, "sage_strategy")
+                    logger.info("ReportStage: persona Sage injetada para modo '%s'.", op_name)
+
         return prompt
 
     def _parse_json_response(self, response: str) -> dict[str, str] | None:

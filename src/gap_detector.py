@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from src.clients.llm_client import LLMClient
 from src.types import GapAnalysis, IntentResult, RankedResult
+from src.agent_persona_loader import AgentPersonaLoader
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,9 @@ class GapDetector:
         self.max_budget_usd = max_budget_usd
         self.min_new_results_ratio = min_new_results_ratio
         self.max_new_queries = max_new_queries
+
+        # Persona loader for GapDetector integration
+        self.persona_loader = AgentPersonaLoader()
 
     async def detect(
         self,
@@ -200,6 +204,22 @@ class GapDetector:
             '  "rationale": "string"\n'
             "}\n"
         )
+
+        # Injetar Prism para rigor científico quando confiança < 0.75 ou modo exigente
+        # Calcular overall_confidence a partir dos resultados (heurística simples)
+        overall_confidence = min(1.0, len(results) * 0.1) if results else 0.5
+        # Tentar obter operation_mode do orchestrator se disponível
+        operation_mode = getattr(self, '_last_operation_mode', 'cirurgia')  # fallback
+        should_use_prism = (
+            overall_confidence < 0.75
+            or operation_mode in ("cirurgia", "black_ops")
+        )
+        if should_use_prism:
+            prompt_text = self.persona_loader.build_enhanced_prompt(prompt_text, "prism_scientist")
+            logger.info(
+                "GapDetector: persona Prism injetada (confidence=%.2f, mode=%s).",
+                overall_confidence, operation_mode,
+            )
 
         schema = {
             "type": "object",

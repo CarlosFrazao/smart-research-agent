@@ -16,6 +16,7 @@ from typing import Any
 
 from src.pipeline.pipeline import PipelineContext, PipelineStage
 from src.services.code_execution_agent import CodeExecutionAgent
+from src.agent_persona_loader import AgentPersonaLoader
 
 logger = logging.getLogger("verification-stage")
 
@@ -51,6 +52,8 @@ class VerificationStage(PipelineStage):
         super().__init__()
         self.code_agent = code_agent or CodeExecutionAgent()
         self.llm = llm_client
+        # Persona loader for Scout integration
+        self.persona_loader = AgentPersonaLoader()
 
     async def run(self, context: PipelineContext) -> None:
         logger.info("VerificationStage: iniciando verificação de claims de código.")
@@ -141,6 +144,35 @@ class VerificationStage(PipelineStage):
             len(verified_claims),
         )
 
+        # Análise de arquitetura com Scout para repositórios GitHub
+        repo_architectures: list[dict[str, str]] = []
+        github_results = [
+            r for r in results if r.url and "github.com" in r.url
+        ]
+
+        if github_results and self.llm:
+            logger.info(
+                "VerificationStage: analisando %d repositório(s) GitHub com Scout.",
+                len(github_results),
+            )
+            scout_tasks = [
+                self._analyze_github_repo_with_scout(
+                    r.url or "",
+                    f"Title: {r.title or ''}\nDescription: {r.description or ''}",
+                )
+                for r in github_results[:_MAX_SOURCES_TO_VERIFY]
+            ]
+            scout_results = await asyncio.gather(*scout_tasks, return_exceptions=True)
+            for result in scout_results:
+                if isinstance(result, dict) and result.get("architecture_map"):
+                    repo_architectures.append(result)
+
+        context.extra["repo_architectures"] = repo_architectures
+        logger.info(
+            "VerificationStage: %d mapa(s) de arquitetura gerado(s) com Scout.",
+            len(repo_architectures),
+        )
+
     # ── Helpers de extração ──────────────────────────────────────────────────
 
     def _extract_code_with_regex(self, text: str) -> str | None:
@@ -191,3 +223,44 @@ class VerificationStage(PipelineStage):
         except Exception as e:
             logger.warning("VerificationStage: _extract_code_with_llm falhou: %s", e)
             return None
+
+    async def _analyze_github_repo_with_scout(
+        self, repo_url: str, description: str
+    ) -> dict[str, str]:
+        """Ativa a persona Scout para mapear a arquitetura de um repositório concorrente.
+
+        Opera APENAS sobre os dados já coletados (title + description + url).
+        NÃO realiza novas chamadas HTTP.
+
+        Args:
+            repo_url: URL do repositório GitHub.
+            description: Texto da descrição já disponível no result.
+
+        Returns:
+            Dicionário com 'url' e 'architecture_map' (string Markdown).
+        """
+        if not self.llm:
+            return {"url": repo_url, "architecture_map": ""}
+
+        scout_persona = self.persona_loader.load("scout_explorer")
+        if not scout_persona:
+            return {"url": repo_url, "architecture_map": ""}
+
+        prompt = (
+            f"{scout_persona}\n\n---\n\n"
+            f"**Repositório:** {repo_url}\n\n"
+            f"**Descrição disponível:**\n{description}\n\n"
+            "Com base exclusivamente nas informações acima, produza o mapa arquitetural "
+            "conforme o formato de saída definido. Se as informações forem insuficientes, "
+            "declare 'Dados insuficientes para mapeamento arquitetural' e indique o nível "
+            "de confiança como 'baixa'."
+        )
+
+        try:
+            raw = await self.llm.generate(prompt, temperature=0.1, max_tokens=800)
+            return {"url": repo_url, "architecture_map": raw.strip()}
+        except Exception as e:
+            logger.warning(
+                "VerificationStage: Scout falhou para '%s': %s", repo_url, e
+            )
+            return {"url": repo_url, "architecture_map": ""}
