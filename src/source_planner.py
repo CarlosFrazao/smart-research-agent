@@ -86,9 +86,17 @@ class SourcePlanner:
     tipo de pesquisa detectado pelo `IntentAnalyzer`.
     """
 
-    def __init__(self, config: dict[str, Any] = None, llm: Any = None):
+    def __init__(
+        self,
+        config: dict[str, Any] = None,
+        llm: Any = None,
+        feedback_store: Any = None,
+        user_id: str | None = None,
+    ):
         self.config = config or {}
         self.llm = llm
+        self.feedback_store = feedback_store
+        self.user_id = user_id
         self.domain_map = self._load_domain_map()
 
     @staticmethod
@@ -135,6 +143,35 @@ class SourcePlanner:
                 logger.warning(f"Erro ao carregar domains.yaml: {e}")
         return DOMAIN_SOURCES
 
+    def _apply_user_weights(
+        self, sources: list[str], domain: str
+    ) -> list[str]:
+        """Reordena fontes conforme o peso histórico do usuário.
+
+        Fontes com maior peso (historico de utilidade) ficam no inicio da lista,
+        recebendo maior prioridade no plano de busca. Se nao houver feedback_store
+        ou user_id configurado, a ordem original é preservada (sem personalizacao).
+
+        Args:
+            sources: Lista de nomes de searchers a reordenar.
+            domain: Dominio/categoria da query para consultar os pesos.
+
+        Returns:
+            list[str]: Fontes ordenadas por peso decrescente (mais uteis primeiro).
+        """
+        if not self.feedback_store or not self.user_id:
+            return sources  # sem personalização → ordem padrão
+
+        try:
+            weights = self.feedback_store.get_source_weights(
+                self.user_id, domain, sources
+            )
+        except Exception as e:
+            logger.warning(f"Falha ao obter pesos de fonte (ignorado): {e}")
+            return sources
+
+        return sorted(sources, key=lambda s: weights.get(s, 1.0), reverse=True)
+
     def plan(self, intent: IntentResult, queries: list[ExpandedQuery]) -> SourcePlan:
         """Gera um plano de buscas priorizando as fontes mais relevantes para o dominio.
 
@@ -173,6 +210,10 @@ class SourcePlanner:
 
         primary = mapping.get("primary", [])
         secondary = mapping.get("secondary", [])
+
+        # Fase 4 — personalização: reordena conforme o histórico de fontes do usuário.
+        primary = self._apply_user_weights(primary, domain_key)
+        secondary = self._apply_user_weights(secondary, domain_key)
 
         plan: dict[str, list[ExpandedQuery]] = {}
         for source in primary + secondary:
@@ -214,8 +255,12 @@ class SourcePlanner:
         primary = merged[: max(len(yaml_primary), 1)] if llm_sources else yaml_primary
         secondary = [s for s in merged if s not in (primary or merged[:1])]
 
+        # Fase 4 — personalização: reordena conforme o histórico de fontes do usuário.
+        primary = self._apply_user_weights(primary, domain_key)
+        secondary = self._apply_user_weights(secondary, domain_key)
+
         plan: dict[str, list[ExpandedQuery]] = {}
-        for source in merged:
+        for source in primary + secondary:
             plan[source] = self._select_queries_for_source(queries, source, intent)
 
         return SourcePlan(sources=plan, primary=primary, secondary=secondary)

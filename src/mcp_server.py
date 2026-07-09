@@ -1307,7 +1307,16 @@ def _register_mcp_tools(app: FastAPI) -> None:
         # TOOL 15 — Registrar feedback de resultado (FeedbackRanker)
         # ─────────────────────────────────────────────────────────────────
         @mcp.tool()
-        async def record_feedback(result_id: str, signal: str, query: str = "") -> str:
+        async def record_feedback(
+            result_id: str,
+            signal: str,
+            query: str = "",
+            user_id: str = "default",
+            source_name: str = "",
+            query_domain: str = "general",
+            rating: int = 0,
+            result_score: float = 0.0,
+        ) -> str:
             """
             Registra feedback sobre um resultado de pesquisa para melhorar o ranking futuro.
 
@@ -1325,15 +1334,43 @@ def _register_mcp_tools(app: FastAPI) -> None:
             O result_id pode ser obtido via result_id_for(result) no FeedbackRanker,
             ou construído como sha1(f"{entity}:{title}".lower())[:12].
 
+            Fase 4 — Rastreio de fonte: quando ``source_name`` é informado, o feedback
+            também é registrado por fonte (FeedbackStore.record_source_feedback) para
+            personalizar a ordenação das fontes sugeridas pelo SourcePlanner conforme o
+            histórico de cada usuário. O rastreio de fonte é sempre não-fatal: se falhar,
+            o feedback do resultado permanece válido e o erro é apenas logado.
+
             Args:
                 result_id: Identificador único do resultado (12 chars hex)
                 signal: Sinal de feedback — um dos 5 sinais válidos acima
                 query: Query original da pesquisa (opcional, para rastreabilidade)
+                user_id: Identificador anônimo do usuário (para personalização por fonte)
+                source_name: Nome da fonte que gerou o resultado (ex: "github", "wikipedia")
+                query_domain: Domínio/categoria da query (ex: "dev_tools", "universal")
+                rating: Nota 0-5 dada pelo usuário; >3 indica fonte útil
+                result_score: Score numérico do resultado (para ponderação futura)
             """
             try:
                 store = FeedbackStore()
                 entry = store.record(result_id=result_id, signal=signal, query=query)
                 logger.info(f"[record_feedback] {result_id} → {signal}")
+
+                source_feedback_recorded = False
+                if source_name:
+                    try:
+                        store.record_source_feedback(
+                            user_id=user_id or "default",
+                            source_name=source_name,
+                            query_domain=query_domain or "general",
+                            was_useful=rating > 3,
+                            result_score=float(result_score),
+                        )
+                        source_feedback_recorded = True
+                    except Exception as src_err:
+                        logger.warning(
+                            f"[record_feedback] rastreio de fonte falhou (não fatal): {src_err}"
+                        )
+
                 return json.dumps(
                     {
                         "recorded": True,
@@ -1341,6 +1378,7 @@ def _register_mcp_tools(app: FastAPI) -> None:
                         "signal": entry["signal"],
                         "timestamp": entry["timestamp"],
                         "valid_signals": sorted(VALID_SIGNALS),
+                        "source_feedback_recorded": source_feedback_recorded,
                     },
                     ensure_ascii=False,
                     indent=2,
