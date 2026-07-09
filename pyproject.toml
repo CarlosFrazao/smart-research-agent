@@ -77,8 +77,15 @@ include = ["src*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:chromadb",
+    "ignore::DeprecationWarning:pyarrow",
+    "ignore::UserWarning:sentence_transformers",
+    "ignore::FutureWarning:torch",
+]
 markers = [
     "benchmark: benchmarks de performance em alto volume (ex: deduplicação com 20+ fontes)",
+    "heavy: testes que requerem chromadb/pyarrow/sentence_transformers/kuzu — pulados automaticamente quando não disponíveis",
 ]
 
 [tool.pyright]

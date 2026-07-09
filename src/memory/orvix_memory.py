@@ -33,8 +33,19 @@ os.environ.setdefault(
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 
-import chromadb
-import kuzu
+try:
+    import chromadb
+    _CHROMADB_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    chromadb = None  # type: ignore[assignment]
+    _CHROMADB_AVAILABLE = False
+
+try:
+    import kuzu
+    _KUZU_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    kuzu = None  # type: ignore[assignment]
+    _KUZU_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

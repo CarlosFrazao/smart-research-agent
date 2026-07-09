@@ -1,3 +1,15 @@
+"""
+conftest.py — Configuração global do pytest para o Smart Research Agent.
+
+Inclui:
+- Fixtures compartilhadas (sample_search_result, mock_llm_client, etc.)
+- Guard de coleta para dependências pesadas (chromadb/pyarrow/sentence_transformers/kuzu)
+  que podem crashar no import em ambientes Windows por conflito de DLLs nativas.
+"""
+from __future__ import annotations
+
+import importlib
+import sys
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from src.types import (
@@ -8,6 +20,62 @@ from src.types import (
     Domain,
     Intention,
 )
+
+# ---------------------------------------------------------------------------
+# Guard de dependências pesadas — previne crash de coleta no Windows
+# ---------------------------------------------------------------------------
+
+#: Pacotes que podem crashar no import por conflitos de DLL nativa no Windows
+#: (pyarrow puxado transitivamente pelo chromadb, sentence-transformers com torch, etc.)
+_HEAVY_PACKAGES = ["chromadb", "pyarrow", "sentence_transformers", "kuzu", "torch"]
+
+_HEAVY_AVAILABLE: dict[str, bool] = {}
+
+for _pkg in _HEAVY_PACKAGES:
+    try:
+        importlib.import_module(_pkg)
+        _HEAVY_AVAILABLE[_pkg] = True
+    except Exception:  # noqa: BLE001
+        _HEAVY_AVAILABLE[_pkg] = False
+
+
+def _all_heavy_available() -> bool:
+    return all(_HEAVY_AVAILABLE.values())
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config,  # noqa: ARG001
+    items: list[pytest.Item],
+) -> None:
+    """Pula automaticamente testes marcados com @pytest.mark.heavy quando
+    as dependências pesadas não estão disponíveis neste ambiente."""
+    if _all_heavy_available():
+        return  # Tudo ok — não pula nada
+
+    unavailable = [pkg for pkg, ok in _HEAVY_AVAILABLE.items() if not ok]
+    reason = (
+        f"Dependências pesadas indisponíveis neste ambiente "
+        f"({', '.join(unavailable)}). Marque o teste com "
+        f"@pytest.mark.heavy para pular automaticamente."
+    )
+    skip_marker = pytest.mark.skip(reason=reason)
+    for item in items:
+        if item.get_closest_marker("heavy"):
+            item.add_marker(skip_marker)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Registra o marker 'heavy' para evitar warnings desconhecidos."""
+    config.addinivalue_line(
+        "markers",
+        "heavy: testes que requerem chromadb/pyarrow/sentence_transformers/kuzu. "
+        "Pulados automaticamente quando essas libs não importam corretamente.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fixtures compartilhadas
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -73,3 +141,4 @@ def mock_llm_client():
         }
     )
     return client
+
