@@ -50,6 +50,8 @@ UNTRUSTED_SOURCES = frozenset({
     # Novos desta fase:
     "discourse",  # texto livre de fórum
     "google_trends",  # dados numéricos, mas origem externa
+    "google_patents",  # conteúdo raspado de páginas de patentes
+    "mercadolivre",  # descrições de vendedores (texto livre)
 })
 
 
