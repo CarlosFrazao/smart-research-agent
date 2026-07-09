@@ -170,6 +170,19 @@ class Config(BaseSettings):
     github_token: str | None = None
     producthunt_token: str | None = None
 
+    # ── Enterprise Connectors (Notion / Confluence / SharePoint) ────────────────
+    notion_api_key: str | None = None
+
+    confluence_api_key: str | None = None
+    confluence_base_url: str | None = None  # ex: https://sua-empresa.atlassian.net
+    confluence_username: str | None = (
+        None  # email Atlassian (Basic Auth: username:api_token)
+    )
+
+    sharepoint_client_id: str | None = None
+    sharepoint_client_secret: str | None = None
+    sharepoint_tenant_id: str | None = None
+
     # ── Stream Monitor (Monitoramento em tempo real) ─────────────────────────
     enable_live_monitoring: bool = Field(
         default=False,

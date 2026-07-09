@@ -813,6 +813,8 @@ class TestSearcherFactory:
             for name, s in searchers.items():
                 if name == "serpapi":
                     continue  # SerpAPI é duck-typed
+                if name in ("notion", "confluence", "sharepoint"):
+                    continue  # Conectores Enterprise (BaseConnectorImplementation, não BaseSearcher)
                 assert isinstance(s, BaseSearcher)
         except ImportError:
             pytest.skip("SearcherFactory não disponível")

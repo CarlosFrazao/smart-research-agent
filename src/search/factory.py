@@ -43,6 +43,18 @@ except ImportError:
     ResidentialProxyProvider = None
     PlaywrightSearcher = None
 
+# Importações dos conectores Enterprise (Notion / Confluence / SharePoint)
+try:
+    from src.connectors import (
+        ConfluenceClient,
+        NotionClient,
+        SharePointClient,
+    )
+except ImportError:
+    NotionClient = None
+    ConfluenceClient = None
+    SharePointClient = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -194,6 +206,46 @@ class SearcherFactory:
             searchers["serpapi"] = SerpAPISearcher(api_key=serpapi_key)
             logger.info("SerpAPISearcher registrado como fallback de último recurso")
 
+        # ── Conectores Enterprise (Notion / Confluence / SharePoint) ──
+        # Fontes primárias/secundárias em 5 de 7 domínios, mas historicamente
+        # NUNCA registradas no factory → silenciosamente ignoradas. O registro
+        # só ocorre quando as respectivas credenciais estão presentes.
+        if NotionClient is not None and getattr(
+            orchestrator.config, "notion_api_key", None
+        ):
+            searchers["notion"] = NotionClient(
+                api_key=orchestrator.config.notion_api_key
+            )
+            logger.info("NotionClient registrado (conector Enterprise)")
+
+        if (
+            ConfluenceClient is not None
+            and getattr(orchestrator.config, "confluence_api_key", None)
+            and getattr(orchestrator.config, "confluence_base_url", None)
+            and getattr(orchestrator.config, "confluence_username", None)
+        ):
+            searchers["confluence"] = ConfluenceClient(
+                api_token=getattr(orchestrator.config, "confluence_api_key", None),
+                base_url=getattr(orchestrator.config, "confluence_base_url", None),
+                username=getattr(orchestrator.config, "confluence_username", None),
+            )
+            logger.info("ConfluenceClient registrado (conector Enterprise)")
+
+        if (
+            SharePointClient is not None
+            and getattr(orchestrator.config, "sharepoint_client_id", None)
+            and getattr(orchestrator.config, "sharepoint_client_secret", None)
+            and getattr(orchestrator.config, "sharepoint_tenant_id", None)
+        ):
+            searchers["sharepoint"] = SharePointClient(
+                client_id=getattr(orchestrator.config, "sharepoint_client_id", None),
+                client_secret=getattr(
+                    orchestrator.config, "sharepoint_client_secret", None
+                ),
+                tenant_id=getattr(orchestrator.config, "sharepoint_tenant_id", None),
+            )
+            logger.info("SharePointClient registrado (conector Enterprise)")
+
         # ── FASE 0.1: Registrar searchers órfãos ──
         # MultilingualSearcher — wrapper sobre SearXNG/Web com tradução LLM
         if os.getenv("SRA_MULTILINGUAL_ENABLED", "false").lower() == "true":
@@ -205,7 +257,10 @@ class SearcherFactory:
                     llm_client=ml_llm,
                     concurrency=3,
                 )
-                logger.info("MultilingualSearcher registrado sobre %s", ml_base.__class__.__name__)
+                logger.info(
+                    "MultilingualSearcher registrado sobre %s",
+                    ml_base.__class__.__name__,
+                )
 
         # ScrapingSearcher — cascata resiliente Firecrawl→Spider→Steel→Jina
         if os.getenv("SRA_SCRAPING_ENABLED", "false").lower() == "true":
@@ -215,10 +270,14 @@ class SearcherFactory:
                 "firecrawl_base_url": orchestrator.config.firecrawl_base_url,
                 "spider_api_key": orchestrator.config.spider_api_key,
                 "steel_api_key": orchestrator.config.steel_api_key,
-                "jina_base_url": getattr(orchestrator.config, "jina_reader_base_url", "https://r.jina.ai/"),
+                "jina_base_url": getattr(
+                    orchestrator.config, "jina_reader_base_url", "https://r.jina.ai/"
+                ),
             }
             searchers["scraping"] = ScrapingSearcher(scraping_cfg)
-            logger.info("ScrapingSearcher registrado (cascata Firecrawl→Spider→Steel→Jina)")
+            logger.info(
+                "ScrapingSearcher registrado (cascata Firecrawl→Spider→Steel→Jina)"
+            )
 
         # ── FASE 1.2: Auto-Discovery no SearcherFactory ──
         # Registrar searchers decorados com @register_searcher
@@ -232,9 +291,12 @@ class SearcherFactory:
                 try:
                     importlib.import_module(f"src.search.{_modname}")
                 except Exception as _e:
-                    logger.debug("Auto-import de src.search.%s falhou: %s", _modname, _e)
+                    logger.debug(
+                        "Auto-import de src.search.%s falhou: %s", _modname, _e
+                    )
 
         from src.search.registry import get_registry
+
         for _name, _meta in get_registry().items():
             if _name in searchers:
                 continue  # precedência do registro manual
@@ -243,11 +305,17 @@ class SearcherFactory:
                     continue
             if _meta.get("requires_key"):
                 if not os.getenv(_meta["requires_key"]):
-                    logger.debug("Searcher '%s' pulado: %s não configurada", _name, _meta["requires_key"])
+                    logger.debug(
+                        "Searcher '%s' pulado: %s não configurada",
+                        _name,
+                        _meta["requires_key"],
+                    )
                     continue
             try:
                 searchers[_name] = _meta["cls"](cfg)
-                logger.info("Searcher '%s' auto-registrado via @register_searcher", _name)
+                logger.info(
+                    "Searcher '%s' auto-registrado via @register_searcher", _name
+                )
             except Exception as _e:
                 logger.warning("Falha ao auto-registrar '%s': %s", _name, _e)
 

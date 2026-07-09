@@ -36,23 +36,44 @@ logger = logging.getLogger("pipeline.search_stage")
 # ── Source Classification for Sanitization (FASE 0.4) ────────────────────────────
 
 # Fontes de alta confiança — isentas de sanitização (APIs estruturadas)
-TRUSTED_SOURCES = frozenset({
-    "github", "arxiv", "pubmed", "semantic_scholar",
-    "hackernews", "stackoverflow", "reddit", "rss",
-    "awesome", "wayback", "producthunt",
-})
+TRUSTED_SOURCES = frozenset(
+    {
+        "github",
+        "arxiv",
+        "pubmed",
+        "semantic_scholar",
+        "hackernews",
+        "stackoverflow",
+        "reddit",
+        "rss",
+        "awesome",
+        "wayback",
+        "producthunt",
+    }
+)
 
 # Fontes não-confiáveis — texto livre, scraping, redes sociais
-UNTRUSTED_SOURCES = frozenset({
-    "firecrawl", "scraping", "searxng", "web",
-    "multilingual", "playwright", "spider", "steel",
-    "duckduckgo", "quora", "twitter", "telegram",
-    # Novos desta fase:
-    "discourse",  # texto livre de fórum
-    "google_trends",  # dados numéricos, mas origem externa
-    "google_patents",  # conteúdo raspado de páginas de patentes
-    "mercadolivre",  # descrições de vendedores (texto livre)
-})
+UNTRUSTED_SOURCES = frozenset(
+    {
+        "firecrawl",
+        "scraping",
+        "searxng",
+        "web",
+        "multilingual",
+        "playwright",
+        "spider",
+        "steel",
+        "duckduckgo",
+        "quora",
+        "twitter",
+        "telegram",
+        # Novos desta fase:
+        "discourse",  # texto livre de fórum
+        "google_trends",  # dados numéricos, mas origem externa
+        "google_patents",  # conteúdo raspado de páginas de patentes
+        "mercadolivre",  # descrições de vendedores (texto livre)
+    }
+)
 
 
 # ── SLAs de Timeout Diferenciados por Categoria de Fonte (FASE 5) ───────────────
@@ -217,8 +238,8 @@ class SearchStage(PipelineStage):
         orchestrator = context.extras.get("orchestrator") if context.extras else None
         if orchestrator and getattr(orchestrator, "stream_monitor", None):
             try:
-                stream_results = await orchestrator.stream_monitor.events_as_search_results(
-                    limit=10
+                stream_results = (
+                    await orchestrator.stream_monitor.events_as_search_results(limit=10)
                 )
                 if stream_results:
                     all_results.extend(stream_results)
@@ -279,7 +300,14 @@ class SearchStage(PipelineStage):
                 continue
 
             searcher = self.searchers.get(source_name)
-            if not searcher or not getattr(searcher, "enabled", True):
+            if not searcher:
+                logger.warning(
+                    "Source '%s' is in the search plan but has no registered searcher. "
+                    "Check SearcherFactory.create_searchers() and Config credentials.",
+                    source_name,
+                )
+                continue
+            if not getattr(searcher, "enabled", True):
                 continue
 
             for eq in source_queries:
@@ -433,15 +461,18 @@ class SearchStage(PipelineStage):
                     if sanitized.was_injection_detected:
                         logger.warning(
                             "[SEGURANÇA] Prompt injection detectado em '%s' URL=%s",
-                            source_name, result.get("url", ""),
+                            source_name,
+                            result.get("url", ""),
                         )
                     # Atualiza a descrição com o conteúdo sanitizado
-                    if hasattr(result, 'description'):
+                    if hasattr(result, "description"):
                         result.description = sanitized.cleaned
                     elif isinstance(result, dict):
                         result["description"] = sanitized.cleaned
                 except Exception as e:
-                    logger.warning(f"Falha ao sanitizar resultado de '{source_name}': {e}")
+                    logger.warning(
+                        f"Falha ao sanitizar resultado de '{source_name}': {e}"
+                    )
 
         return results
 
