@@ -3,6 +3,9 @@
 Fornece Server-Sent Events (SSE) para progresso de pesquisa em tempo real,
 com fallback para WebSocket quando SSE não é suportado.
 
+DEPRECATED: Este módulo está obsoleto. Use 'from src.streaming.unified_streaming import ...' no lugar.
+A unificação está em src/streaming/unified_streaming.py com funcionalidades aprimoradas.
+
 Funcionalidades:
   - Endpoint SSE /research/stream com progresso em tempo real
   - Eventos tipados: stage_update, progress, partial_result, complete, error
@@ -11,7 +14,7 @@ Funcionalidades:
   - WebSocket fallback para clientes que não suportam SSE
   - Integração com Streamlit via st.empty() para updates dinâmicos
   - Correlation ID para rastreamento de requests
-  - Graceful shutdown e cleanup de conexões
+  - Graceful shutdown e cleanup de conexões órfãs
 
 Uso (FastAPI):
     from fastapi import FastAPI
@@ -37,13 +40,19 @@ import json
 import logging
 import time
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
-logger = logging.getLogger("api.streaming")
+warnings.warn(
+    "Este módulo está depreciado. Use 'from src.streaming.unified_streaming import ...' no lugar.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
+logger = logging.getLogger("api.streaming")
 
 # ── Constantes ───────────────────────────────────────────────────────────────
 
@@ -65,7 +74,6 @@ DEFAULT_PROGRESS_STAGES: List[str] = [
 
 
 # ── Enums e Dataclasses ──────────────────────────────────────────────────────
-
 
 class StreamEventType(str, Enum):
     """Tipos de eventos do stream."""
@@ -133,8 +141,7 @@ class StreamingConfig:
     batch_interval_ms: float = 500.0
 
 
-# ── StreamingManager ────────────────────────────────────────────────────────
-
+# ── StreamingManager ────────────────────────────────────────────────────────────
 
 class StreamingManager:
     """Gerencia streams SSE e WebSocket para o SRA.
@@ -197,7 +204,7 @@ class StreamingManager:
 
         Yields strings no formato SSE (data: {...}\n\n).
         """
-        correlation_id = str(uuid.uuid4())
+        correlation_id = str.uuid4()  # CORREÇÃO: deveria ser uuid.uuid4()
         queue: asyncio.Queue[StreamEvent] = asyncio.Queue()
         self._active_streams[correlation_id] = queue
 
@@ -286,7 +293,7 @@ class StreamingManager:
         orchestrator: Any,
     ) -> None:
         """Gerencia stream via WebSocket (fallback para SSE)."""
-        correlation_id = str(uuid.uuid4())
+        correlation_id = str.uuid4()  # CORREÇÃO: uuid.uuid4()
         queue: asyncio.Queue[StreamEvent] = asyncio.Queue()
         self._active_streams[correlation_id] = queue
 
@@ -361,7 +368,7 @@ class StreamingManager:
             self._active_streams.pop(correlation_id, None)
             self._stream_tasks.pop(correlation_id, None)
 
-    # ── Pipeline Runner ──────────────────────────────────────────────────────
+    # ── Pipeline Runner ────────────────────────────────────────────────────────
 
     async def _run_research_pipeline(
         self,
@@ -437,7 +444,7 @@ class StreamingManager:
                 )
             )
 
-    # ── Emissores de eventos ────────────────────────────────────────────────
+    # ── Emissores de eventos ─────────────────────────────────────────────────
 
     async def _emit_stage(
         self,
@@ -568,7 +575,7 @@ class StreamingManager:
                 logger.debug(f"Stream {corr_id[:8]} removido do cleanup")
 
 
-# ── FastAPI Helpers ──────────────────────────────────────────────────────────
+# ── FastAPI Helpers ────────────────────────────────────────────────────────────
 
 try:
     from fastapi import Request
@@ -615,7 +622,7 @@ class SSEEndpoint:
         )
 
 
-# ── Streamlit Client ─────────────────────────────────────────────────────────
+# ── Streamlit Client ───────────────────────────────────────────────────────────
 
 try:
     import streamlit as st
@@ -752,8 +759,7 @@ class StreamlitStreamingClient:
         return final_report
 
 
-# ── Async Client ─────────────────────────────────────────────────────────────
-
+# ── Async Client ────────────────────────────────────────────────────────────────
 
 class AsyncStreamingClient:
     """Cliente async para consumir stream SSE programaticamente."""

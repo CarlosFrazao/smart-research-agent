@@ -47,12 +47,23 @@ class LLMSanitizer:
         self._cache: dict = {}
 
     async def sanitize(self, content: str) -> SanitizedContent:
-        if not content or len(content) < 100:
+        if not content:
             return SanitizedContent(content, content or "", False, 0.0)
+        # Verifica marcadores de injeção ANTES do check de tamanho (segurança):
+        # mesmo texto curto com padrão de prompt injection conhecido deve ser
+        # sinalizado imediatamente, sem depender do LLM ou do comprimento.
+        was_injection = any(m in content.lower() for m in INJECTION_MARKERS)
+        if len(content) < 100:
+            # Texto curto: sinaliza se marcador presente, senão passa limpo.
+            return SanitizedContent(
+                content,
+                content or "",
+                was_injection,
+                0.5 if was_injection else 0.0,
+            )
         cache_key = hash(content)
         if cache_key in self._cache:
             return self._cache[cache_key]
-        was_injection = any(m in content.lower() for m in INJECTION_MARKERS)
         try:
             # Chama generate do LLMClient para limpar o prompt
             cleaned = await self.llm.generate(

@@ -110,6 +110,17 @@ class SourcePlanner:
                 mais listas separadas de searchers primarios e secundarios.
         """
         domain_key = intent.domain.value
+        # FASE 0.3: Se domínio identificado não estiver no mapa, use "universal"
+        if domain_key not in self.domain_map:
+            logger.info(
+                "Domínio '%s' não encontrado em domains.yaml — usando 'universal' como fallback",
+                domain_key,
+            )
+            domain_key = "universal"
+        # Segundo fallback: se "universal" também não existir, use "general"
+        if domain_key not in self.domain_map:
+            domain_key = "general"
+
         mapping = self.domain_map.get(domain_key, DOMAIN_SOURCES["general"])
 
         primary = mapping.get("primary", [])

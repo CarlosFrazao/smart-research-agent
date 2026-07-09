@@ -12,6 +12,9 @@ um ou mais clientes HTTP os consumam em tempo real via SSE, com suporte a:
 - Encerramento limpo quando um evento terminal (`result` ou `error`) é
   publicado.
 
+DEPRECATED: Este módulo está obsoleto. Use 'from src.streaming.unified_streaming import ...' no lugar.
+A unificação está em src/streaming/unified_streaming.py com funcionalidades aprimoradas.
+
 Uso típico (ver `api/main.py`):
 
     broker = ProgressBroker()
@@ -36,7 +39,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
+import warnings
+import uuid
 from datetime import datetime, timezone
 from typing import (
     Any,
@@ -52,9 +58,19 @@ from typing import (
 
 from pydantic import BaseModel, Field
 
+warnings.warn(
+    "Este módulo está depreciado. Use 'from src.streaming.unified_streaming import ...' no lugar.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+logger = logging.getLogger(__name__)
+
 # ─── Modelos ──────────────────────────────────────────────────────────────
 
-EventType = Literal["progress", "result", "error", "heartbeat"]
+EventType = Literal["progress", "result", "error", "heartbeat", "stage_update",
+                    "partial_result", "partial_report", "metrics", "warning",
+                    "complete", "disconnect"]
 
 # Eventos que encerram o stream para os assinantes (nenhum evento futuro é esperado).
 TERMINAL_EVENTS: frozenset[str] = frozenset({"result", "error"})

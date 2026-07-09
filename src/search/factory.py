@@ -27,6 +27,10 @@ from src.search.spider_searcher import SpiderSearcher
 from src.search.steel_searcher import SteelSearcher
 from src.search.serpapi_searcher import SerpAPISearcher
 
+# Importações dos searchers órfãos (FASE 0.1)
+from src.search.multilingual_searcher import MultilingualSearcher
+from src.search.scraping_searcher import ScrapingSearcher
+
 try:
     from src.search.producthunt_searcher import ProductHuntSearcher
 except ImportError:
@@ -189,5 +193,62 @@ class SearcherFactory:
         if serpapi_enabled and serpapi_key:
             searchers["serpapi"] = SerpAPISearcher(api_key=serpapi_key)
             logger.info("SerpAPISearcher registrado como fallback de último recurso")
+
+        # ── FASE 0.1: Registrar searchers órfãos ──
+        # MultilingualSearcher — wrapper sobre SearXNG/Web com tradução LLM
+        if os.getenv("SRA_MULTILINGUAL_ENABLED", "false").lower() == "true":
+            ml_base = searchers.get("searxng") or searchers.get("web")
+            ml_llm = getattr(orchestrator, "llm", None)
+            if ml_base and ml_llm:
+                searchers["multilingual"] = MultilingualSearcher(
+                    base_searcher=ml_base,
+                    llm_client=ml_llm,
+                    concurrency=3,
+                )
+                logger.info("MultilingualSearcher registrado sobre %s", ml_base.__class__.__name__)
+
+        # ScrapingSearcher — cascata resiliente Firecrawl→Spider→Steel→Jina
+        if os.getenv("SRA_SCRAPING_ENABLED", "false").lower() == "true":
+            scraping_cfg = {
+                **cfg,
+                "firecrawl_api_key": orchestrator.config.firecrawl_api_key,
+                "firecrawl_base_url": orchestrator.config.firecrawl_base_url,
+                "spider_api_key": orchestrator.config.spider_api_key,
+                "steel_api_key": orchestrator.config.steel_api_key,
+                "jina_base_url": getattr(orchestrator.config, "jina_reader_base_url", "https://r.jina.ai/"),
+            }
+            searchers["scraping"] = ScrapingSearcher(scraping_cfg)
+            logger.info("ScrapingSearcher registrado (cascata Firecrawl→Spider→Steel→Jina)")
+
+        # ── FASE 1.2: Auto-Discovery no SearcherFactory ──
+        # Registrar searchers decorados com @register_searcher
+        import importlib
+        import pkgutil
+        import src.search as _search_pkg
+
+        # Importar todos os módulos de src/search/ para garantir que os decorators rodem
+        for _importer, _modname, _ispkg in pkgutil.iter_modules(_search_pkg.__path__):
+            if _modname not in ("factory", "registry", "base_searcher", "common"):
+                try:
+                    importlib.import_module(f"src.search.{_modname}")
+                except Exception as _e:
+                    logger.debug("Auto-import de src.search.%s falhou: %s", _modname, _e)
+
+        from src.search.registry import get_registry
+        for _name, _meta in get_registry().items():
+            if _name in searchers:
+                continue  # precedência do registro manual
+            if _meta.get("enabled_env"):
+                if os.getenv(_meta["enabled_env"], "false").lower() != "true":
+                    continue
+            if _meta.get("requires_key"):
+                if not os.getenv(_meta["requires_key"]):
+                    logger.debug("Searcher '%s' pulado: %s não configurada", _name, _meta["requires_key"])
+                    continue
+            try:
+                searchers[_name] = _meta["cls"](cfg)
+                logger.info("Searcher '%s' auto-registrado via @register_searcher", _name)
+            except Exception as _e:
+                logger.warning("Falha ao auto-registrar '%s': %s", _name, _e)
 
         return searchers

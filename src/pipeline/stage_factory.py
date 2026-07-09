@@ -534,6 +534,7 @@ class StageFactory:
             config=SearchStageConfig(),
             circuit_breaker_registry=cb_registry,
             health_monitor=getattr(orch, "health_monitor", None) if orch else None,
+            sanitizer=getattr(orch, "sanitizer", None) if orch else None,
         )
 
     def _create_rank_stage(self) -> PipelineStage:

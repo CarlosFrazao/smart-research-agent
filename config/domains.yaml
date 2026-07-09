@@ -27,3 +27,22 @@ domains:
     primary: [github, reddit, hackernews, firecrawl]
     secondary: [producthunt, arxiv, awesome]
     github_qualifiers: "sort:stars"
+  universal:
+    description: "Busca de propósito geral — internet ampla, fatos, notícias, cultura"
+    primary:
+      - searxng
+      - web
+      - wikipedia
+    secondary:
+      - multilingual
+      - scraping
+    fallback_enabled: true
+    notes: "Usado automaticamente quando nenhum domínio técnico específico é identificado pelo intent_analyzer"
+  open_web:
+    description: "Alias de 'universal' para compatibilidade com roteamento legado"
+    primary:
+      - searxng
+      - web
+    secondary:
+      - multilingual
+    fallback_enabled: true

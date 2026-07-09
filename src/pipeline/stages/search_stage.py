@@ -33,6 +33,23 @@ from src.utils.circuit_breaker import (
 logger = logging.getLogger("pipeline.search_stage")
 
 
+# ── Source Classification for Sanitization (FASE 0.4) ────────────────────────────
+
+# Fontes de alta confiança — isentas de sanitização (APIs estruturadas)
+TRUSTED_SOURCES = frozenset({
+    "github", "arxiv", "pubmed", "semantic_scholar",
+    "hackernews", "stackoverflow", "reddit", "rss",
+    "awesome", "wayback", "producthunt",
+})
+
+# Fontes não-confiáveis — texto livre, scraping, redes sociais
+UNTRUSTED_SOURCES = frozenset({
+    "firecrawl", "scraping", "searxng", "web",
+    "multilingual", "playwright", "spider", "steel",
+    "duckduckgo", "quora", "twitter", "telegram",
+})
+
+
 @dataclass
 class SearchStageConfig:
     """Configuração fina do SearchStage."""
@@ -82,6 +99,7 @@ class SearchStage(PipelineStage):
         config: Optional[SearchStageConfig] = None,
         circuit_breaker_registry: Optional[Any] = None,
         health_monitor: Optional[Any] = None,
+        sanitizer: Optional[Any] = None,
     ):
         self.searchers = searchers
         self.cache = cache
@@ -89,6 +107,7 @@ class SearchStage(PipelineStage):
         self.config = config or SearchStageConfig()
         self.cb_registry = circuit_breaker_registry or CircuitBreakerRegistry
         self.health_monitor = health_monitor
+        self.sanitizer = sanitizer
 
         # Semaphore por source (limita concorrência por fonte)
         self._semaphores: Dict[str, asyncio.Semaphore] = {
@@ -328,6 +347,9 @@ class SearchStage(PipelineStage):
                 result = await cb.call(
                     self._search_with_timeout, searcher, query, domain, source_name
                 )
+                # FASE 0.4: Sanitizar descrições de fontes não-confiáveis
+                if self.sanitizer and source_name in UNTRUSTED_SOURCES:
+                    result = await self._sanitize_results(result, source_name)
                 return source_name, query, result
         except CircuitBreakerOpen:
             logger.warning(f"Circuit breaker OPEN para '{source_name}' — pulando")
@@ -335,6 +357,37 @@ class SearchStage(PipelineStage):
         except Exception as e:
             logger.error(f"Erro protegido em '{source_name}': {e}")
             return source_name, query, []
+
+    async def _sanitize_results(
+        self, results: List[SearchResult], source_name: str
+    ) -> List[SearchResult]:
+        """Sanitiza descrições de resultados de fontes não-confiáveis.
+
+        Aplica o LLMSanitizer apenas a descrições longas (>100 chars) para
+        detectar e neutralizar tentativas de prompt injection.
+        """
+        if not self.sanitizer or not results:
+            return results
+
+        for result in results:
+            desc = result.get("description", "")
+            if desc and len(desc) > 100:
+                try:
+                    sanitized = await self.sanitizer.sanitize(desc)
+                    if sanitized.was_injection_detected:
+                        logger.warning(
+                            "[SEGURANÇA] Prompt injection detectado em '%s' URL=%s",
+                            source_name, result.get("url", ""),
+                        )
+                    # Atualiza a descrição com o conteúdo sanitizado
+                    if hasattr(result, 'description'):
+                        result.description = sanitized.cleaned
+                    elif isinstance(result, dict):
+                        result["description"] = sanitized.cleaned
+                except Exception as e:
+                    logger.warning(f"Falha ao sanitizar resultado de '{source_name}': {e}")
+
+        return results
 
     async def _search_with_timeout(
         self, searcher: Any, query: str, domain: str, source_name: str
