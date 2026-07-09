@@ -47,6 +47,9 @@ UNTRUSTED_SOURCES = frozenset({
     "firecrawl", "scraping", "searxng", "web",
     "multilingual", "playwright", "spider", "steel",
     "duckduckgo", "quora", "twitter", "telegram",
+    # Novos desta fase:
+    "discourse",  # texto livre de fórum
+    "google_trends",  # dados numéricos, mas origem externa
 })
 
 
