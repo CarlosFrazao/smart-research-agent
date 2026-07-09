@@ -58,5 +58,11 @@ jobs:
           pip install pytest pytest-asyncio pytest-mock aioresponses pytest-cov
           pip install -e .[all]
 
+      - name: Audit dependencies for vulnerabilities
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt || pip-audit .
+        continue-on-error: false  # falhar o CI em vulnerabilidades conhecidas
+
       - name: Run tests with pytest
         run: pytest

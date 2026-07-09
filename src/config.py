@@ -95,6 +95,7 @@ def _valid_operation_modes() -> tuple[str, ...] | None:
 
 
 def _looks_like_url(value: str, schemes: tuple[str, ...]) -> bool:
+    """Retorna True se ``value`` inicia com um dos ``schemes`` (ex: ``http://``)."""
     return value.startswith(schemes)
 
 
@@ -182,6 +183,23 @@ class Config(BaseSettings):
     sharepoint_client_id: str | None = None
     sharepoint_client_secret: str | None = None
     sharepoint_tenant_id: str | None = None
+
+    # ── Segurança da API REST (Auditoria Parte 2 — Fase 3) ──────────────────────
+    # Chave de API própria do SRA. Quando configurada (via SRA_API_KEY no .env),
+    # todos os endpoints de pesquisa passam a exigir o header
+    # `X-API-Key: <valor>`. Quando None/ausente, a autenticação é desabilitada
+    # (compatibilidade com uso local sem configuração — apenas um warning no startup).
+    sra_api_key: str | None = Field(
+        default=None,
+        description="Chave de API do SRA. Se definida, endpoints de pesquisa exigem o header X-API-Key.",
+    )
+
+    # Lista de origens permitidas pelo CORS. Lê de CORS_ALLOWED_ORIGINS (csv) no
+    # .env. Default ["*"] preserva o comportamento anterior em dev local.
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: ["*"],
+        description="Origens permitidas pelo CORS (lidas de CORS_ALLOWED_ORIGINS, csv).",
+    )
 
     # ── Stream Monitor (Monitoramento em tempo real) ─────────────────────────
     enable_live_monitoring: bool = Field(
@@ -283,6 +301,7 @@ class Config(BaseSettings):
     @field_validator("operation_mode")
     @classmethod
     def _validate_operation_mode(cls, v: str) -> str:
+        """Valida que ``operation_mode`` pertence à lista de modos válidos."""
         valid_modes = _valid_operation_modes()
         if valid_modes and v not in valid_modes:
             raise ValueError(
@@ -291,9 +310,28 @@ class Config(BaseSettings):
             )
         return v
 
+    @field_validator("cors_allowed_origins", mode="before")
+    @classmethod
+    def _validate_cors_allowed_origins(cls, v: Any) -> list[str]:
+        """Normaliza ``CORS_ALLOWED_ORIGINS`` (csv do .env) para ``list[str]``.
+
+        pydantic-settings entrega o ``CORS_ALLOWED_ORIGINS`` do ``.env`` como
+        string crua (ex: ``"https://a.com,https://b.com"``), e o coercion
+        padrão de ``list[str]`` falha em strings. Usamos ``mode="before"`` para
+        normalizar para lista ANTES do coercion de tipo, aceitando tanto a
+        string csv quanto uma lista já parseada. Se o valor for inválido/vazio,
+        retorna ``["*"]`` (comportamento de dev local).
+        """
+        if isinstance(v, str):
+            return [o.strip() for o in v.split(",") if o.strip()]
+        if isinstance(v, (list, tuple)):
+            return [str(o).strip() for o in v if str(o).strip()]
+        return ["*"]
+
     @field_validator("captcha_provider")
     @classmethod
     def _validate_captcha_provider(cls, v: str | None) -> str | None:
+        """Valida que ``captcha_provider`` é ``2captcha`` ou ``capsolver``."""
         allowed = {"2captcha", "capsolver"}
         if v is not None and v not in allowed:
             raise ValueError(
@@ -304,6 +342,7 @@ class Config(BaseSettings):
     @field_validator("residential_proxy_provider")
     @classmethod
     def _validate_proxy_provider(cls, v: str | None) -> str | None:
+        """Valida que ``residential_proxy_provider`` é ``brightdata`` ou ``smartproxy``."""
         allowed = {"brightdata", "smartproxy"}
         if v is not None and v not in allowed:
             raise ValueError(
@@ -315,6 +354,7 @@ class Config(BaseSettings):
     @field_validator("log_level")
     @classmethod
     def _validate_log_level(cls, v: str) -> str:
+        """Valida que ``log_level`` está entre os níveis suportados e normaliza para maiúsculas."""
         valid = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         if v.upper() not in valid:
             raise ValueError(
@@ -333,6 +373,7 @@ class Config(BaseSettings):
     )
     @classmethod
     def _validate_required_url(cls, v: str | None, info) -> str | None:
+        """Valida que a URL em ``info.field_name`` inicia com o scheme esperado (http/https ou redis)."""
         if not v or v.strip() == "" or v.strip().lower() == "none":
             return v
         schemes = (
@@ -347,6 +388,7 @@ class Config(BaseSettings):
     @field_validator("firecrawl_api_key")
     @classmethod
     def _validate_firecrawl_api_key(cls, v: str | None) -> str | None:
+        """Trata placeholders de exemplo do Firecrawl como chave ausente."""
         if v in ("fc-placeholder", "fc_placeholder"):
             return None
         return v
@@ -354,6 +396,7 @@ class Config(BaseSettings):
     @field_validator("memory_db_path")
     @classmethod
     def _validate_memory_db_path(cls, v: str) -> str:
+        """Resolve ``memory_db_path`` para um caminho absoluto se relativo."""
         path = Path(v)
         if not path.is_absolute():
             return str(path.resolve().absolute())
@@ -362,6 +405,7 @@ class Config(BaseSettings):
     @field_validator("firecrawl_base_url")
     @classmethod
     def _validate_optional_url(cls, v: str | None) -> str | None:
+        """Valida que ``firecrawl_base_url`` (se informada) inicia com http:// ou https://."""
         if v is not None and not _looks_like_url(v, ("http://", "https://")):
             raise ValueError(
                 f"firecrawl_base_url='{v}' deve começar com http:// ou https://."
@@ -504,6 +548,7 @@ class ConfigManager:
     """
 
     def __init__(self, env_path: str | Path = ".env", *, watch: bool = True) -> None:
+        """Inicializa o manager com a config base e (opcionalmente) observa o ``.env``."""
         self._env_path = Path(env_path)
         self._lock = threading.RLock()
         self._config = Config()
@@ -567,7 +612,10 @@ class ConfigManager:
         target = self._env_path.resolve()
 
         class _EnvChangeHandler(FileSystemEventHandler):
+            """Handler do watchdog que dispara reload quando o ``.env`` muda."""
+
             def on_modified(self, event) -> None:
+                """Recarrega a config se o arquivo alvo (não diretório) foi modificado."""
                 if not event.is_directory and Path(event.src_path).resolve() == target:
                     manager.reload()
 
@@ -675,6 +723,7 @@ class ABTestExperiment:
     """
 
     def __init__(self, name: str, variants: list[ModeVariant]) -> None:
+        """Cria o experimento, exigindo ao menos uma variante."""
         if not variants:
             raise ValueError(
                 "Um experimento de A/B testing precisa de ao menos uma variante."
@@ -686,6 +735,7 @@ class ABTestExperiment:
         self._lock = threading.Lock()
 
     def assign(self, subject_id: str | None = None) -> str:
+        """Sorteia (ou recovera, se determinístico) a variante para ``subject_id``."""
         with self._lock:
             if subject_id:
                 if subject_id not in self._assignments:
@@ -701,6 +751,7 @@ class ABTestExperiment:
             return variant
 
     def _weighted_pick(self, r: float) -> str:
+        """Escolhe a variante segundo os pesos acumulados para o valor ``r`` em [0,1]."""
         total = sum(v.weight for v in self.variants)
         threshold = r * total
         cumulative = 0.0
@@ -720,19 +771,23 @@ class ABTestRegistry:
     """Registro central de experimentos de A/B testing de modos de operação."""
 
     def __init__(self) -> None:
+        """Inicializa o registro vazio de experimentos."""
         self._experiments: dict[str, ABTestExperiment] = {}
         self._lock = threading.Lock()
 
     def register(self, name: str, variants: list[ModeVariant]) -> ABTestExperiment:
+        """Registra e retorna um novo experimento de A/B testing."""
         with self._lock:
             experiment = ABTestExperiment(name, variants)
             self._experiments[name] = experiment
             return experiment
 
     def get(self, name: str) -> ABTestExperiment | None:
+        """Retorna o experimento registrado (ou None se inexistente)."""
         return self._experiments.get(name)
 
     def assign_mode(self, experiment_name: str, subject_id: str | None = None) -> str:
+        """Atribui uma variante de ``experiment_name`` para ``subject_id``."""
         experiment = self.get(experiment_name)
         if experiment is None:
             raise KeyError(
