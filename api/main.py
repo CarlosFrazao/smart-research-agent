@@ -1,5 +1,13 @@
 """API REST corporativa em FastAPI para o Smart Research Agent.
 
+.. note:: **Módulo legado / alternativo (Plano Parte 3 — Fase 1, §15.2).**
+   O servidor oficial de produção é ``src/mcp_server.py`` (é o que o Dockerfile
+   sobe e o que expõe as 15+ tools MCP). Este módulo permanece por
+   compatibilidade e para uso standalone da API REST, mas suas rotas de
+   pesquisa/agendamento/observabilidade agora vivem em ``rest_router``, que é
+   reutilizado por ``src/mcp_server.py`` sob o prefixo ``/api/v2``. Prefira
+   ``uvicorn src.mcp_server:app`` para produção.
+
 Expõe três formas de consumir uma pesquisa, todas compartilhando a mesma
 função de execução (`_run_research_job`) e o mesmo `Orchestrator.research()`:
 
@@ -29,6 +37,7 @@ if TYPE_CHECKING:  # evita import circular em runtime
     from src.config import Config
 
 from fastapi import (
+    APIRouter,
     Depends,
     FastAPI,
     HTTPException,
@@ -169,6 +178,15 @@ async def verify_api_key(
         )
 
 
+# ─── Router REST compartilhado ────────────────────────────────
+# As rotas de pesquisa/agendamento/observabilidade vivem em um APIRouter para
+# que o servidor oficial (`src/mcp_server.py`) possa reutilizá-las via
+# `app.include_router(rest_router, prefix="/api/v2")` sem duplicar código
+# (Plano Parte 3 — Fase 1, §15.2). O `app` deste módulo (legado) inclui o
+# mesmo router no final do arquivo, preservando os caminhos originais.
+rest_router = APIRouter()
+
+
 # ─── Schemas Pydantic ─────────────────────────────────────────
 class ResearchRequest(BaseModel):
     query: str = Field(
@@ -241,7 +259,7 @@ async def _run_research_job(task_id: str, req: ResearchRequest) -> None:
     o mesmo comportamento e as mesmas etapas de progresso.
     """
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
 
     async with _task_lock:
         _task_store[task_id] = {"status": "running", "progress": None}
@@ -258,7 +276,7 @@ async def _run_research_job(task_id: str, req: ResearchRequest) -> None:
         config.operation_mode = req.mode
         config.max_results_per_source = req.max_results
 
-        orchestrator = Orchestrator(config)
+        orchestrator = create_orchestrator(config)
         result = await orchestrator.research(req.query, progress_callback=on_progress)
         duration = time.monotonic() - start_job
 
@@ -287,7 +305,7 @@ async def health():
     }
 
 
-@app.post(
+@rest_router.post(
     "/api/research",
     response_model=ResearchResponse,
     status_code=201,
@@ -301,7 +319,7 @@ async def research_sync(request: Request, req: ResearchRequest):
     Para pesquisas longas, prefira `/api/research/stream` ou `/api/research/async`.
     """
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
 
     start_time = time.monotonic()
     try:
@@ -309,7 +327,7 @@ async def research_sync(request: Request, req: ResearchRequest):
         config.operation_mode = req.mode
         config.max_results_per_source = req.max_results
 
-        orchestrator = Orchestrator(config)
+        orchestrator = create_orchestrator(config)
         result = await orchestrator.research(req.query)
         duration = time.monotonic() - start_time
 
@@ -318,7 +336,7 @@ async def research_sync(request: Request, req: ResearchRequest):
         raise HTTPException(status_code=500, detail=f"Erro na pesquisa síncrona: {e}")
 
 
-@app.post(
+@rest_router.post(
     "/api/research/async",
     response_model=TaskAcceptedResponse,
     status_code=202,
@@ -349,7 +367,7 @@ async def research_async(
     )
 
 
-@app.get("/api/research/{task_id}", response_model=TaskStatusResponse)
+@rest_router.get("/api/research/{task_id}", response_model=TaskStatusResponse)
 async def get_research_status(task_id: str):
     """Consulta o progresso e resultado final de um processamento assíncrono (polling)."""
     async with _task_lock:
@@ -366,7 +384,7 @@ async def get_research_status(task_id: str):
     )
 
 
-@app.post(
+@rest_router.post(
     "/api/research/stream",
     status_code=200,
     dependencies=[Depends(verify_api_key)],
@@ -400,7 +418,7 @@ async def research_stream(request: Request, req: ResearchRequest):
     )
 
 
-@app.get("/api/research/{task_id}/stream")
+@rest_router.get("/api/research/{task_id}/stream")
 async def research_stream_reconnect(task_id: str):
     """Assina (ou reassina) o stream de progresso de uma tarefa já iniciada.
 
@@ -421,7 +439,7 @@ async def research_stream_reconnect(task_id: str):
     )
 
 
-@app.get("/api/circuit-breakers")
+@rest_router.get("/api/circuit-breakers")
 async def get_circuit_breakers():
     """Retorna o status atualizado de todos os disjuntores da aplicação."""
     from src.utils.circuit_breaker import CircuitBreakerRegistry
@@ -429,7 +447,7 @@ async def get_circuit_breakers():
     return CircuitBreakerRegistry.status_all()
 
 
-@app.get("/api/source-costs/{session_id}")
+@rest_router.get("/api/source-costs/{session_id}")
 async def get_source_costs(session_id: str):
     """Retorna custo e performance por fonte de busca para uma sessão.
 
@@ -455,13 +473,13 @@ def _build_scheduler() -> Any:
     (persistido em JSON no disco) ao processo da API.
     """
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
     from src.scheduler import ResearchScheduler
 
-    return ResearchScheduler(Orchestrator(Config()))
+    return ResearchScheduler(create_orchestrator(Config()))
 
 
-@app.post(
+@rest_router.post(
     "/api/schedule",
     response_model=ScheduleResponse,
     status_code=201,
@@ -492,7 +510,7 @@ async def schedule_research(payload: ScheduleRequest) -> ScheduleResponse:
         raise HTTPException(status_code=500, detail=f"Erro ao agendar pesquisa: {e}")
 
 
-@app.get("/api/schedule", dependencies=[Depends(verify_api_key)])
+@rest_router.get("/api/schedule", dependencies=[Depends(verify_api_key)])
 async def list_scheduled_research() -> dict:
     """Lista todas as pesquisas recorrentes agendadas."""
     scheduler = _build_scheduler()
@@ -500,10 +518,16 @@ async def list_scheduled_research() -> dict:
     return {"total": len(jobs), "jobs": jobs}
 
 
-@app.delete("/api/schedule/{job_id}", dependencies=[Depends(verify_api_key)])
+@rest_router.delete("/api/schedule/{job_id}", dependencies=[Depends(verify_api_key)])
 async def cancel_scheduled_research(job_id: str) -> dict:
     """Cancela e remove uma pesquisa recorrente agendada."""
     scheduler = _build_scheduler()
     if not scheduler.cancel_job(job_id):
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' não encontrado")
     return {"cancelled": True, "job_id": job_id}
+
+
+# Inclui o router no app legado deste módulo, preservando os caminhos originais
+# (ex.: POST /api/research). O servidor oficial `src/mcp_server.py` inclui o
+# mesmo `rest_router` sob o prefixo `/api/v2`.
+app.include_router(rest_router)

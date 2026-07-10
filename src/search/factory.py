@@ -287,7 +287,7 @@ class SearcherFactory:
 
         # Importar todos os módulos de src/search/ para garantir que os decorators rodem
         for _importer, _modname, _ispkg in pkgutil.iter_modules(_search_pkg.__path__):
-            if _modname not in ("factory", "registry", "base_searcher", "common"):
+            if _modname not in ("factory", "registry", "base_searcher"):
                 try:
                     importlib.import_module(f"src.search.{_modname}")
                 except Exception as _e:

@@ -30,7 +30,7 @@ def search(
 ):
     """Executa o pipeline completo de pesquisa a partir do terminal."""
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
 
     with Progress(
         SpinnerColumn(),
@@ -44,7 +44,7 @@ def search(
         try:
             config = Config()
             config.operation_mode = mode
-            orchestrator = Orchestrator(config)
+            orchestrator = create_orchestrator(config)
 
             # Executa com asyncio local
             result = asyncio.run(orchestrator.research(query))
@@ -84,10 +84,10 @@ def schedule_research(
 ):
     """Agenda uma pesquisa recorrente com detecção de mudanças e alertas via webhook."""
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
     from src.scheduler import ResearchScheduler
 
-    orchestrator = Orchestrator(Config())
+    orchestrator = create_orchestrator(Config())
     scheduler = ResearchScheduler(orchestrator)
     job_id = scheduler.schedule_research(
         query=query,
@@ -104,10 +104,10 @@ def schedule_research(
 def schedule_list():
     """Lista todas as pesquisas recorrentes agendadas."""
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
     from src.scheduler import ResearchScheduler
 
-    scheduler = ResearchScheduler(Orchestrator(Config()))
+    scheduler = ResearchScheduler(create_orchestrator(Config()))
     jobs = scheduler.list_jobs()
     if not jobs:
         console.print("  Nenhuma pesquisa agendada.")
@@ -125,10 +125,10 @@ def schedule_run(
 ):
     """Executa imediatamente um job agendado (útil para testar/forçar execução)."""
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
     from src.scheduler import ResearchScheduler
 
-    scheduler = ResearchScheduler(Orchestrator(Config()))
+    scheduler = ResearchScheduler(create_orchestrator(Config()))
     try:
         asyncio.run(scheduler.run_scheduled_research(job_id))
         console.print(f"[bold green]✅ Job '{job_id}' executado.[/bold green]")
@@ -143,10 +143,10 @@ def schedule_cancel(
 ):
     """Cancela e remove uma pesquisa recorrente agendada."""
     from src.config import Config
-    from src.orchestrator import Orchestrator
+    from src.orchestrator_factory import create_orchestrator
     from src.scheduler import ResearchScheduler
 
-    scheduler = ResearchScheduler(Orchestrator(Config()))
+    scheduler = ResearchScheduler(create_orchestrator(Config()))
     if scheduler.cancel_job(job_id):
         console.print(f"[bold green]✅ Job '{job_id}' cancelado.[/bold green]")
     else:

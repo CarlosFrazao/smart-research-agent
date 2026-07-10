@@ -167,9 +167,17 @@ class ReportStage(PipelineStage):
         # 4.7: Auditoria de claims via ResearchAuditor (§14.1)
         # Chama auditor.audit() após gerar o relatório, antes de retornar ao usuário.
         # É não-fatal: se a auditoria falhar, o relatório sem auditoria é retornado.
+        # A auditoria só roda quando o modo de operação ativo define
+        # `enable_auditor=True` (ex.: "cirurgia", "black_ops", "arqueologia",
+        # "debate"). Modos rápidos como "guerrilha" pulam esta etapa.
         orchestrator = context.extras.get("orchestrator") if context.extras else None
+        operation_mode = (
+            getattr(orchestrator, "operation_mode", None) if orchestrator else None
+        )
+        auditor_enabled = bool(getattr(operation_mode, "enable_auditor", False))
         if (
-            orchestrator
+            auditor_enabled
+            and orchestrator
             and hasattr(orchestrator, "auditor")
             and orchestrator.auditor is not None
         ):

@@ -59,29 +59,33 @@ def reset_globals():
 
 def test_get_orchestrator_lazy_init():
     import src.mcp_server as srv
+    import src.orchestrator_factory as factory_mod
 
+    # get_orchestrator agora delega para create_orchestrator (§14.2), que
+    # seleciona Orchestrator ou ReActOrchestrator conforme a config.
     mock_orc = MagicMock()
-    orig_orc = srv.Orchestrator
-    srv.Orchestrator = MagicMock(return_value=mock_orc)
+    orig_factory = factory_mod.create_orchestrator
+    factory_mod.create_orchestrator = MagicMock(return_value=mock_orc)
     try:
         orc = srv.get_orchestrator()
     finally:
-        srv.Orchestrator = orig_orc
+        factory_mod.create_orchestrator = orig_factory
     assert orc is mock_orc
 
 
 def test_get_orchestrator_singleton():
     import src.mcp_server as srv
+    import src.orchestrator_factory as factory_mod
 
     mock_orc = MagicMock()
-    orig_orc = srv.Orchestrator
+    orig_factory = factory_mod.create_orchestrator
     mock_factory = MagicMock(return_value=mock_orc)
-    srv.Orchestrator = mock_factory
+    factory_mod.create_orchestrator = mock_factory
     try:
         srv.get_orchestrator()
         srv.get_orchestrator()
     finally:
-        srv.Orchestrator = orig_orc
+        factory_mod.create_orchestrator = orig_factory
     mock_factory.assert_called_once()
 
 
@@ -402,3 +406,50 @@ def test_health_endpoint_exists():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+# ─── §15.2 — Unificação dos servidores FastAPI ───────────────────────────────
+
+
+def test_rest_router_mounted_under_api_v2():
+    """As rotas exclusivas de api/main.py devem responder sob /api/v2.
+
+    Nota: nesta versão do FastAPI, ``include_router`` não achata as rotas em
+    ``app.routes`` (usa um wrapper ``_IncludedRouter``), então validamos via
+    TestClient — uma rota montada responde algo diferente de 404.
+    """
+    from fastapi.testclient import TestClient
+    import src.mcp_server as srv
+
+    client = TestClient(srv.app, raise_server_exceptions=False)
+
+    # circuit-breakers não exige corpo nem auth: se montada, responde 200.
+    # (Sem o include_router sob /api/v2, este caminho não existiria → 404.)
+    assert client.get("/api/v2/api/circuit-breakers").status_code == 200
+    # source-costs por sessão também é GET puro e prova a montagem do prefixo.
+    assert client.get("/api/v2/api/source-costs/sessao-x").status_code == 200
+
+
+def test_research_endpoint_returns_500_on_error():
+    """§15.2 — erro no pipeline deve virar HTTP 500, não HTTP 200 com {'error'}."""
+    from fastapi.testclient import TestClient
+    import src.mcp_server as srv
+
+    mock_orc = MagicMock()
+    mock_orc.research = AsyncMock(side_effect=RuntimeError("boom"))
+    srv._orchestrator = mock_orc
+
+    client = TestClient(srv.app, raise_server_exceptions=False)
+    response = client.post("/research", json={"query": "algo que falha"})
+    assert response.status_code == 500
+    assert "boom" in response.json()["detail"]
+
+
+def test_research_endpoint_returns_400_on_missing_query():
+    """Query vazia deve retornar HTTP 400, não HTTP 200 com {'error'}."""
+    from fastapi.testclient import TestClient
+    import src.mcp_server as srv
+
+    client = TestClient(srv.app, raise_server_exceptions=False)
+    response = client.post("/research", json={"query": ""})
+    assert response.status_code == 400

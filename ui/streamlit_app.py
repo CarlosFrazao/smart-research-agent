@@ -159,8 +159,20 @@ with st.sidebar:
     st.markdown("### ⚙️ Painel de Controle")
     mode = st.selectbox(
         "Modo de Operação",
-        ["cirurgia", "guerrilha", "radar", "arqueologia", "concorrencia", "black_ops"],
-        help="guerrilha=rápido, cirurgia=preciso com auditoria, black_ops=pesquisa profunda",
+        [
+            "cirurgia",
+            "guerrilha",
+            "radar",
+            "arqueologia",
+            "concorrencia",
+            "black_ops",
+            "debate",
+        ],
+        help=(
+            "guerrilha=rápido, cirurgia=preciso com auditoria, "
+            "black_ops=pesquisa profunda, "
+            "debate=motor multi-agente (hipóteses opostas + juiz LLM)"
+        ),
     )
     max_results = st.slider("Resultados máximos por fonte", 3, 25, 12)
     languages = st.multiselect(
@@ -322,7 +334,7 @@ with tab_swarm:
                             st.session_state["orch_result"] = loop.run_until_complete(
                                 _orch.research(user_question)
                             )
-                        except:
+                        except Exception:
                             st.session_state["orch_result"] = (
                                 "(Relatório de pesquisa não disponível)"
                             )

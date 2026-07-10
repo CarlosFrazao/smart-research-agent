@@ -105,7 +105,9 @@ def get_orchestrator(config: Config | None = None) -> Orchestrator:
     if _orchestrator is None:
         if config is None:
             config = Config()
-        _orchestrator = Orchestrator(config)
+        from src.orchestrator_factory import create_orchestrator
+
+        _orchestrator = create_orchestrator(config)
         from src.hitl_manager import HITLManager
 
         if not hasattr(_orchestrator, "hitl_manager"):
@@ -130,6 +132,53 @@ def get_confidence_scorer(config: Config | None = None) -> ConfidenceScorer:
     return _confidence_scorer
 
 
+def _apply_rest_security(app: FastAPI, cfg: Config) -> None:
+    """Aplica CORS, rate limiting e auth ao servidor oficial (§15.2).
+
+    Espelha as defesas implementadas em ``api/main.py`` (Auditoria Parte 2 —
+    Fase 3) neste servidor, que é o que de fato roda em produção via Docker:
+
+    - **CORS:** origens lidas de ``cfg.cors_allowed_origins`` (env), não ``*``.
+    - **Rate limiting:** por IP via slowapi (``app.state.limiter``); as rotas do
+      ``rest_router`` já declaram ``@limiter.limit`` e passam a ser efetivas.
+    - **Auth:** o ``verify_api_key`` de ``api/main.py`` já é dependência das
+      rotas do ``rest_router``; aqui garantimos que o ``get_config`` resolva a
+      mesma ``Config``.
+
+    Falhas de import (ambiente sem slowapi, por ex.) degradam para no-op com
+    aviso, sem impedir o servidor de subir.
+
+    Args:
+        app: Instância FastAPI recém-criada.
+        cfg: Configuração efetiva desta instância.
+    """
+    try:
+        from fastapi.middleware.cors import CORSMiddleware
+        from slowapi import Limiter, _rate_limit_exceeded_handler
+        from slowapi.errors import RateLimitExceeded
+        from slowapi.util import get_remote_address
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=getattr(cfg, "cors_allowed_origins", ["*"]),
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        limiter = Limiter(key_func=get_remote_address)
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+        if not getattr(cfg, "sra_api_key", None):
+            logger.warning(
+                "SRA_API_KEY não configurada. Rotas /api/v2 sem autenticação. "
+                "Defina SRA_API_KEY no .env para uso em produção."
+            )
+    except Exception as exc:  # pragma: no cover - defensivo
+        logger.warning("mcp_server: não foi possível aplicar segurança REST: %s", exc)
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     """Cria uma instância independente do servidor MCP do Smart Research Agent.
 
@@ -149,6 +198,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(title="Smart Research Agent MCP Server")
 
     cfg = config or Config()
+
+    # ── Segurança REST (Plano Parte 3 — Fase 1, §15.2) ──
+    # Aplica no servidor oficial as mesmas defesas já existentes em api/main.py:
+    # CORS por env, rate limiting por IP (slowapi) e autenticação X-API-Key.
+    _apply_rest_security(app, cfg)
+
     container = DependencyContainer()
     container.register_instance("config", cfg)
 
@@ -186,6 +241,18 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     _register_rest_endpoints(app)
     _register_mcp_tools(app)
+
+    # Absorve as rotas REST exclusivas de api/main.py (pesquisa síncrona/async
+    # com polling, streaming SSE, agendamento e observabilidade) sob o prefixo
+    # /api/v2, unificando os dois servidores divergentes (§15.2). O import é
+    # local para evitar custo de import e ciclos no carregamento do módulo.
+    try:
+        from api.main import rest_router
+
+        app.include_router(rest_router, prefix="/api/v2")
+        logger.info("mcp_server: rest_router de api/main incluído sob /api/v2.")
+    except Exception as exc:  # pragma: no cover - defensivo
+        logger.warning("mcp_server: falha ao incluir rest_router (/api/v2): %s", exc)
 
     return app
 
@@ -414,7 +481,7 @@ def _register_rest_endpoints(app: FastAPI) -> None:
     ):
         query = body.get("query", "")
         if not query:
-            return {"error": "query is required"}
+            raise HTTPException(status_code=400, detail="query is required")
         session_id = body.get("session_id", "default_session")
         # api_key e provider são aceitos no body para compatibilidade com o frontend
         # O orchestrator usa as chaves do .env por default; override não é logado
@@ -429,8 +496,11 @@ def _register_rest_endpoints(app: FastAPI) -> None:
 
             return {"report": report, "query": query, "session_id": session_id}
         except Exception as e:
-            logger.error(f"Erro na pesquisa: {e}")
-            return {"error": str(e)}
+            # §15.2: erro de pesquisa deve retornar HTTP 500, não HTTP 200 com
+            # {"error": ...} — do contrário o cliente não consegue distinguir
+            # sucesso de falha pelo status code.
+            logger.exception("Research pipeline error")
+            raise HTTPException(status_code=500, detail=str(e)) from e
         finally:
             _current_research.set(None)
 

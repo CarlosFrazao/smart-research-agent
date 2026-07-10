@@ -60,12 +60,21 @@ Configure chaves de API, endereços de bancos de dados (Redis, ChromaDB, KuzuDB)
 
 ## 🚀 Como Executar
 
-### 1. API REST FastAPI
-Inicie a API REST local com Swagger UI documentado automaticamente:
+### 1. Servidor oficial (API REST + MCP)
+O servidor oficial de produção é `src/mcp_server.py` — é o que o Dockerfile
+sobe e o que expõe tanto as tools MCP quanto as rotas REST. Inicie-o com:
 ```powershell
-uvicorn api.main:app --port 3458 --reload
+uvicorn src.mcp_server:app --port 3458 --reload
 ```
 Acesse a documentação OpenAPI em: [http://localhost:3458/docs](http://localhost:3458/docs)
+
+As rotas REST de pesquisa/agendamento/observabilidade herdadas do módulo
+legado `api/main.py` ficam disponíveis sob o prefixo `/api/v2`
+(ex.: `POST /api/v2/api/research`), com autenticação `X-API-Key`, CORS por
+env (`CORS_ALLOWED_ORIGINS`) e rate limiting por IP aplicados.
+
+> **Legado:** `uvicorn api.main:app --port 3458 --reload` ainda funciona para
+> uso standalone da API REST, mas prefira o servidor oficial acima.
 
 ### 2. Web UI Streamlit
 Inicie a interface interativa no seu navegador:
