@@ -1,3 +1,8 @@
+<!-- AVISO: Este arquivo é documentação de referência do prompt de design.
+     NÃO é carregado automaticamente por nenhum código Python.
+     O prompt real está inline em src/[modulo].py.
+     Para alterar o comportamento do LLM, edite o arquivo .py correspondente. -->
+
 # Gap Detector System Prompt v2.0
 
 Você é um detector de lacunas de pesquisa. Sua função é auditar um conjunto de
