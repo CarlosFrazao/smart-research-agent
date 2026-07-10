@@ -237,6 +237,15 @@ class SearchResult(SRAModel):
         hallucination_flags: Sinalizadores de possível alucinação.
         result_id: ID canônico gerado a partir da combinação source+url para
             deduplicação única (gerado por generate_result_id()).
+        cluster_id: Preenchido pelo passo de clustering (Fase 4) — resultados de fontes
+            diferentes sobre o mesmo fato/evento compartilham o mesmo cluster_id.
+            None = não passou por clustering ou não teve nenhum resultado similar.
+        corroborated_by: Lista de `source` que corroboram o mesmo cluster_id — permite ao
+            SynthesizeStage/ReportStage mostrar 'confirmado por N fontes independentes'
+            em vez de listar N itens redundantes.
+        trust_tier: Preenchido no SearchStage a partir da allowlist/denylist pessoal do usuário (Fase 5).
+            'deny' pode ser filtrado completamente ou penalizado no score.
+            Default 'neutral' garante backward compatibility total.
     """
 
     source: str = Field(min_length=1)
@@ -255,6 +264,20 @@ class SearchResult(SRAModel):
     contradictions: list[str] = Field(default_factory=list)
     hallucination_flags: list[str] = Field(default_factory=list)
     result_id: str = Field(default="", description="Canonical result identifier")
+    cluster_id: str | None = None
+    """Preenchido pelo passo de clustering (Fase 4) — resultados de fontes
+    diferentes sobre o mesmo fato/evento compartilham o mesmo cluster_id.
+    None = não passou por clustering ou não teve nenhum resultado similar."""
+
+    corroborated_by: list[str] = Field(default_factory=list)
+    """Lista de `source` que corroboram o mesmo cluster_id — permite ao
+    SynthesizeStage/ReportStage mostrar 'confirmado por N fontes independentes'
+    em vez de listar N itens redundantes."""
+
+    trust_tier: Literal["allow", "neutral", "deny"] = "neutral"
+    """Preenchido no SearchStage a partir da allowlist/denylist pessoal do usuário (Fase 5).
+    'deny' pode ser filtrado completamente ou penalizado no score.
+    Default 'neutral' garante backward compatibility total."""
 
 
 class RankedResult(SearchResult):

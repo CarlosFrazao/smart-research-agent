@@ -303,7 +303,9 @@ class ExpandStage:
                 from src.source_planner import SourcePlanner
 
                 planner = SourcePlanner()
-                context.source_plan = planner.plan(intent, context.expanded_queries)
+                context.source_plan = planner.plan(
+                    intent, context.expanded_queries, context
+                )
 
             # --- INICIO DO BLOCANTE HUMAN-IN-THE-LOOP (HITL) ---
             orchestrator = context.extras.get("orchestrator")

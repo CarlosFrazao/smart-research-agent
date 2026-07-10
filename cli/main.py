@@ -46,8 +46,17 @@ def search(
             config.operation_mode = mode
             orchestrator = create_orchestrator(config)
 
+            # Fase 2 — TrustRuleStore: lê regras pessoais do usuário (fallback "anonymous")
+            from src.trust_rule_store import TrustRuleStore
+
+            trust_store = TrustRuleStore()
+            user_id = getattr(orchestrator, "user_id", "anonymous") or "anonymous"
+            trust_rules = trust_store.get_rules_for_user(user_id)
+
             # Executa com asyncio local
-            result = asyncio.run(orchestrator.research(query))
+            result = asyncio.run(
+                orchestrator.research(query, context_extra={"trust_rules": trust_rules})
+            )
             progress.remove_task(task)
         except Exception as e:
             progress.remove_task(task)

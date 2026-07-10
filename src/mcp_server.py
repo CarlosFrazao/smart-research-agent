@@ -1524,6 +1524,7 @@ def _register_mcp_tools(app: FastAPI) -> None:
             """
             try:
                 from src.source_planner import SourcePlanner
+                from src.trust_rule_store import TrustRuleStore
                 from src.types import ExpandedQuery, IntentResult
 
                 orc = container.orchestrator
@@ -1549,8 +1550,16 @@ def _register_mcp_tools(app: FastAPI) -> None:
                     domain = "general"
 
                 queries = [ExpandedQuery(query=query, type="original", priority="alta")]
+
+                # Fase 2 — TrustRuleStore: lê regras pessoais do usuário
+                trust_store = TrustRuleStore()
+                user_id = getattr(orc, "user_id", "anonymous") or "anonymous"
+                context = {
+                    "extra": {"trust_rules": trust_store.get_rules_for_user(user_id)}
+                }
+
                 planner = SourcePlanner(llm=getattr(orc, "llm", None))
-                plan = planner.plan(intent, queries)
+                plan = planner.plan(intent, queries, context)
 
                 planned_sources = list(dict.fromkeys(plan.primary + plan.secondary))
                 available = {

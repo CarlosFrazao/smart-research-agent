@@ -177,6 +177,7 @@ class Orchestrator:
         formats: list[Any] | None = None,
         progress_callback: Optional[ProgressCallback] = None,
         session_id: str = "default_session",
+        context_extra: dict | None = None,
     ) -> str:
         """Executa o pipeline completo de pesquisa e retorna o relatorio Markdown.
 
@@ -225,6 +226,8 @@ class Orchestrator:
             context.extras["progress_callback"] = progress_callback
             context.extras["orchestrator"] = self
             context.extras["session_id"] = session_id
+            if context_extra:
+                context.extras.update(context_extra)
             try:
                 context = await self._pipeline.run(context)
             finally:
