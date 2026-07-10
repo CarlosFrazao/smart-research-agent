@@ -224,7 +224,35 @@ class ExpandStage:
         ter fallback; se a API falhar, o sistema não quebra").
         """
         start = time.perf_counter()
+
+        # FASE 6.5: extrai operadores de busca avançada (site:, filetype:,
+        # intitle:) da query original ANTES da expansão. O texto limpo alimenta
+        # a expansão; os operadores ficam em context.extras para os searchers
+        # que os suportam nativamente (SearXNG, DuckDuckGo) os reaplicarem.
         query = context.query
+        try:
+            from src.query_parser import parse_advanced_query
+
+            parsed = parse_advanced_query(query)
+            if parsed.has_operators:
+                query = parsed.text or query
+                extras = getattr(context, "extras", None)
+                if isinstance(extras, dict):
+                    extras["advanced_operators"] = {
+                        "site_filter": parsed.site_filter,
+                        "filetype": parsed.filetype,
+                        "intitle": parsed.intitle,
+                        "engine_query": parsed.to_engine_query(),
+                    }
+                logger.info(
+                    "expand_stage.operators_parsed",
+                    site=parsed.site_filter,
+                    filetype=parsed.filetype,
+                    intitle=parsed.intitle,
+                )
+        except Exception as exc:  # noqa: BLE001 - parser nunca deve quebrar o stage
+            logger.warning("expand_stage.operator_parse_failed", error=str(exc))
+
         intent = getattr(context, "intent", None)
         cache_key = _build_cache_key(query, intent)
 

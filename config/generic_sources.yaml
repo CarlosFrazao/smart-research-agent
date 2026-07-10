@@ -1,0 +1,87 @@
+# Catálogo de fontes de busca configuráveis (Auditoria Parte 2 — Fase 6).
+#
+# Cada entrada vira uma fonte de busca disponível no SRA SEM escrever código
+# Python novo — o GenericAPISearcher (src/search/generic_api_searcher.py) lê
+# esta definição em runtime e transforma a API REST pública em um searcher.
+#
+# Campos obrigatórios:
+#   id           Identificador único da fonte (vira o nome do searcher).
+#   name         Nome legível para logs/UI.
+#   base_url     URL do endpoint. Pode conter {query} quando query_param é null.
+#   result_path  Expressão JMESPath para a lista de resultados na resposta.
+#                Use null quando a resposta já é uma lista no nível raiz.
+#
+# Campos opcionais:
+#   query_param  Nome do parâmetro de query (ex: "q"). Se null, a query é
+#                interpolada na base_url via {query}.
+#   title_field  Campo (JMESPath) do título dentro de cada item. Default: "title".
+#   snippet_field Campo (JMESPath) da descrição/snippet dentro de cada item.
+#   url_template Template da URL do resultado. Placeholders {campo} são
+#                substituídos por item["campo"] (nível raiz do item).
+#   max_results  Máximo de resultados retornados. Default: 10.
+#   timeout      Timeout HTTP em segundos. Default: 15.
+#   headers      Headers HTTP. Valores {ENV_VAR} são resolvidos de os.environ.
+#   extra_params Parâmetros de query fixos adicionais.
+
+sources:
+  - id: "open_library"
+    name: "Open Library (Internet Archive)"
+    base_url: "https://openlibrary.org/search.json"
+    query_param: "q"
+    result_path: "docs"
+    title_field: "title"
+    url_template: "https://openlibrary.org{key}"
+    snippet_field: "first_sentence.value"
+    max_results: 10
+    timeout: 15
+
+  - id: "core_ac_uk"
+    name: "CORE.ac.uk (Open Access Research)"
+    base_url: "https://api.core.ac.uk/v3/search/works"
+    query_param: "q"
+    result_path: "results"
+    title_field: "title"
+    url_template: "{downloadUrl}"
+    snippet_field: "abstract"
+    max_results: 10
+    timeout: 20
+    headers:
+      Authorization: "Bearer {CORE_API_KEY}"
+
+  - id: "doaj"
+    name: "Directory of Open Access Journals"
+    base_url: "https://doaj.org/api/search/articles/{query}"
+    query_param: null
+    result_path: "results"
+    title_field: "bibjson.title"
+    url_template: "https://doaj.org/article/{id}"
+    snippet_field: "bibjson.abstract"
+    max_results: 10
+    timeout: 15
+
+  - id: "osm_nominatim"
+    name: "OpenStreetMap Nominatim (Geocoding)"
+    base_url: "https://nominatim.openstreetmap.org/search"
+    query_param: "q"
+    result_path: null
+    title_field: "display_name"
+    url_template: "https://www.openstreetmap.org/#map=15/{lat}/{lon}"
+    snippet_field: "type"
+    max_results: 5
+    timeout: 10
+    extra_params:
+      format: "json"
+      addressdetails: "1"
+
+  - id: "openalex"
+    name: "OpenAlex (Scholarly Works)"
+    base_url: "https://api.openalex.org/works"
+    query_param: "search"
+    result_path: "results"
+    title_field: "title"
+    url_template: "{id}"
+    snippet_field: "doi"
+    max_results: 10
+    timeout: 20
+
+  # Adicionar mais fontes aqui — sem escrever código Python.

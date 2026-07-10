@@ -13,9 +13,9 @@
 | **Fase 1** | `MISSAO_PARTE2_FASE1_CONECTORES_E_FIACAO.md` | 🔴 CRÍTICA | Nenhum | ✅ Concluída (commit `ab9ca71`) |
 | **Fase 2** | `MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md` | 🟠 Alta | Fase 1 | ✅ Concluída (commit `5075b046b`) |
 | **Fase 3** | `MISSAO_PARTE2_FASE3_SEGURANCA_API.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída (commit `ebf8b61`) |
-| **Fase 4** | `MISSAO_PARTE2_FASE4_FEEDBACK_RESULTID.md` | 🔴 CRÍTICA | Fase 1 | ⏳ Pendente |
-| **Fase 5** | `MISSAO_PARTE2_FASE5_INFRA_E_DIVIDA_TECNICA.md` | 🟡 Média | Fases 1-4 | ⏳ Pendente |
-| **Fase 6** | `MISSAO_PARTE2_FASE6_UNIVERSAL_SEARCHER.md` | 🟢 Alta (novo valor) | Fases 1-5 | ⏳ Pendente |
+| **Fase 4** | `MISSAO_PARTE2_FASE4_FEEDBACK_RESULTID.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída (commit `121bef3`) |
+| **Fase 5** | `MISSAO_PARTE2_FASE5_INFRA_E_DIVIDA_TECNICA.md` | 🟡 Média | Fases 1-4 | ✅ Concluída (commit `5a1cd5a`) |
+| **Fase 6** | `MISSAO_PARTE2_FASE6_UNIVERSAL_SEARCHER.md` | 🟢 Alta (novo valor) | Fases 1-5 | ✅ Concluída |
 
 ---
 

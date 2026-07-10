@@ -66,6 +66,94 @@ def search(
         console.print(Markdown(result if isinstance(result, str) else str(result)))
 
 
+@app.command("schedule")
+def schedule_research(
+    query: str = typer.Argument(..., help="Query de pesquisa recorrente"),
+    cron: str = typer.Option(
+        "0 8 * * *", "--cron", "-c", help="Expressão cron (padrão: diário às 8h)"
+    ),
+    webhook_url: Optional[str] = typer.Option(
+        None, "--webhook", "-w", help="URL para alertas de mudança (Slack/Discord/N8N)"
+    ),
+    output_dir: str = typer.Option(
+        "reports/scheduled", "--output-dir", "-o", help="Diretório para os relatórios"
+    ),
+    no_alerts: bool = typer.Option(
+        False, "--no-alerts", help="Desabilita alertas de mudança para este job"
+    ),
+):
+    """Agenda uma pesquisa recorrente com detecção de mudanças e alertas via webhook."""
+    from src.config import Config
+    from src.orchestrator import Orchestrator
+    from src.scheduler import ResearchScheduler
+
+    orchestrator = Orchestrator(Config())
+    scheduler = ResearchScheduler(orchestrator)
+    job_id = scheduler.schedule_research(
+        query=query,
+        cron_expr=cron,
+        output_dir=output_dir,
+        webhook_url=webhook_url,
+        alert_on_changes=not no_alerts,
+    )
+    console.print(f"[bold green]✅ Pesquisa agendada:[/bold green] {job_id}")
+    console.print(f"  query='{query}' | cron='{cron}' | output='{output_dir}'")
+
+
+@app.command("schedule-list")
+def schedule_list():
+    """Lista todas as pesquisas recorrentes agendadas."""
+    from src.config import Config
+    from src.orchestrator import Orchestrator
+    from src.scheduler import ResearchScheduler
+
+    scheduler = ResearchScheduler(Orchestrator(Config()))
+    jobs = scheduler.list_jobs()
+    if not jobs:
+        console.print("  Nenhuma pesquisa agendada.")
+        return
+    for job in jobs:
+        console.print(
+            f"  * [cyan]{job['id']}[/cyan] — '{job['query']}' | cron='{job['cron']}' "
+            f"| last_run={job.get('last_run') or 'nunca'}"
+        )
+
+
+@app.command("schedule-run")
+def schedule_run(
+    job_id: str = typer.Argument(..., help="ID do job a executar imediatamente"),
+):
+    """Executa imediatamente um job agendado (útil para testar/forçar execução)."""
+    from src.config import Config
+    from src.orchestrator import Orchestrator
+    from src.scheduler import ResearchScheduler
+
+    scheduler = ResearchScheduler(Orchestrator(Config()))
+    try:
+        asyncio.run(scheduler.run_scheduled_research(job_id))
+        console.print(f"[bold green]✅ Job '{job_id}' executado.[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]Erro ao executar job '{job_id}': {e}[/bold red]")
+        raise typer.Exit(1)
+
+
+@app.command("schedule-cancel")
+def schedule_cancel(
+    job_id: str = typer.Argument(..., help="ID do job a cancelar"),
+):
+    """Cancela e remove uma pesquisa recorrente agendada."""
+    from src.config import Config
+    from src.orchestrator import Orchestrator
+    from src.scheduler import ResearchScheduler
+
+    scheduler = ResearchScheduler(Orchestrator(Config()))
+    if scheduler.cancel_job(job_id):
+        console.print(f"[bold green]✅ Job '{job_id}' cancelado.[/bold green]")
+    else:
+        console.print(f"[yellow]Job '{job_id}' não encontrado.[/yellow]")
+        raise typer.Exit(1)
+
+
 @app.command()
 def status():
     """Consulta o status atual de todos os disjuntores da aplicação."""

@@ -50,7 +50,17 @@ DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
     },
     "ai_ml": {
         "primary": ["arxiv", "github", "notion", "rss", "searxng"],
-        "secondary": ["reddit", "confluence", "sharepoint", "firecrawl", "producthunt"],
+        "secondary": [
+            "reddit",
+            "confluence",
+            "sharepoint",
+            "firecrawl",
+            "producthunt",
+            "open_library",
+            "core_ac_uk",
+            "doaj",
+            "openalex",
+        ],
     },
     "automation": {
         "primary": ["github", "confluence", "notion", "sharepoint"],
@@ -58,7 +68,14 @@ DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
     },
     "infrastructure": {
         "primary": ["github", "confluence", "sharepoint", "awesome"],
-        "secondary": ["reddit", "arxiv", "firecrawl", "searxng", "wayback"],
+        "secondary": [
+            "reddit",
+            "arxiv",
+            "firecrawl",
+            "searxng",
+            "wayback",
+            "osm_nominatim",
+        ],
     },
     "open_source": {
         "primary": ["github", "awesome", "hackernews", "searxng"],
@@ -73,6 +90,7 @@ DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
             "awesome",
             "stackoverflow",
             "wayback",
+            "open_library",
         ],
     },
 }
@@ -143,9 +161,7 @@ class SourcePlanner:
                 logger.warning(f"Erro ao carregar domains.yaml: {e}")
         return DOMAIN_SOURCES
 
-    def _apply_user_weights(
-        self, sources: list[str], domain: str
-    ) -> list[str]:
+    def _apply_user_weights(self, sources: list[str], domain: str) -> list[str]:
         """Reordena fontes conforme o peso histórico do usuário.
 
         Fontes com maior peso (historico de utilidade) ficam no inicio da lista,
@@ -299,7 +315,9 @@ class SourcePlanner:
             query=query,
             domain=getattr(intent.domain, "value", str(intent.domain)),
             intent=getattr(intent, "intent", ""),
-            available_sources=", ".join(sorted(available)) if available else "wikipedia, duckduckgo, searxng, web, reddit, hackernews, github, arxiv",
+            available_sources=", ".join(sorted(available))
+            if available
+            else "wikipedia, duckduckgo, searxng, web, reddit, hackernews, github, arxiv",
         )
 
         try:

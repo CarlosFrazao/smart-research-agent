@@ -319,6 +319,31 @@ class SearcherFactory:
             except Exception as _e:
                 logger.warning("Falha ao auto-registrar '%s': %s", _name, _e)
 
+        # ── FASE 6: Registrar fontes genéricas do catálogo YAML ──
+        # GenericAPISearcher transforma cada entrada de config/generic_sources.yaml
+        # em uma fonte de busca sem escrever código Python novo. Searchers
+        # dedicados têm precedência (não são sobrescritos).
+        try:
+            from src.search.generic_api_searcher import (
+                GenericAPISearcher,
+                list_generic_source_ids,
+            )
+
+            for _gid in list_generic_source_ids():
+                if _gid in searchers:
+                    continue  # não sobrescrever um searcher dedicado
+                try:
+                    searchers[_gid] = GenericAPISearcher(_gid, cfg)
+                    logger.info(
+                        "Fonte genérica '%s' registrada via GenericAPISearcher", _gid
+                    )
+                except Exception as _e:
+                    logger.warning(
+                        "Falha ao registrar fonte genérica '%s': %s", _gid, _e
+                    )
+        except Exception as _e:
+            logger.warning("Não foi possível carregar generic_sources.yaml: %s", _e)
+
         return searchers
 
     @classmethod
@@ -363,6 +388,13 @@ class SearcherFactory:
             from src.search.registry import get_registry
 
             known.update(get_registry().keys())
+        except Exception:
+            pass
+        # Fontes genéricas do catálogo YAML (FASE 6)
+        try:
+            from src.search.generic_api_searcher import list_generic_source_ids
+
+            known.update(list_generic_source_ids())
         except Exception:
             pass
         return known

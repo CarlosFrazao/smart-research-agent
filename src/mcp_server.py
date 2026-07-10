@@ -1417,9 +1417,130 @@ def _register_mcp_tools(app: FastAPI) -> None:
                 logger.error(f"[record_feedback] erro: {e}")
                 return json.dumps({"recorded": False, "error": str(e)})
 
+        # ─────────────────────────────────────────────────────────────────
+        # TOOL 16 — Busca universal (canivete suíço) — FASE 6
+        # ─────────────────────────────────────────────────────────────────
+        @mcp.tool()
+        async def search_anything(
+            query: str,
+            hint_domain: str | None = None,
+            max_results: int = 10,
+        ) -> str:
+            """
+            Pesquisa universal ("canivete suico"): cobre todas as fontes disponiveis
+            sem precisar conhecer a taxonomia interna do SRA. Ideal quando voce nao
+            sabe qual tool especifica usar — esta tool escolhe as fontes por voce.
+
+            Diferente de research_technology (que roda o pipeline completo de 9
+            passos e retorna um relatorio), esta tool faz uma busca multi-fonte
+            rapida e retorna os resultados brutos normalizados em JSON.
+
+            O roteamento usa o dominio 'general' por padrao (amplo), ou um
+            'hint_domain' se voce quiser direcionar (ex: 'ai_ml', 'infrastructure').
+            As fontes genericas do catalogo YAML (open_library, openalex,
+            osm_nominatim, etc.) participam automaticamente.
+
+            Retorna JSON com:
+            - query: a query original
+            - domain: dominio usado no roteamento
+            - sources_queried: fontes efetivamente consultadas
+            - total: total de resultados agregados
+            - results: lista de {title, url, description, source}
+
+            Args:
+                query: A consulta em linguagem natural (ex: "livros sobre estoicismo").
+                hint_domain: Dica de dominio opcional. Se omitido, usa 'general'.
+                max_results: Numero maximo de resultados por fonte (padrao: 10, max: 30).
+            """
+            try:
+                from src.source_planner import SourcePlanner
+                from src.types import ExpandedQuery, IntentResult
+
+                orc = container.orchestrator
+                domain = hint_domain or "general"
+                per_source = min(max(int(max_results), 1), 30)
+
+                # Monta um IntentResult sintetico para o dominio pedido. Se o
+                # dominio for invalido, cai em 'general' (fallback do planner).
+                try:
+                    intent = IntentResult(
+                        domain=domain,
+                        intention="discover",
+                        urgency="nao",
+                        confidence="media",
+                    )
+                except Exception:
+                    intent = IntentResult(
+                        domain="general",
+                        intention="discover",
+                        urgency="nao",
+                        confidence="media",
+                    )
+                    domain = "general"
+
+                queries = [ExpandedQuery(query=query, type="original", priority="alta")]
+                planner = SourcePlanner(llm=getattr(orc, "llm", None))
+                plan = planner.plan(intent, queries)
+
+                planned_sources = list(dict.fromkeys(plan.primary + plan.secondary))
+                available = {
+                    name: orc.searchers[name]
+                    for name in planned_sources
+                    if name in orc.searchers
+                }
+
+                async def _run(name: str, searcher: Any) -> list[Any]:
+                    try:
+                        searcher.max_results = per_source
+                        return await searcher.search(query)
+                    except Exception as se:  # noqa: BLE001 - falha por fonte isolada
+                        logger.warning(
+                            "[search_anything] fonte '%s' falhou: %s", name, se
+                        )
+                        return []
+
+                import asyncio as _asyncio
+
+                gathered = await _asyncio.gather(
+                    *[_run(n, s) for n, s in available.items()]
+                )
+
+                results: list[dict[str, Any]] = []
+                for source_results in gathered:
+                    for r in source_results[:per_source]:
+                        results.append(
+                            {
+                                "title": r.title,
+                                "url": r.url,
+                                "description": r.description,
+                                "source": r.source,
+                            }
+                        )
+
+                logger.info(
+                    "[search_anything] %d resultados de %d fontes para '%s'",
+                    len(results),
+                    len(available),
+                    query,
+                )
+                return json.dumps(
+                    {
+                        "query": query,
+                        "domain": domain,
+                        "sources_queried": list(available.keys()),
+                        "total": len(results),
+                        "results": results,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            except Exception as e:
+                logger.error(f"[search_anything] erro: {e}")
+                return json.dumps({"error": str(e)})
+
         app.mount("/mcp", mcp.sse_app())
         logger.info(
-            "MCP FastMCP montado com sucesso via sse_app() em /mcp — 15 tools registradas"
+            "MCP FastMCP montado com sucesso via sse_app() em /mcp — 16 tools registradas"
         )
 
     except ImportError as err:

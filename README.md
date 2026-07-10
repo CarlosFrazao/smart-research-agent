@@ -85,7 +85,18 @@ python cli/main.py search "Kubernetes trends 2026" -m cirurgia -o kubernetes.md
 
 # Consultar status dos Circuit Breakers
 python cli/main.py status
+
+# Agendar uma pesquisa recorrente com alertas de mudança (webhook Slack/Discord)
+python cli/main.py schedule "novidades em RAG" --cron "0 8 * * *" --webhook "https://hooks.slack.com/..."
+
+# Listar / executar / cancelar pesquisas agendadas
+python cli/main.py schedule-list
+python cli/main.py schedule-run <job_id>
+python cli/main.py schedule-cancel <job_id>
 ```
+
+> As mesmas operações estão disponíveis via API REST: `POST /api/schedule`,
+> `GET /api/schedule` e `DELETE /api/schedule/{job_id}`.
 
 ### 4. Celery Worker (Fila Assíncrona)
 Inicie o processador de tarefas em segundo plano:
@@ -99,6 +110,73 @@ celery -A src.worker.celery_app worker --loglevel=info
 
 - **Métricas Prometheus:** Expostas dinamicamente na porta `8001` no endpoint `/metrics`. Acesse: [http://localhost:8001/metrics](http://localhost:8001/metrics).
 - **Logs Estruturados:** Configurados via `structlog` com renderização JSON nativa em produção, otimizada para ingestão automática em Datadog, Grafana Loki, e AWS CloudWatch.
+
+---
+
+## 🧩 Adicionando novas fontes via YAML
+
+O SRA é um **canivete suíço universal**: adicionar uma nova fonte de busca é
+uma questão de **YAML, não de código Python**. O `GenericAPISearcher`
+(`src/search/generic_api_searcher.py`) lê o catálogo
+`config/generic_sources.yaml` em runtime e transforma qualquer API REST pública
+em uma fonte de busca — ela é registrada automaticamente no `SearcherFactory` e
+validada pelo teste de wiring.
+
+### Exemplo — adicionar uma nova fonte
+
+Basta acrescentar uma entrada em `config/generic_sources.yaml`:
+
+```yaml
+sources:
+  - id: "openalex"                              # vira o nome do searcher
+    name: "OpenAlex (Scholarly Works)"
+    base_url: "https://api.openalex.org/works"
+    query_param: "search"                       # ?search=<query>. Use null p/ query na URL
+    result_path: "results"                      # JMESPath da lista de resultados
+    title_field: "title"                        # campo do título (aceita aninhado: bibjson.title)
+    url_template: "{id}"                         # {campo} é substituído por item["campo"]
+    snippet_field: "doi"                         # campo da descrição/snippet
+    max_results: 10
+    timeout: 20
+    headers:                                     # opcional
+      Authorization: "Bearer {OPENALEX_API_KEY}" # {ENV_VAR} resolvido de os.environ
+    extra_params:                                # opcional — params fixos
+      mailto: "you@example.com"
+```
+
+**Campos:**
+
+| Campo | Obrigatório | Descrição |
+|---|---|---|
+| `id` | ✅ | Identificador único (vira o nome do searcher) |
+| `base_url` | ✅ | Endpoint da API. Pode conter `{query}` quando `query_param: null` |
+| `result_path` | ✅ | Expressão JMESPath da lista de resultados. `null` = resposta é lista raiz |
+| `query_param` | — | Nome do parâmetro de query (ex: `q`). `null` = query interpolada na URL |
+| `title_field` / `snippet_field` | — | Campos JMESPath (suportam caminho aninhado, ex: `bibjson.title`) |
+| `url_template` | — | Template da URL do resultado; `{campo}` = `item["campo"]` |
+| `max_results` / `timeout` | — | Defaults: 10 resultados, 15s |
+| `headers` / `extra_params` | — | Headers com `{ENV_VAR}` e parâmetros fixos de query |
+
+Depois, opcionalmente, referencie o `id` da fonte em `config/domains.yaml`
+(listas `primary`/`secondary`) para incluí-la no roteamento de um domínio.
+Nenhum código Python novo é necessário.
+
+### Busca universal via MCP
+
+A tool MCP `search_anything(query, hint_domain=None, max_results=10)` faz uma
+busca multi-fonte cobrindo todas as fontes disponíveis (incluindo as genéricas),
+sem precisar conhecer a taxonomia interna do SRA.
+
+### Operadores de busca avançada
+
+A query aceita operadores estilo Google, extraídos automaticamente e aplicados
+pelas fontes que os suportam (SearXNG, DuckDuckGo):
+
+```
+site:reddit.com melhor teclado mecânico
+filetype:pdf machine learning
+intitle:python tutorial
+```
 
 ---
 

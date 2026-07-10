@@ -202,6 +202,23 @@ class TaskAcceptedResponse(BaseModel):
     stream_url: str
 
 
+class ScheduleRequest(BaseModel):
+    """Payload para agendar uma pesquisa recorrente (FASE 6)."""
+
+    query: str = Field(..., min_length=3, max_length=500, example="Novidades em RAG")
+    cron: str = Field("0 8 * * *", example="0 8 * * *")
+    webhook_url: Optional[str] = Field(None, example="https://hooks.slack.com/...")
+    output_dir: str = Field("reports/scheduled", example="reports/scheduled")
+    alert_on_changes: bool = Field(True)
+
+
+class ScheduleResponse(BaseModel):
+    job_id: str
+    query: str
+    cron: str
+    output_dir: str
+
+
 # ─── Núcleo de execução compartilhado ──────────────────────────
 def _build_response(
     req: ResearchRequest, synthesis: Any, duration: float
@@ -428,3 +445,65 @@ async def get_source_costs(session_id: str):
             summary, key=lambda k: summary[k]["avg_latency_ms"], default=None
         ),
     }
+
+
+# ─── Agendamento de pesquisas recorrentes (FASE 6) ─────────────────────
+def _build_scheduler() -> Any:
+    """Constrói um ResearchScheduler com um Orchestrator próprio.
+
+    Instanciado por requisição para não acoplar o ciclo de vida do scheduler
+    (persistido em JSON no disco) ao processo da API.
+    """
+    from src.config import Config
+    from src.orchestrator import Orchestrator
+    from src.scheduler import ResearchScheduler
+
+    return ResearchScheduler(Orchestrator(Config()))
+
+
+@app.post(
+    "/api/schedule",
+    response_model=ScheduleResponse,
+    status_code=201,
+    dependencies=[Depends(verify_api_key)],
+)
+async def schedule_research(payload: ScheduleRequest) -> ScheduleResponse:
+    """Agenda uma pesquisa recorrente com detecção de mudanças e alertas.
+
+    O job é persistido em ``reports/scheduled_jobs.json`` e pode ser executado
+    por um worker externo (APScheduler ou cron) via ``run_scheduled_research``.
+    """
+    try:
+        scheduler = _build_scheduler()
+        job_id = scheduler.schedule_research(
+            query=payload.query,
+            cron_expr=payload.cron,
+            output_dir=payload.output_dir,
+            webhook_url=payload.webhook_url,
+            alert_on_changes=payload.alert_on_changes,
+        )
+        return ScheduleResponse(
+            job_id=job_id,
+            query=payload.query,
+            cron=payload.cron,
+            output_dir=payload.output_dir,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao agendar pesquisa: {e}")
+
+
+@app.get("/api/schedule", dependencies=[Depends(verify_api_key)])
+async def list_scheduled_research() -> dict:
+    """Lista todas as pesquisas recorrentes agendadas."""
+    scheduler = _build_scheduler()
+    jobs = scheduler.list_jobs()
+    return {"total": len(jobs), "jobs": jobs}
+
+
+@app.delete("/api/schedule/{job_id}", dependencies=[Depends(verify_api_key)])
+async def cancel_scheduled_research(job_id: str) -> dict:
+    """Cancela e remove uma pesquisa recorrente agendada."""
+    scheduler = _build_scheduler()
+    if not scheduler.cancel_job(job_id):
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' não encontrado")
+    return {"cancelled": True, "job_id": job_id}
