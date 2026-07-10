@@ -8,7 +8,7 @@ entre os searchers mais compativel com cada tipo de busca.
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from src.types import ExpandedQuery, IntentResult, SourcePlan
 
@@ -188,7 +188,9 @@ class SourcePlanner:
 
         return sorted(sources, key=lambda s: weights.get(s, 1.0), reverse=True)
 
-    def plan(self, intent: IntentResult, queries: list[ExpandedQuery]) -> SourcePlan:
+    def plan(
+        self, intent: IntentResult, queries: list[ExpandedQuery], context: dict = None
+    ) -> SourcePlan:
         """Gera um plano de buscas priorizando as fontes mais relevantes para o dominio.
 
         Aplica roteamento estático para dominios tecnicos conhecidos e
@@ -199,6 +201,7 @@ class SourcePlanner:
         Args:
             intent: Resultado da analise de intencao contendo o dominio detectado.
             queries: Lista de queries expandidas geradas pelo `QueryExpander`.
+            context: Contexto opcional contendo `extra` (com `trust_rules`)
 
         Returns:
             SourcePlan: Plano com sources mapeando cada searcher as suas queries,
@@ -220,7 +223,7 @@ class SourcePlanner:
         # o domínio cai no fallback universal. Domínios técnicos mantêm o
         # roteamento estático (comportamento atual preservado).
         if domain_key == "universal" and self.llm is not None:
-            return self._plan_universal_with_llm(intent, queries, domain_key)
+            return self._plan_universal_with_llm(intent, queries, domain_key, context)
 
         mapping = self.domain_map.get(domain_key, DOMAIN_SOURCES["general"])
 
@@ -231,6 +234,26 @@ class SourcePlanner:
         primary = self._apply_user_weights(primary, domain_key)
         secondary = self._apply_user_weights(secondary, domain_key)
 
+        # Fase 2 — TrustRuleStore: aplica regras de allow/deny do usuário
+        if context is None:
+            trust_rules: dict = {}
+        elif isinstance(context, dict):
+            trust_rules = context.get("extra", {}).get("trust_rules", {})
+        else:
+            trust_rules = getattr(context, "extra", {}).get("trust_rules", {})
+        if trust_rules:
+            denied = {s for s, tier in trust_rules.items() if tier == "deny"}
+            allowed_priority = [s for s, tier in trust_rules.items() if tier == "allow"]
+
+            # Remove fontes denylisted do plano
+            primary = [s for s in primary if s not in denied]
+            secondary = [s for s in secondary if s not in denied]
+
+            # Promove fontes allowlisted para o topo de primary
+            for s in reversed(allowed_priority):
+                if s not in primary:
+                    primary.insert(0, s)
+
         plan: dict[str, list[ExpandedQuery]] = {}
         for source in primary + secondary:
             plan[source] = self._select_queries_for_source(queries, source, intent)
@@ -238,7 +261,11 @@ class SourcePlanner:
         return SourcePlan(sources=plan, primary=primary, secondary=secondary)
 
     def _plan_universal_with_llm(
-        self, intent: IntentResult, queries: list[ExpandedQuery], domain_key: str
+        self,
+        intent: IntentResult,
+        queries: list[ExpandedQuery],
+        domain_key: str,
+        context: dict = None,
     ) -> SourcePlan:
         """Planeia o dominio universal usando LLM + fallback em cascata.
 
@@ -274,6 +301,26 @@ class SourcePlanner:
         # Fase 4 — personalização: reordena conforme o histórico de fontes do usuário.
         primary = self._apply_user_weights(primary, domain_key)
         secondary = self._apply_user_weights(secondary, domain_key)
+
+        # Fase 2 — TrustRuleStore: aplica regras de allow/deny do usuário
+        if context is None:
+            trust_rules: dict = {}
+        elif isinstance(context, dict):
+            trust_rules = context.get("extra", {}).get("trust_rules", {})
+        else:
+            trust_rules = getattr(context, "extra", {}).get("trust_rules", {})
+        if trust_rules:
+            denied = {s for s, tier in trust_rules.items() if tier == "deny"}
+            allowed_priority = [s for s, tier in trust_rules.items() if tier == "allow"]
+
+            # Remove fontes denylisted do plano
+            primary = [s for s in primary if s not in denied]
+            secondary = [s for s in secondary if s not in denied]
+
+            # Promove fontes allowlisted para o topo de primary
+            for s in reversed(allowed_priority):
+                if s not in primary:
+                    primary.insert(0, s)
 
         plan: dict[str, list[ExpandedQuery]] = {}
         for source in primary + secondary:
