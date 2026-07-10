@@ -1,0 +1,2056 @@
+{
+  "meta": {
+    "count": 4186922,
+    "db_response_time_ms": 271,
+    "page": 1,
+    "per_page": 3,
+    "groups_count": null,
+    "x_query": {
+      "oql": "works where full text has (climate change)",
+      "oqo": {
+        "get_rows": "works",
+        "filter_rows": [
+          {
+            "column_id": "fulltext.search",
+            "value": "climate change",
+            "operator": "has"
+          }
+        ],
+        "per_page": 3
+      },
+      "url": "/works?filter=fulltext.search:climate change&per_page=3"
+    },
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W2939474406",
+      "doi": null,
+      "title": "Climate change 2007: the physical science basis",
+      "display_name": "Climate change 2007: the physical science basis",
+      "relevance_score": 12445.001,
+      "publication_year": 2007,
+      "publication_date": "2007-01-01",
+      "ids": {
+        "openalex": "https://openalex.org/W2939474406",
+        "mag": "2939474406"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "pmh:info:ark/67531/metadc950228",
+        "is_oa": true,
+        "landing_page_url": "https://digital.library.unt.edu/ark:/67531/metadc950228/",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4306400792",
+          "display_name": "University of North Texas Digital Library (University of North Texas)",
+          "issn_l": null,
+          "issn": null,
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": false,
+          "host_organization": "https://openalex.org/I123534392",
+          "host_organization_name": "University of North Texas",
+          "host_organization_lineage": [
+            "https://openalex.org/I123534392"
+          ],
+          "host_organization_lineage_names": [],
+          "type": "repository"
+        },
+        "license": "public-domain",
+        "license_id": "https://openalex.org/licenses/public-domain",
+        "version": "submittedVersion",
+        "is_accepted": false,
+        "is_published": false,
+        "raw_source_name": "",
+        "raw_type": "Report"
+      },
+      "type": "article",
+      "indexed_in": [],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "green",
+        "oa_url": "https://digital.library.unt.edu/ark:/67531/metadc950228/",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5019124017",
+            "display_name": "Susan Solomon",
+            "orcid": "https://orcid.org/0000-0002-2020-7581"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Susan L. Solomon",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5110657512",
+            "display_name": "Dahe Qin",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Dahe Qin",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5046285468",
+            "display_name": "Martin Manning",
+            "orcid": "https://orcid.org/0000-0003-2628-6089"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Martin Manning",
+          "raw_affiliation_strings": [],
+          "raw_orcid": "https://orcid.org/0000-0003-2628-6089",
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5052803135",
+            "display_name": "Melinda Marquis",
+            "orcid": "https://orcid.org/0000-0002-4073-2965"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Melinda Marquis",
+          "raw_affiliation_strings": [],
+          "raw_orcid": "https://orcid.org/0000-0002-4073-2965",
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5111441747",
+            "display_name": "Kristen Averyt",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Kristen Averyt",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5019954898",
+            "display_name": "Melinda Tignor",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "M Tignor",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5039274552",
+            "display_name": "H. L. Miller",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "H. L. Miller",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5101873521",
+            "display_name": "Zhenlin Chen",
+            "orcid": "https://orcid.org/0000-0003-0561-8929"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Zhenlin Chen",
+          "raw_affiliation_strings": [],
+          "raw_orcid": "https://orcid.org/0000-0003-0561-8929",
+          "affiliations": []
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 0,
+      "institutions_distinct_count": 0,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": null,
+      "apc_paid": null,
+      "fwci": 1450.2696,
+      "has_fulltext": false,
+      "cited_by_count": 23475,
+      "citation_normalized_percentile": {
+        "value": 1.0,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 95,
+        "max": 100
+      },
+      "biblio": {
+        "volume": null,
+        "issue": null,
+        "first_page": null,
+        "last_page": null
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T13530",
+        "display_name": "Climate Change and Environmental Impact",
+        "score": 0.09220000356435776,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2306",
+          "display_name": "Global and Planetary Change"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/23",
+          "display_name": "Environmental Science"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/3",
+          "display_name": "Physical Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T13530",
+          "display_name": "Climate Change and Environmental Impact",
+          "score": 0.09220000356435776,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2306",
+            "display_name": "Global and Planetary Change"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/23",
+            "display_name": "Environmental Science"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T14329",
+          "display_name": "Science and Climate Studies",
+          "score": 0.08250000327825546,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2306",
+            "display_name": "Global and Planetary Change"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/23",
+            "display_name": "Environmental Science"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/climate-change",
+          "display_name": "Climate change",
+          "score": 0.7152025699615479
+        },
+        {
+          "id": "https://openalex.org/keywords/climatology",
+          "display_name": "Climatology",
+          "score": 0.6331238746643066
+        },
+        {
+          "id": "https://openalex.org/keywords/environmental-science",
+          "display_name": "Environmental science",
+          "score": 0.5505313873291016
+        },
+        {
+          "id": "https://openalex.org/keywords/climate-model",
+          "display_name": "Climate model",
+          "score": 0.471633642911911
+        },
+        {
+          "id": "https://openalex.org/keywords/climate-commitment",
+          "display_name": "Climate commitment",
+          "score": 0.42075997591018677
+        },
+        {
+          "id": "https://openalex.org/keywords/atmosphere",
+          "display_name": "Atmosphere (unit)",
+          "score": 0.41948097944259644
+        },
+        {
+          "id": "https://openalex.org/keywords/global-warming",
+          "display_name": "Global warming",
+          "score": 0.3958234190940857
+        },
+        {
+          "id": "https://openalex.org/keywords/physical-geography",
+          "display_name": "Physical geography",
+          "score": 0.3215898275375366
+        },
+        {
+          "id": "https://openalex.org/keywords/geography",
+          "display_name": "Geography",
+          "score": 0.3178706765174866
+        },
+        {
+          "id": "https://openalex.org/keywords/meteorology",
+          "display_name": "Meteorology",
+          "score": 0.3072689175605774
+        },
+        {
+          "id": "https://openalex.org/keywords/effects-of-global-warming",
+          "display_name": "Effects of global warming",
+          "score": 0.295986533164978
+        },
+        {
+          "id": "https://openalex.org/keywords/geology",
+          "display_name": "Geology",
+          "score": 0.22779124975204468
+        },
+        {
+          "id": "https://openalex.org/keywords/oceanography",
+          "display_name": "Oceanography",
+          "score": 0.15175554156303406
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C132651083",
+          "wikidata": "https://www.wikidata.org/wiki/Q7942",
+          "display_name": "Climate change",
+          "level": 2,
+          "score": 0.7152025699615479
+        },
+        {
+          "id": "https://openalex.org/C49204034",
+          "wikidata": "https://www.wikidata.org/wiki/Q52139",
+          "display_name": "Climatology",
+          "level": 1,
+          "score": 0.6331238746643066
+        },
+        {
+          "id": "https://openalex.org/C39432304",
+          "wikidata": "https://www.wikidata.org/wiki/Q188847",
+          "display_name": "Environmental science",
+          "level": 0,
+          "score": 0.5505313873291016
+        },
+        {
+          "id": "https://openalex.org/C168754636",
+          "wikidata": "https://www.wikidata.org/wiki/Q620920",
+          "display_name": "Climate model",
+          "level": 3,
+          "score": 0.471633642911911
+        },
+        {
+          "id": "https://openalex.org/C48999079",
+          "wikidata": "https://www.wikidata.org/wiki/Q5133511",
+          "display_name": "Climate commitment",
+          "level": 5,
+          "score": 0.42075997591018677
+        },
+        {
+          "id": "https://openalex.org/C65440619",
+          "wikidata": "https://www.wikidata.org/wiki/Q177974",
+          "display_name": "Atmosphere (unit)",
+          "level": 2,
+          "score": 0.41948097944259644
+        },
+        {
+          "id": "https://openalex.org/C115343472",
+          "wikidata": "https://www.wikidata.org/wiki/Q7942",
+          "display_name": "Global warming",
+          "level": 3,
+          "score": 0.3958234190940857
+        },
+        {
+          "id": "https://openalex.org/C100970517",
+          "wikidata": "https://www.wikidata.org/wiki/Q52107",
+          "display_name": "Physical geography",
+          "level": 1,
+          "score": 0.3215898275375366
+        },
+        {
+          "id": "https://openalex.org/C205649164",
+          "wikidata": "https://www.wikidata.org/wiki/Q1071",
+          "display_name": "Geography",
+          "level": 0,
+          "score": 0.3178706765174866
+        },
+        {
+          "id": "https://openalex.org/C153294291",
+          "wikidata": "https://www.wikidata.org/wiki/Q25261",
+          "display_name": "Meteorology",
+          "level": 1,
+          "score": 0.3072689175605774
+        },
+        {
+          "id": "https://openalex.org/C114990195",
+          "wikidata": "https://www.wikidata.org/wiki/Q1430548",
+          "display_name": "Effects of global warming",
+          "level": 4,
+          "score": 0.295986533164978
+        },
+        {
+          "id": "https://openalex.org/C127313418",
+          "wikidata": "https://www.wikidata.org/wiki/Q1069",
+          "display_name": "Geology",
+          "level": 0,
+          "score": 0.22779124975204468
+        },
+        {
+          "id": "https://openalex.org/C111368507",
+          "wikidata": "https://www.wikidata.org/wiki/Q43518",
+          "display_name": "Oceanography",
+          "level": 1,
+          "score": 0.15175554156303406
+        }
+      ],
+      "mesh": [],
+      "locations_count": 3,
+      "locations": [
+        {
+          "id": "pmh:info:ark/67531/metadc950228",
+          "is_oa": true,
+          "landing_page_url": "https://digital.library.unt.edu/ark:/67531/metadc950228/",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400792",
+            "display_name": "University of North Texas Digital Library (University of North Texas)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I123534392",
+            "host_organization_name": "University of North Texas",
+            "host_organization_lineage": [
+              "https://openalex.org/I123534392"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "public-domain",
+          "license_id": "https://openalex.org/licenses/public-domain",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "",
+          "raw_type": "Report"
+        },
+        {
+          "id": "pmh:oai:aleph.bib-bvb.de:BVB01-017196984",
+          "is_oa": false,
+          "landing_page_url": "http://bvbr.bib-bvb.de:8991/F?func=service&amp;doc_library=BVB01&amp;local_base=BVB01&amp;doc_number=017196984&amp;sequence=000001&amp;line_number=0001&amp;func_code=DB_RECORDS&amp;service_type=MEDIA",
+          "pdf_url": null,
+          "source": null,
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "",
+          "raw_type": "text"
+        },
+        {
+          "id": "mag:2939474406",
+          "is_oa": false,
+          "landing_page_url": "https://digital.library.unt.edu/ark:/67531/metadc950228/m2/1/high_res_d/ar4_wg1_full_report.pdf",
+          "pdf_url": null,
+          "source": null,
+          "license": null,
+          "license_id": null,
+          "version": null,
+          "is_accepted": false,
+          "is_published": null,
+          "raw_source_name": null,
+          "raw_type": null
+        }
+      ],
+      "best_oa_location": {
+        "id": "pmh:info:ark/67531/metadc950228",
+        "is_oa": true,
+        "landing_page_url": "https://digital.library.unt.edu/ark:/67531/metadc950228/",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4306400792",
+          "display_name": "University of North Texas Digital Library (University of North Texas)",
+          "issn_l": null,
+          "issn": null,
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": false,
+          "host_organization": "https://openalex.org/I123534392",
+          "host_organization_name": "University of North Texas",
+          "host_organization_lineage": [
+            "https://openalex.org/I123534392"
+          ],
+          "host_organization_lineage_names": [],
+          "type": "repository"
+        },
+        "license": "public-domain",
+        "license_id": "https://openalex.org/licenses/public-domain",
+        "version": "submittedVersion",
+        "is_accepted": false,
+        "is_published": false,
+        "raw_source_name": "",
+        "raw_type": "Report"
+      },
+      "sustainable_development_goals": [
+        {
+          "display_name": "Climate action",
+          "score": 0.7599999904632568,
+          "id": "https://metadata.un.org/sdg/13"
+        }
+      ],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "pdf": false,
+        "grobid_xml": false
+      },
+      "content_urls": null,
+      "referenced_works_count": 0,
+      "referenced_works": [],
+      "related_works": [
+        "https://openalex.org/W617039848",
+        "https://openalex.org/W2924055038",
+        "https://openalex.org/W2907110490",
+        "https://openalex.org/W2607177562",
+        "https://openalex.org/W2173251738",
+        "https://openalex.org/W2151455735",
+        "https://openalex.org/W2133501143",
+        "https://openalex.org/W2126975094",
+        "https://openalex.org/W2126416729",
+        "https://openalex.org/W21054777",
+        "https://openalex.org/W2062217294",
+        "https://openalex.org/W2024966118",
+        "https://openalex.org/W1909570941",
+        "https://openalex.org/W1621450917",
+        "https://openalex.org/W1575579655",
+        "https://openalex.org/W1548396839",
+        "https://openalex.org/W1523963696",
+        "https://openalex.org/W1522296012",
+        "https://openalex.org/W1520428197",
+        "https://openalex.org/W1007704209"
+      ],
+      "abstract_inverted_index": {
+        "This": [
+          0
+        ],
+        "report": [
+          1
+        ],
+        "is": [
+          2
+        ],
+        "the": [
+          3,
+          7,
+          17,
+          25,
+          34
+        ],
+        "first": [
+          4
+        ],
+        "volume": [
+          5
+        ],
+        "of": [
+          6,
+          20,
+          49
+        ],
+        "IPCC's": [
+          8
+        ],
+        "Fourth": [
+          9
+        ],
+        "Assessment": [
+          10
+        ],
+        "Report.": [
+          11
+        ],
+        "It": [
+          12
+        ],
+        "covers": [
+          13
+        ],
+        "several": [
+          14
+        ],
+        "topics": [
+          15
+        ],
+        "including": [
+          16
+        ],
+        "extensive": [
+          18
+        ],
+        "range": [
+          19
+        ],
+        "observations": [
+          21
+        ],
+        "now": [
+          22
+        ],
+        "available": [
+          23
+        ],
+        "for": [
+          24,
+          47
+        ],
+        "atmosphere": [
+          26
+        ],
+        "and": [
+          27,
+          42,
+          44
+        ],
+        "surface,": [
+          28
+        ],
+        "changes": [
+          29
+        ],
+        "in": [
+          30
+        ],
+        "sea": [
+          31
+        ],
+        "level,": [
+          32
+        ],
+        "assesses": [
+          33
+        ],
+        "paleoclimatic": [
+          35
+        ],
+        "perspective,": [
+          36
+        ],
+        "climate": [
+          37,
+          45
+        ],
+        "change": [
+          38
+        ],
+        "causes": [
+          39
+        ],
+        "both": [
+          40
+        ],
+        "natural": [
+          41
+        ],
+        "anthropogenic,": [
+          43
+        ],
+        "models": [
+          46
+        ],
+        "projections": [
+          48
+        ],
+        "global": [
+          50
+        ],
+        "climate.": [
+          51
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 1
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 77
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 147
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 156
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 173
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 432
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 392
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 496
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 515
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 628
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 851
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 1759
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 2722
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 3057
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 3050
+        }
+      ],
+      "updated_date": "2026-07-04T07:58:01.006859",
+      "created_date": "2025-10-10T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W1520428197",
+      "doi": null,
+      "title": "Climate change 2007 : the physical science basis : contribution of Working Group I to the Fourth Assessment Report of the Intergovernmental Panel on Climate Change",
+      "display_name": "Climate change 2007 : the physical science basis : contribution of Working Group I to the Fourth Assessment Report of the Intergovernmental Panel on Climate Change",
+      "relevance_score": 10576.522,
+      "publication_year": 2007,
+      "publication_date": "2007-01-01",
+      "ids": {
+        "openalex": "https://openalex.org/W1520428197",
+        "mag": "1520428197"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "pmh:oai:aleph.bib-bvb.de:BVB01-015654135",
+        "is_oa": false,
+        "landing_page_url": "http://www.ipcc.ch/ipccreports/ar4-wg1.htm",
+        "pdf_url": null,
+        "source": null,
+        "license": null,
+        "license_id": null,
+        "version": "submittedVersion",
+        "is_accepted": false,
+        "is_published": false,
+        "raw_source_name": "",
+        "raw_type": "text"
+      },
+      "type": "book",
+      "indexed_in": [],
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5019124017",
+            "display_name": "Susan Solomon",
+            "orcid": "https://orcid.org/0000-0002-2020-7581"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Susan L. Solomon",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 0,
+      "institutions_distinct_count": 0,
+      "corresponding_author_ids": [
+        "https://openalex.org/A5019124017"
+      ],
+      "corresponding_institution_ids": [],
+      "apc_list": null,
+      "apc_paid": null,
+      "fwci": 312.7454,
+      "has_fulltext": false,
+      "cited_by_count": 17680,
+      "citation_normalized_percentile": {
+        "value": 1.0,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 99,
+        "max": 100
+      },
+      "biblio": {
+        "volume": null,
+        "issue": null,
+        "first_page": null,
+        "last_page": null
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T13530",
+        "display_name": "Climate Change and Environmental Impact",
+        "score": 0.7878000140190125,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2306",
+          "display_name": "Global and Planetary Change"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/23",
+          "display_name": "Environmental Science"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/3",
+          "display_name": "Physical Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T13530",
+          "display_name": "Climate Change and Environmental Impact",
+          "score": 0.7878000140190125,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2306",
+            "display_name": "Global and Planetary Change"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/23",
+            "display_name": "Environmental Science"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/climate-change",
+          "display_name": "Climate change",
+          "score": 0.7563860416412354
+        },
+        {
+          "id": "https://openalex.org/keywords/climatology",
+          "display_name": "Climatology",
+          "score": 0.7036580443382263
+        },
+        {
+          "id": "https://openalex.org/keywords/radiative-forcing",
+          "display_name": "Radiative forcing",
+          "score": 0.6086887717247009
+        },
+        {
+          "id": "https://openalex.org/keywords/environmental-science",
+          "display_name": "Environmental science",
+          "score": 0.5371281504631042
+        },
+        {
+          "id": "https://openalex.org/keywords/climate-model",
+          "display_name": "Climate model",
+          "score": 0.48877856135368347
+        },
+        {
+          "id": "https://openalex.org/keywords/paleoclimatology",
+          "display_name": "Paleoclimatology",
+          "score": 0.4402509331703186
+        },
+        {
+          "id": "https://openalex.org/keywords/snow",
+          "display_name": "Snow",
+          "score": 0.4271332621574402
+        },
+        {
+          "id": "https://openalex.org/keywords/forcing",
+          "display_name": "Forcing (mathematics)",
+          "score": 0.41558197140693665
+        },
+        {
+          "id": "https://openalex.org/keywords/geography",
+          "display_name": "Geography",
+          "score": 0.3264678716659546
+        },
+        {
+          "id": "https://openalex.org/keywords/meteorology",
+          "display_name": "Meteorology",
+          "score": 0.26943427324295044
+        },
+        {
+          "id": "https://openalex.org/keywords/oceanography",
+          "display_name": "Oceanography",
+          "score": 0.15989172458648682
+        },
+        {
+          "id": "https://openalex.org/keywords/geology",
+          "display_name": "Geology",
+          "score": 0.14427876472473145
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C132651083",
+          "wikidata": "https://www.wikidata.org/wiki/Q7942",
+          "display_name": "Climate change",
+          "level": 2,
+          "score": 0.7563860416412354
+        },
+        {
+          "id": "https://openalex.org/C49204034",
+          "wikidata": "https://www.wikidata.org/wiki/Q52139",
+          "display_name": "Climatology",
+          "level": 1,
+          "score": 0.7036580443382263
+        },
+        {
+          "id": "https://openalex.org/C99578197",
+          "wikidata": "https://www.wikidata.org/wiki/Q1463606",
+          "display_name": "Radiative forcing",
+          "level": 3,
+          "score": 0.6086887717247009
+        },
+        {
+          "id": "https://openalex.org/C39432304",
+          "wikidata": "https://www.wikidata.org/wiki/Q188847",
+          "display_name": "Environmental science",
+          "level": 0,
+          "score": 0.5371281504631042
+        },
+        {
+          "id": "https://openalex.org/C168754636",
+          "wikidata": "https://www.wikidata.org/wiki/Q620920",
+          "display_name": "Climate model",
+          "level": 3,
+          "score": 0.48877856135368347
+        },
+        {
+          "id": "https://openalex.org/C33683781",
+          "wikidata": "https://www.wikidata.org/wiki/Q191069",
+          "display_name": "Paleoclimatology",
+          "level": 3,
+          "score": 0.4402509331703186
+        },
+        {
+          "id": "https://openalex.org/C197046000",
+          "wikidata": "https://www.wikidata.org/wiki/Q7561",
+          "display_name": "Snow",
+          "level": 2,
+          "score": 0.4271332621574402
+        },
+        {
+          "id": "https://openalex.org/C197115733",
+          "wikidata": "https://www.wikidata.org/wiki/Q1003136",
+          "display_name": "Forcing (mathematics)",
+          "level": 2,
+          "score": 0.41558197140693665
+        },
+        {
+          "id": "https://openalex.org/C205649164",
+          "wikidata": "https://www.wikidata.org/wiki/Q1071",
+          "display_name": "Geography",
+          "level": 0,
+          "score": 0.3264678716659546
+        },
+        {
+          "id": "https://openalex.org/C153294291",
+          "wikidata": "https://www.wikidata.org/wiki/Q25261",
+          "display_name": "Meteorology",
+          "level": 1,
+          "score": 0.26943427324295044
+        },
+        {
+          "id": "https://openalex.org/C111368507",
+          "wikidata": "https://www.wikidata.org/wiki/Q43518",
+          "display_name": "Oceanography",
+          "level": 1,
+          "score": 0.15989172458648682
+        },
+        {
+          "id": "https://openalex.org/C127313418",
+          "wikidata": "https://www.wikidata.org/wiki/Q1069",
+          "display_name": "Geology",
+          "level": 0,
+          "score": 0.14427876472473145
+        }
+      ],
+      "mesh": [],
+      "locations_count": 2,
+      "locations": [
+        {
+          "id": "pmh:oai:aleph.bib-bvb.de:BVB01-015654135",
+          "is_oa": false,
+          "landing_page_url": "http://www.ipcc.ch/ipccreports/ar4-wg1.htm",
+          "pdf_url": null,
+          "source": null,
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "",
+          "raw_type": "text"
+        },
+        {
+          "id": "mag:1520428197",
+          "is_oa": false,
+          "landing_page_url": "https://boris.unibe.ch/71452/",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306462995",
+            "display_name": "Cambridge University Press eBooks",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/P4310311721",
+            "host_organization_name": "Cambridge University Press",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310311721",
+              "https://openalex.org/P4310311702"
+            ],
+            "host_organization_lineage_names": [
+              "Cambridge University Press",
+              "University of Cambridge"
+            ],
+            "type": "ebook platform"
+          },
+          "license": null,
+          "license_id": null,
+          "version": null,
+          "is_accepted": false,
+          "is_published": null,
+          "raw_source_name": "Cambridge University Press eBooks",
+          "raw_type": null
+        }
+      ],
+      "best_oa_location": null,
+      "sustainable_development_goals": [
+        {
+          "display_name": "Climate action",
+          "score": 0.8500000238418579,
+          "id": "https://metadata.un.org/sdg/13"
+        }
+      ],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "pdf": false,
+        "grobid_xml": false
+      },
+      "content_urls": null,
+      "referenced_works_count": 0,
+      "referenced_works": [],
+      "related_works": [
+        "https://openalex.org/W617039848",
+        "https://openalex.org/W2939474406",
+        "https://openalex.org/W2907110490",
+        "https://openalex.org/W2607177562",
+        "https://openalex.org/W2173251738",
+        "https://openalex.org/W2151455735",
+        "https://openalex.org/W2133501143",
+        "https://openalex.org/W2126975094",
+        "https://openalex.org/W2126416729",
+        "https://openalex.org/W21054777",
+        "https://openalex.org/W2062667641",
+        "https://openalex.org/W2024649846",
+        "https://openalex.org/W1905429483",
+        "https://openalex.org/W1621450917",
+        "https://openalex.org/W1583276246",
+        "https://openalex.org/W1575579655",
+        "https://openalex.org/W1548396839",
+        "https://openalex.org/W1523963696",
+        "https://openalex.org/W1522296012",
+        "https://openalex.org/W1007704209"
+      ],
+      "abstract_inverted_index": {
+        "Summary": [
+          0
+        ],
+        "for": [
+          1
+        ],
+        "policymakers": [
+          2
+        ],
+        "--": [
+          3,
+          6,
+          13,
+          21,
+          28,
+          37,
+          45,
+          47,
+          57,
+          63,
+          69,
+          73,
+          77,
+          81,
+          92,
+          103
+        ],
+        "Technical": [
+          4
+        ],
+        "summary": [
+          5
+        ],
+        "Historical": [
+          7
+        ],
+        "overview": [
+          8
+        ],
+        "of": [
+          9,
+          96
+        ],
+        "climate": [
+          10,
+          26,
+          40,
+          53,
+          67,
+          71,
+          75
+        ],
+        "change": [
+          11,
+          27,
+          41,
+          68
+        ],
+        "science": [
+          12
+        ],
+        "Changes": [
+          14
+        ],
+        "in": [
+          15,
+          31,
+          51
+        ],
+        "atmospheric": [
+          16,
+          23
+        ],
+        "constituents": [
+          17
+        ],
+        "and": [
+          18,
+          25,
+          34,
+          42,
+          55,
+          60,
+          65
+        ],
+        "radiative": [
+          19
+        ],
+        "forcing": [
+          20
+        ],
+        "Observations:": [
+          22,
+          29,
+          38
+        ],
+        "surface": [
+          24
+        ],
+        "changes": [
+          30,
+          50
+        ],
+        "snow,": [
+          32
+        ],
+        "ice,": [
+          33
+        ],
+        "frozen": [
+          35
+        ],
+        "ground": [
+          36
+        ],
+        "ocean": [
+          39
+        ],
+        "sea": [
+          43
+        ],
+        "level": [
+          44
+        ],
+        "Paleoclimate": [
+          46
+        ],
+        "Coupling": [
+          48
+        ],
+        "between": [
+          49
+        ],
+        "the": [
+          52,
+          86,
+          97
+        ],
+        "system": [
+          54
+        ],
+        "biogeochemistry": [
+          56
+        ],
+        "Climate": [
+          58
+        ],
+        "models": [
+          59
+        ],
+        "their": [
+          61
+        ],
+        "evaluation": [
+          62
+        ],
+        "Understanding": [
+          64
+        ],
+        "attributing": [
+          66
+        ],
+        "Global": [
+          70
+        ],
+        "projections": [
+          72,
+          76
+        ],
+        "Regional": [
+          74
+        ],
+        "Annex": [
+          78,
+          82,
+          93,
+          104
+        ],
+        "I:": [
+          79
+        ],
+        "Glossary": [
+          80
+        ],
+        "II:": [
+          83
+        ],
+        "Contributors": [
+          84
+        ],
+        "to": [
+          85
+        ],
+        "IPCC": [
+          87,
+          98
+        ],
+        "WGI": [
+          88,
+          99
+        ],
+        "Fourth": [
+          89,
+          100
+        ],
+        "Assessment": [
+          90,
+          101
+        ],
+        "Report": [
+          91,
+          102
+        ],
+        "III:": [
+          94
+        ],
+        "Reviewers": [
+          95
+        ],
+        "IV:": [
+          105
+        ],
+        "Acronyms.": [
+          106
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2025,
+          "cited_by_count": 138
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 256
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 336
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 383
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 523
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 523
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 617
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 654
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 712
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 870
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 1031
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 1620
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 2072
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 1946
+        }
+      ],
+      "updated_date": "2026-07-04T07:58:01.006859",
+      "created_date": "2025-10-10T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W1522296012",
+      "doi": "https://doi.org/10.2307/20033020",
+      "title": "Climate Change 2001: The Scientific Basis",
+      "display_name": "Climate Change 2001: The Scientific Basis",
+      "relevance_score": 9905.04,
+      "publication_year": 2002,
+      "publication_date": "2002-01-01",
+      "ids": {
+        "openalex": "https://openalex.org/W1522296012",
+        "doi": "https://doi.org/10.2307/20033020",
+        "mag": "1522296012"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.2307/20033020",
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.2307/20033020",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S7015929",
+          "display_name": "Foreign Affairs",
+          "issn_l": "0015-7120",
+          "issn": [
+            "0015-7120",
+            "2327-7793"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310316137",
+          "host_organization_name": "Council on Foreign Relations",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310316137"
+          ],
+          "host_organization_lineage_names": [
+            "Council on Foreign Relations"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Foreign Affairs",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref"
+      ],
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5108634046",
+            "display_name": "Richard N. Cooper",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Richard N. Cooper",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5016024634",
+            "display_name": "J. T. Houghton",
+            "orcid": "https://orcid.org/0000-0001-5802-4759"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "J. T. Houghton",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5070580406",
+            "display_name": "James J. McCarthy",
+            "orcid": "https://orcid.org/0000-0001-8881-935X"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "James J. McCarthy",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5110382351",
+            "display_name": "Bert Metz",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Bert Metz",
+          "raw_affiliation_strings": [],
+          "raw_orcid": null,
+          "affiliations": []
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 0,
+      "institutions_distinct_count": 0,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": null,
+      "apc_paid": null,
+      "fwci": 3148.7061,
+      "has_fulltext": false,
+      "cited_by_count": 12983,
+      "citation_normalized_percentile": {
+        "value": 1.0,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 97,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "81",
+        "issue": "1",
+        "first_page": "208",
+        "last_page": "208"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10471",
+        "display_name": "Climate Change Policy and Economics",
+        "score": 0.5778999924659729,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2002",
+          "display_name": "Economics and Econometrics"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/20",
+          "display_name": "Economics, Econometrics and Finance"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/2",
+          "display_name": "Social Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10471",
+          "display_name": "Climate Change Policy and Economics",
+          "score": 0.5778999924659729,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2002",
+            "display_name": "Economics and Econometrics"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/20",
+            "display_name": "Economics, Econometrics and Finance"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/2",
+            "display_name": "Social Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T13530",
+          "display_name": "Climate Change and Environmental Impact",
+          "score": 0.5679000020027161,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2306",
+            "display_name": "Global and Planetary Change"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/23",
+            "display_name": "Environmental Science"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/political-science",
+          "display_name": "Political science",
+          "score": 0.5740510821342468
+        },
+        {
+          "id": "https://openalex.org/keywords/climate-change",
+          "display_name": "Climate change",
+          "score": 0.5726560354232788
+        },
+        {
+          "id": "https://openalex.org/keywords/development-economics",
+          "display_name": "Development economics",
+          "score": 0.3314501643180847
+        },
+        {
+          "id": "https://openalex.org/keywords/economics",
+          "display_name": "Economics",
+          "score": 0.20766955614089966
+        },
+        {
+          "id": "https://openalex.org/keywords/geology",
+          "display_name": "Geology",
+          "score": 0.10794350504875183
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C17744445",
+          "wikidata": "https://www.wikidata.org/wiki/Q36442",
+          "display_name": "Political science",
+          "level": 0,
+          "score": 0.5740510821342468
+        },
+        {
+          "id": "https://openalex.org/C132651083",
+          "wikidata": "https://www.wikidata.org/wiki/Q7942",
+          "display_name": "Climate change",
+          "level": 2,
+          "score": 0.5726560354232788
+        },
+        {
+          "id": "https://openalex.org/C47768531",
+          "wikidata": "https://www.wikidata.org/wiki/Q1127188",
+          "display_name": "Development economics",
+          "level": 1,
+          "score": 0.3314501643180847
+        },
+        {
+          "id": "https://openalex.org/C162324750",
+          "wikidata": "https://www.wikidata.org/wiki/Q8134",
+          "display_name": "Economics",
+          "level": 0,
+          "score": 0.20766955614089966
+        },
+        {
+          "id": "https://openalex.org/C127313418",
+          "wikidata": "https://www.wikidata.org/wiki/Q1069",
+          "display_name": "Geology",
+          "level": 0,
+          "score": 0.10794350504875183
+        },
+        {
+          "id": "https://openalex.org/C111368507",
+          "wikidata": "https://www.wikidata.org/wiki/Q43518",
+          "display_name": "Oceanography",
+          "level": 1,
+          "score": 0.0
+        }
+      ],
+      "mesh": [],
+      "locations_count": 1,
+      "locations": [
+        {
+          "id": "doi:10.2307/20033020",
+          "is_oa": false,
+          "landing_page_url": "https://doi.org/10.2307/20033020",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S7015929",
+            "display_name": "Foreign Affairs",
+            "issn_l": "0015-7120",
+            "issn": [
+              "0015-7120",
+              "2327-7793"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310316137",
+            "host_organization_name": "Council on Foreign Relations",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310316137"
+            ],
+            "host_organization_lineage_names": [
+              "Council on Foreign Relations"
+            ],
+            "type": "journal"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Foreign Affairs",
+          "raw_type": "journal-article"
+        }
+      ],
+      "best_oa_location": null,
+      "sustainable_development_goals": [
+        {
+          "display_name": "Climate action",
+          "score": 0.75,
+          "id": "https://metadata.un.org/sdg/13"
+        }
+      ],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "pdf": false,
+        "grobid_xml": false
+      },
+      "content_urls": null,
+      "referenced_works_count": 0,
+      "referenced_works": [],
+      "related_works": [
+        "https://openalex.org/W2748952813",
+        "https://openalex.org/W1968810339",
+        "https://openalex.org/W3096121261",
+        "https://openalex.org/W3190643595",
+        "https://openalex.org/W4376872516",
+        "https://openalex.org/W4205311831",
+        "https://openalex.org/W4225788860",
+        "https://openalex.org/W1991192109",
+        "https://openalex.org/W3149705085",
+        "https://openalex.org/W2895122413"
+      ],
+      "abstract_inverted_index": {
+        "Summary": [
+          0
+        ],
+        "for": [
+          1
+        ],
+        "policymakers": [
+          2
+        ],
+        "Technical": [
+          3
+        ],
+        "summary": [
+          4
+        ],
+        "1.": [
+          5
+        ],
+        "The": [
+          6,
+          19
+        ],
+        "climate": [
+          7,
+          14,
+          42,
+          46,
+          57,
+          61,
+          75
+        ],
+        "system": [
+          8
+        ],
+        "-": [
+          9,
+          63
+        ],
+        "an": [
+          10
+        ],
+        "overview": [
+          11
+        ],
+        "2.": [
+          12
+        ],
+        "Observed": [
+          13
+        ],
+        "variability": [
+          15
+        ],
+        "and": [
+          16,
+          22,
+          28,
+          35,
+          48,
+          65,
+          77
+        ],
+        "change": [
+          17,
+          43,
+          58,
+          76
+        ],
+        "3.": [
+          18
+        ],
+        "carbon": [
+          20
+        ],
+        "cycle": [
+          21
+        ],
+        "atmospheric": [
+          23
+        ],
+        "CO2": [
+          24
+        ],
+        "4.": [
+          25
+        ],
+        "Atmospheric": [
+          26
+        ],
+        "chemistry": [
+          27
+        ],
+        "greenhouse": [
+          29
+        ],
+        "gases": [
+          30
+        ],
+        "5.": [
+          31
+        ],
+        "Aerosols,": [
+          32
+        ],
+        "their": [
+          33
+        ],
+        "direct": [
+          34
+        ],
+        "indirect": [
+          36
+        ],
+        "effects": [
+          37
+        ],
+        "6.": [
+          38
+        ],
+        "Radiative": [
+          39
+        ],
+        "forcing": [
+          40
+        ],
+        "of": [
+          41,
+          55,
+          74,
+          79
+        ],
+        "7.": [
+          44
+        ],
+        "Physical": [
+          45
+        ],
+        "processes": [
+          47
+        ],
+        "feedbacks": [
+          49
+        ],
+        "8.": [
+          50
+        ],
+        "Model": [
+          51
+        ],
+        "evaluation": [
+          52,
+          64
+        ],
+        "9.": [
+          53
+        ],
+        "Projections": [
+          54
+        ],
+        "future": [
+          56
+        ],
+        "10.": [
+          59
+        ],
+        "Regional": [
+          60
+        ],
+        "simulation": [
+          62
+        ],
+        "projections": [
+          66
+        ],
+        "11.": [
+          67
+        ],
+        "Changes": [
+          68
+        ],
+        "in": [
+          69
+        ],
+        "sea": [
+          70
+        ],
+        "level": [
+          71
+        ],
+        "12.": [
+          72
+        ],
+        "Detection": [
+          73
+        ],
+        "attribution": [
+          78
+        ],
+        "causes": [
+          80
+        ],
+        "13.": [
+          81
+        ],
+        "Climate": [
+          82
+        ],
+        "scenario": [
+          83
+        ],
+        "development": [
+          84
+        ],
+        "14.": [
+          85
+        ],
+        "Advancing": [
+          86
+        ],
+        "our": [
+          87
+        ],
+        "understanding": [
+          88
+        ],
+        "Glossary": [
+          89
+        ],
+        "Index": [
+          90
+        ],
+        "Appendix.": [
+          91
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 2
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 66
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 164
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 77
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 110
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 193
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 193
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 219
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 198
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 188
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 248
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 423
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 540
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 633
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 630
+        }
+      ],
+      "updated_date": "2026-07-02T09:51:11.867554",
+      "created_date": "2025-10-10T00:00:00"
+    }
+  ],
+  "group_by": []
+}

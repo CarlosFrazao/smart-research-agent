@@ -12,6 +12,7 @@ from src.search.generic_api_searcher import (
     GenericAPISearcher,
     _resolve_field,
     _resolve_placeholders,
+    list_enabled_generic_source_ids,
     list_generic_source_ids,
 )
 
@@ -23,6 +24,22 @@ def test_catalog_lists_expected_sources():
     assert "doaj" in ids
     assert "osm_nominatim" in ids
     assert len(ids) >= 4
+
+
+def test_enabled_sources_excludes_disabled():
+    """Fontes com enabled:false (pypi, open_meteo) NÃO devem ser registradas.
+
+    O SearcherFactory itera sobre list_enabled_generic_source_ids(), então
+    elas não viram searchers ativos apesar de aparecerem no catálogo.
+    """
+    enabled = list_enabled_generic_source_ids()
+    assert "wikipedia" in enabled
+    assert "open_library" in enabled
+    assert "npm_registry" in enabled
+    assert "musicbrainz" in enabled
+    assert "domain_whois" in enabled
+    assert "pypi" not in enabled
+    assert "open_meteo" not in enabled
 
 
 def test_unknown_source_raises_value_error():
@@ -62,7 +79,7 @@ async def test_search_parses_result_path_and_fields():
                 {
                     "title": "Clean Code",
                     "key": "/works/OL1W",
-                    "first_sentence": {"value": "A handbook of craftsmanship."},
+                    "subtitle": "A handbook of craftsmanship.",
                 }
             ]
         }

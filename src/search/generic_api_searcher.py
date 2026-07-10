@@ -78,8 +78,22 @@ def _load_source_def(source_id: str) -> dict[str, Any] | None:
 
 
 def list_generic_source_ids() -> list[str]:
-    """Lista os ``id`` de todas as fontes declaradas no catálogo YAML."""
+    """Lista os ``id`` de todas as fontes declaradas no catálogo YAML.
+
+    Inclui fontes com ``enabled: false`` — útil para o roteamento
+    (``get_available_searchers``) conhecer todos os nomes válidos, mesmo os
+    desabilitados por padrão.
+    """
     return list(_load_catalog().keys())
+
+
+def list_enabled_generic_source_ids() -> list[str]:
+    """Lista apenas os ``id`` de fontes com ``enabled: true`` no catálogo.
+
+    Usado pelo ``SearcherFactory`` para NÃO registrar fontes desabilitadas
+    (ex: ``pypi``, ``open_meteo``) como searchers ativos.
+    """
+    return [sid for sid, defn in _load_catalog().items() if defn.get("enabled", True)]
 
 
 def _resolve_field(item: Any, field_path: str | None) -> str:

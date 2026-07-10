@@ -1,4 +1,4 @@
-# Catálogo de fontes de busca configuráveis (Auditoria Parte 2 — Fase 6).
+# Catálogo de fontes de busca configuráveis (Plano Parte 3 — Fase 3).
 #
 # Cada entrada vira uma fonte de busca disponível no SRA SEM escrever código
 # Python novo — o GenericAPISearcher (src/search/generic_api_searcher.py) lê
@@ -13,7 +13,7 @@
 #
 # Campos opcionais:
 #   query_param  Nome do parâmetro de query (ex: "q"). Se null, a query é
-#                interpolada na base_url via {query}.
+#                interpolada na base_url via {query} (uso em lookup_only).
 #   title_field  Campo (JMESPath) do título dentro de cada item. Default: "title".
 #   snippet_field Campo (JMESPath) da descrição/snippet dentro de cada item.
 #   url_template Template da URL do resultado. Placeholders {campo} são
@@ -22,8 +22,17 @@
 #   timeout      Timeout HTTP em segundos. Default: 15.
 #   headers      Headers HTTP. Valores {ENV_VAR} são resolvidos de os.environ.
 #   extra_params Parâmetros de query fixos adicionais.
+#   enabled      Se false, a fonte não é registrada pelo SearcherFactory.
+#
+# Limitações conhecidas (v1, deliberadas — ver EXPERIMENTAL_MODULES.md):
+#   - Sem paginação: apenas a primeira página de resultados é retornada.
+#   - Auth exótica (OAuth2/SigV4) não coberta; só none/bearer/query param.
+#   - Sem transforms arbitrários via YAML (eval() proibido por segurança).
+#   - PyPI search retorna HTML (não JSON); mantido desabilitado até haver
+#     parser HTML dedicado — ver nota em 'pypi' abaixo.
 
 sources:
+  # ───────────────────────── Fonte original da Fase 6 (mantida) ──────────────
   - id: "open_library"
     name: "Open Library (Internet Archive)"
     base_url: "https://openlibrary.org/search.json"
@@ -31,7 +40,7 @@ sources:
     result_path: "docs"
     title_field: "title"
     url_template: "https://openlibrary.org{key}"
-    snippet_field: "first_sentence.value"
+    snippet_field: "subtitle"
     max_results: 10
     timeout: 15
 
@@ -80,8 +89,114 @@ sources:
     result_path: "results"
     title_field: "title"
     url_template: "{id}"
-    snippet_field: "doi"
+    snippet_field: "display_name"
     max_results: 10
     timeout: 20
+
+  # ─────────────── Fontes novas da Fase 3 (GenericAPISearcher) ───────────────
+  - id: "wikipedia"
+    name: "Wikipedia (pt-BR)"
+    base_url: "https://pt.wikipedia.org/w/api.php"
+    query_param: "srsearch"
+    extra_params:
+      action: "query"
+      list: "search"
+      format: "json"
+      srlimit: "10"
+    result_path: "query.search"
+    title_field: "title"
+    url_template: "https://pt.wikipedia.org/wiki/{title}"
+    snippet_field: "snippet"
+    max_results: 10
+    timeout: 15
+    # NOTA: o snippet da Wikipedia vem com HTML/markup de highlight
+    # (<span class="searchmatch">). O GenericAPISearcher atual não faz strip
+    # de HTML — documentado em EXPERIMENTAL_MODULES.md. A URL do resultado
+    # é construída a partir do título (url_template com {title}).
+
+  - id: "npm_registry"
+    name: "npm Registry"
+    base_url: "https://registry.npmjs.org/-/v1/search"
+    query_param: "text"
+    extra_params:
+      size: "10"
+    result_path: "objects"
+    title_field: "package.name"
+    url_template: "{package.links.npm}"
+    snippet_field: "package.description"
+    max_results: 10
+    timeout: 15
+
+  - id: "dictionary"
+    name: "Free Dictionary API"
+    base_url: "https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
+    query_param: null
+    # lookup_only: a query é interpolada na base_url via {word}.
+    result_path: null
+    title_field: "word"
+    url_template: null
+    snippet_field: "meanings[0].definitions[0].definition"
+    max_results: 1
+    timeout: 15
+
+  - id: "musicbrainz"
+    name: "MusicBrainz (Recordings)"
+    base_url: "https://musicbrainz.org/ws/2/recording"
+    query_param: "query"
+    extra_params:
+      fmt: "json"
+      limit: "10"
+    result_path: "recordings"
+    title_field: "title"
+    url_template: "https://musicbrainz.org/recording/{id}"
+    snippet_field: "\"artist-credit\"[0].name"
+    max_results: 10
+    timeout: 15
+    rate_limit_per_minute: 50   # MusicBrainz é estrito — RESPEITAR
+
+  - id: "domain_whois"
+    name: "RDAP Domain WHOIS"
+    base_url: "https://rdap.org/domain/{domain}"
+    query_param: null
+    # lookup_only: a query é interpolada na base_url via {domain}.
+    result_path: null
+    title_field: "ldhName"
+    url_template: null
+    snippet_field: "status[0]"
+    max_results: 1
+    timeout: 15
+    # Uso legítimo: verificar credibilidade de uma fonte desconhecida
+    # (due diligence). NÃO usar para rastreamento de pessoas.
+
+  - id: "pypi"
+    name: "PyPI (Python Package Index)"
+    base_url: "https://pypi.org/search/"
+    query_param: "q"
+    # PyPI JSON API não tem busca por texto livre — o endpoint /search/ retorna
+    # HTML, não JSON. Sem parser HTML dedicado, a busca não normaliza. Mantido
+    # DESABILITADO até haver suporte a parse HTML (fora do escopo v1).
+    enabled: false
+    result_path: null
+    title_field: "name"
+    url_template: "https://pypi.org/project/{name}/"
+    snippet_field: "summary"
+    max_results: 10
+    timeout: 15
+
+  - id: "open_meteo"
+    name: "Open-Meteo (Weather)"
+    base_url: "https://api.open-meteo.com/v1/forecast"
+    query_param: "latitude"
+    # Requer lat/lon (dois parâmetros), não query de texto livre. Desabilitado
+    # por padrão — fora do escopo v1 de busca textual.
+    enabled: false
+    extra_params:
+      current_weather: "true"
+    result_path: null
+    title_field: "latitude"
+    snippet_field: "current_weather.temperature"
+    url_template: null
+    max_results: 1
+    timeout: 15
 
   # Adicionar mais fontes aqui — sem escrever código Python.

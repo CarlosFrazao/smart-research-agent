@@ -71,3 +71,32 @@ Um módulo experimental deixa de ser experimental quando:
 
 Ao satisfazer esses critérios, remova a entrada aqui e a exceção correspondente
 em `tests/test_wiring_integration.py`.
+
+---
+
+## GenericAPISearcher — Limitações conhecidas (Plano Parte 3 — Fase 3)
+
+`src/search/generic_api_searcher.py` + `config/generic_sources.yaml` formam o
+"canivete suíço" de fontes configuráveis por YAML. Integrado ao
+`SearcherFactory` (auto-registro de toda fonte `enabled: true` no catálogo).
+
+Limitações deliberadas (v1 — NÃO implementar além disso):
+- **Sem paginação:** cada fonte retorna apenas a primeira página de resultados.
+- **Auth simples:** só `none` / `Bearer {ENV_VAR}` / query param. OAuth2 e SigV4
+  não cobertos.
+- **Sem transforms arbitrários:** placeholders em `url_template` são resolvidos
+  por chave do item; `eval()` é proibido por segurança.
+- **Snippets com HTML:** a Wikipedia (`wikipedia.snippet`) retorna markup de
+  highlight (`<span class="searchmatch">`). O searcher atual não faz strip de
+  HTML — o `description` pode conter tags. Decisão pendente de produto.
+- **Fontes desabilitadas por padrão:** `pypi` (busca retorna HTML, não JSON —
+  falta parser HTML dedicado) e `open_meteo` (requer lat/lon, não query textual).
+- **`dictionary` e `domain_whois` são lookup_only:** a query é interpolada na
+  `base_url` via `{word}`/`{domain}` (sem `query_param`).
+
+Fontes habilitadas: wikipedia, open_library, npm_registry, dictionary,
+musicbrainz, domain_whois, core_ac_uk, doaj, osm_nominatim, openalex.
+
+Validação: `tests/test_generic_api_searcher_conformance.py` (parametrizado por
+fonte habilitada, checa `result_path` e `title_field`/`snippet_field` contra as
+fixtures em `tests/fixtures/generic_sources/`).

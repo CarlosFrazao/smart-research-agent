@@ -1,0 +1,91 @@
+[
+  {
+    "place_id": 9054698,
+    "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+    "osm_type": "relation",
+    "osm_id": 298285,
+    "lat": "-23.5506507",
+    "lon": "-46.6333824",
+    "class": "boundary",
+    "type": "administrative",
+    "place_rank": 16,
+    "importance": 0.7552016442287615,
+    "addresstype": "municipality",
+    "name": "São Paulo",
+    "display_name": "São Paulo, Região Sudeste, Brasil",
+    "address": {
+      "municipality": "São Paulo",
+      "state": "São Paulo",
+      "ISO3166-2-lvl4": "BR-SP",
+      "region": "Região Sudeste",
+      "country": "Brasil",
+      "country_code": "br"
+    },
+    "boundingbox": [
+      "-24.0079003",
+      "-23.3577551",
+      "-46.8262692",
+      "-46.3650898"
+    ]
+  },
+  {
+    "place_id": 12000664,
+    "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+    "osm_type": "relation",
+    "osm_id": 298204,
+    "lat": "-22.0702705",
+    "lon": "-48.4333875",
+    "class": "boundary",
+    "type": "administrative",
+    "place_rank": 8,
+    "importance": 0.7245181148387051,
+    "addresstype": "state",
+    "name": "São Paulo",
+    "display_name": "São Paulo, Região Sudeste, Brasil",
+    "address": {
+      "state": "São Paulo",
+      "ISO3166-2-lvl4": "BR-SP",
+      "region": "Região Sudeste",
+      "country": "Brasil",
+      "country_code": "br"
+    },
+    "boundingbox": [
+      "-25.4895759",
+      "-19.7823272",
+      "-53.1090000",
+      "-44.1613652"
+    ]
+  },
+  {
+    "place_id": 13662212,
+    "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+    "osm_type": "node",
+    "osm_id": 5390979124,
+    "lat": "-1.2043218",
+    "lon": "-47.1583944",
+    "class": "place",
+    "type": "suburb",
+    "place_rank": 19,
+    "importance": 0.7552016442287615,
+    "addresstype": "suburb",
+    "name": "São Paulo",
+    "display_name": "São Paulo, Capanema, Pará, Região Norte, 68700-540, Brasil",
+    "address": {
+      "suburb": "São Paulo",
+      "city_district": "Capanema",
+      "town": "Capanema",
+      "state": "Pará",
+      "ISO3166-2-lvl4": "BR-PA",
+      "region": "Região Norte",
+      "postcode": "68700-540",
+      "country": "Brasil",
+      "country_code": "br"
+    },
+    "boundingbox": [
+      "-1.2243218",
+      "-1.1843218",
+      "-47.1783944",
+      "-47.1383944"
+    ]
+  }
+]

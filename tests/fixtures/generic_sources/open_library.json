@@ -1,0 +1,81 @@
+{
+  "numFound": 117,
+  "start": 0,
+  "numFoundExact": true,
+  "num_found": 117,
+  "documentation_url": "https://openlibrary.org/dev/docs/api/search",
+  "q": "clean code",
+  "offset": null,
+  "docs": [
+    {
+      "author_key": [
+        "OL2653686A"
+      ],
+      "author_name": [
+        "Robert C. Martin"
+      ],
+      "cover_i": 8065615,
+      "ebook_access": "printdisabled",
+      "edition_count": 13,
+      "first_publish_year": 2008,
+      "has_fulltext": true,
+      "ia": [
+        "cleancodehandboo0000unse"
+      ],
+      "ia_collection": [
+        "internetarchivebooks",
+        "printdisabled"
+      ],
+      "key": "/works/OL17618370W",
+      "language": [
+        "fre",
+        "spa",
+        "hun",
+        "eng"
+      ],
+      "public_scan_b": false,
+      "subtitle": "A Handbook of Agile Software Craftsmanship",
+      "title": "Clean Code"
+    },
+    {
+      "author_key": [
+        "OL2653686A"
+      ],
+      "author_name": [
+        "Robert C. Martin"
+      ],
+      "cover_edition_key": "OL33893682M",
+      "cover_i": 12004890,
+      "ebook_access": "no_ebook",
+      "edition_count": 1,
+      "first_publish_year": 2008,
+      "has_fulltext": false,
+      "key": "/works/OL25308313W",
+      "language": [
+        "por"
+      ],
+      "public_scan_b": false,
+      "title": "Código Limpo. Habilidades Práticas Do Agile Softwar"
+    },
+    {
+      "author_key": [
+        "OL9082263A"
+      ],
+      "author_name": [
+        "Mariano Anaya"
+      ],
+      "cover_edition_key": "OL31851994M",
+      "cover_i": 10541843,
+      "ebook_access": "no_ebook",
+      "edition_count": 4,
+      "first_publish_year": 2018,
+      "has_fulltext": false,
+      "key": "/works/OL24143787W",
+      "language": [
+        "eng"
+      ],
+      "public_scan_b": false,
+      "title": "Clean Code in Python"
+    }
+  ]
+}

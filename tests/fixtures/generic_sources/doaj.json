@@ -1,0 +1,831 @@
+{
+  "total": 189803,
+  "page": 1,
+  "pageSize": 10,
+  "timestamp": "2026-07-10T19:56:19.888722Z",
+  "query": "machine learning",
+  "results": [
+    {
+      "last_updated": "2025-08-20T01:49:50Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "10.46481/jnsps.2025.2273",
+            "type": "doi"
+          },
+          {
+            "id": "2714-2817",
+            "type": "pissn"
+          },
+          {
+            "id": "2714-4704",
+            "type": "eissn"
+          }
+        ],
+        "journal": {
+          "volume": "7",
+          "number": "1",
+          "country": "NG",
+          "issns": [
+            "2714-2817",
+            "2714-4704"
+          ],
+          "publisher": "Nigerian Society of Physical Sciences",
+          "language": [
+            "EN"
+          ],
+          "title": "Journal of Nigerian Society of Physical Sciences"
+        },
+        "month": "February",
+        "keywords": [
+          "Algorithm",
+          "Dataset",
+          "Dimensionality reduction",
+          "Feature selection"
+        ],
+        "year": "2025",
+        "subject": [
+          {
+            "code": "QC1-999",
+            "scheme": "LCC",
+            "term": "Physics"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "Department of Computer Science, Federal University Wukari, P.M.B 1020, \tKatsina-Ala Road, Wukari, Taraba State, Nigeria",
+            "name": "PHILEMON UTEN EMMOH"
+          },
+          {
+            "affiliation": "Department of Computer Science, Federal University of Lafia, P.M.B 146, Lafia, Nasarawa State, Nigeria",
+            "name": "christopher  ifeanyi Eke"
+          },
+          {
+            "affiliation": "Department of Computer Science, Federal University of Lafia, P.M.B 146, Lafia, Nasarawa State, Nigeria",
+            "name": "Timothy Moses"
+          }
+        ],
+        "link": [
+          {
+            "content_type": "HTML",
+            "type": "fulltext",
+            "url": "https://journal.nsps.org.ng/index.php/jnsps/article/view/2273"
+          }
+        ],
+        "abstract": "\nSelection of important features is very vital in machine learning tasks involving high-dimensional dataset with large features. It helps in reducing the dimensionality of a dataset and improving model performance. Most of the feature selection techniques have restriction in the kind of dataset to be used. This study proposed a feature selection technique that is based on statistical lift measure to select important features from a dataset. The proposed technique is a generic approach that can be used in any binary classification dataset. The technique successfully determined the most important feature subset and outperformed the existing techniques. The proposed technique was tested on lungs cancer dataset and happiness classification dataset. The effectiveness of the proposed technique in selecting important features subset was evaluated and compared with other existing techniques, namely Chi-Square, Pearson Correlation and Information Gain. Both the proposed and the existing techniques were evaluated on five machine learning models using four standard evaluation metrics such as accuracy, precision, recall and F1-score. The experimental results of the proposed technique on lung cancer dataset shows that logistic regression, decision tree, adaboost, gradient boost and random forest produced a predictive accuracy of 0.919%, 0.935%, 0.919%, 0.935% and 0.935% respectively, and that of happiness classification dataset produced a predictive accuracy of 0.758%, 0.689%, 0.724%, 0.655% and 0.689% on random forest, k-nearest neighbor, decision tree, gradient boost and cat boost respectively, which outperformed the existing techniques.\n",
+        "title": "A feature selection and scoring scheme for dimensionality reduction in a machine learning task"
+      },
+      "id": "000122f776cb4f27b0f575971a4bed38",
+      "created_date": "2025-01-17T18:52:28Z"
+    },
+    {
+      "last_updated": "2025-08-20T00:40:35Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "10.1038/s41598-024-73898-4",
+            "type": "doi"
+          },
+          {
+            "id": "2045-2322",
+            "type": "eissn"
+          }
+        ],
+        "journal": {
+          "volume": "14",
+          "number": "1",
+          "country": "GB",
+          "issns": [
+            "2045-2322"
+          ],
+          "publisher": "Nature Portfolio",
+          "language": [
+            "EN"
+          ],
+          "title": "Scientific Reports"
+        },
+        "month": "10",
+        "end_page": "10",
+        "year": "2024",
+        "start_page": "1",
+        "subject": [
+          {
+            "code": "R",
+            "scheme": "LCC",
+            "term": "Medicine"
+          },
+          {
+            "code": "Q",
+            "scheme": "LCC",
+            "term": "Science"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "Division of Nephrology and Hypertension, Department of Internal Medicine, St. Marianna University School of Medicine",
+            "name": "Ryunosuke Noda"
+          },
+          {
+            "affiliation": "Division of Nephrology and Hypertension, Department of Internal Medicine, St. Marianna University School of Medicine",
+            "name": "Daisuke Ichikawa"
+          },
+          {
+            "affiliation": "Division of Nephrology and Hypertension, Department of Internal Medicine, St. Marianna University School of Medicine",
+            "name": "Yugo Shibagaki"
+          }
+        ],
+        "link": [
+          {
+            "content_type": "HTML",
+            "type": "fulltext",
+            "url": "https://doi.org/10.1038/s41598-024-73898-4"
+          }
+        ],
+        "abstract": "Abstract Minimal change disease (MCD) is a common cause of nephrotic syndrome. Due to its rapid progression, early detection is essential; however, definitive diagnosis requires invasive kidney biopsy. This study aims to develop non-invasive predictive models for diagnosing MCD by machine learning. We retrospectively collected data on demographic characteristics, blood tests, and urine tests from patients with nephrotic syndrome who underwent kidney biopsy. We applied four machine learning algorithms—TabPFN, LightGBM, Random Forest, and Artificial Neural Network—and logistic regression. We compared their performance using stratified 5-repeated 5-fold cross-validation for the area under the receiver operating characteristic curve (AUROC) and the area under the precision-recall curve (AUPRC). Variable importance was evaluated using the SHapley Additive exPlanations (SHAP) method. A total of 248 patients were included, with 82 cases (33%) were diagnosed with MCD. TabPFN demonstrated the best performance with an AUROC of 0.915 (95% CI 0.896–0.932) and an AUPRC of 0.840 (95% CI 0.807–0.872). The SHAP methods identified C3, total cholesterol, and urine red blood cells as key predictors for TabPFN, consistent with previous reports. Machine learning models could be valuable non-invasive diagnostic tools for MCD.",
+        "title": "Machine learning-based diagnostic prediction of minimal change disease: model development study"
+      },
+      "id": "000134bd78f94c829350f855e4f681d0",
+      "created_date": "2024-10-13T11:19:32Z"
+    },
+    {
+      "last_updated": "2025-08-20T00:15:21Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "10.3390/s20195497",
+            "type": "doi"
+          },
+          {
+            "id": "1424-8220",
+            "type": "eissn"
+          }
+        ],
+        "journal": {
+          "volume": "20",
+          "number": "19",
+          "country": "CH",
+          "issns": [
+            "1424-8220"
+          ],
+          "publisher": "MDPI AG",
+          "language": [
+            "EN"
+          ],
+          "title": "Sensors"
+        },
+        "month": "09",
+        "keywords": [
+          "heat sensors",
+          "smart offices",
+          "occupancy prediction",
+          "machine learning",
+          "computer vision",
+          "feature engineering"
+        ],
+        "year": "2020",
+        "start_page": "5497",
+        "subject": [
+          {
+            "code": "TP1-1185",
+            "scheme": "LCC",
+            "term": "Chemical technology"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "Jönköping AI Lab (JAIL), Department of Computer Science and Informatics, School of Engineering, Jönköping University, 553 18 Jönköping, Sweden",
+            "name": "Beril Sirmacek"
+          },
+          {
+            "affiliation": "Jönköping AI Lab (JAIL), Department of Computer Science and Informatics, School of Engineering, Jönköping University, 553 18 Jönköping, Sweden",
+            "name": "Maria Riveiro"
+          }
+        ],
+        "link": [
+          {
+            "content_type": "text/html",
+            "type": "fulltext",
+            "url": "https://www.mdpi.com/1424-8220/20/19/5497"
+          }
+        ],
+        "abstract": "Solving the challenge of occupancy prediction is crucial in order to design efficient and sustainable office spaces and automate lighting, heating, and air circulation in these facilities. In office spaces where large areas need to be observed, multiple sensors must be used for full coverage. In these cases, it is normally important to keep the costs low, but also to make sure that the privacy of the people who use such environments are preserved. Low-cost and low-resolution heat (thermal) sensors can be very useful to build solutions that address these concerns. However, they are extremely sensitive to noise artifacts which might be caused by heat prints of the people who left the space or by other objects, which are either using electricity or exposed to sunlight. There are some earlier solutions for occupancy prediction that employ low-resolution heat sensors; however, they have not addressed nor compensated for such heat artifacts. Therefore, in this paper, we presented a low-cost and low-energy consuming smart space implementation to predict the number of people in the environment based on whether their activity is static or dynamic in time. We used a low-resolution <inline-formula><math display=\"inline\"><semantics><mrow><mo>(</mo><mn>8</mn><mo>×</mo><mn>8</mn><mo>)</mo></mrow></semantics></math></inline-formula> and non-intrusive heat sensor to collect data from an actual meeting room. We proposed two novel workflows to predict the occupancy; one that is based on computer vision and one based on machine learning. Besides comparing the advantages and disadvantages of these different workflows, we used several state-of-the-art explainability methods in order to provide a detailed analysis of the algorithm parameters and how the image properties influence the resulting performance. Furthermore, we analyzed noise resources that affect the heat sensor data. The experiments show that the feature classification based method gives high accuracy when the data are clean from noise artifacts. However, when there are noise artifacts, the computer vision based method can compensate for those artifacts providing robust results. Because the computer vision based method requires an empty room recording, the feature classification based method should be chosen either when there is no expectancy of seeing noise artifacts in the data or when there is no empty recording available. We hope that our analysis brings light into understanding how to handle very low-resolution heat images in these environments. The presented workflows could be used in various domains and applications other than smart offices, where occupancy prediction is essential, e.g., for elderly care.",
+        "title": "Occupancy Prediction Using Low-Cost and Low-Resolution Heat Sensors for Smart Offices"
+      },
+      "id": "00013831f2754d1eae195f60ab31f584",
+      "created_date": "2020-09-26T00:01:12Z"
+    },
+    {
+      "last_updated": "2025-08-19T18:45:59Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "2169-3536",
+            "type": "eissn"
+          },
+          {
+            "id": "10.1109/ACCESS.2018.2851281",
+            "type": "doi"
+          }
+        ],
+        "journal": {
+          "volume": "6",
+          "country": "US",
+          "issns": [
+            "2169-3536"
+          ],
+          "publisher": "IEEE",
+          "language": [
+            "EN"
+          ],
+          "title": "IEEE Access"
+        },
+        "end_page": "38523",
+        "keywords": [
+          "Lexical semantic network",
+          "neural machine translation",
+          "word sense disambiguation"
+        ],
+        "year": "2018",
+        "start_page": "38512",
+        "subject": [
+          {
+            "code": "TK1-9971",
+            "scheme": "LCC",
+            "term": "Electrical engineering. Electronics. Nuclear engineering"
+          }
+        ],
+        "author": [
+          {
+            "orcid_id": "https://orcid.org/0000-0001-7792-295X",
+            "affiliation": "Department of IT Convergence, University of Ulsan, Ulsan, South Korea",
+            "name": "Quang-Phuoc Nguyen"
+          },
+          {
+            "orcid_id": "https://orcid.org/0000-0002-4363-2177",
+            "affiliation": "Department of IT Convergence, University of Ulsan, Ulsan, South Korea",
+            "name": "Anh-Dung Vo"
+          },
+          {
+            "orcid_id": "https://orcid.org/0000-0002-6793-3687",
+            "affiliation": "Department of IT Convergence, University of Ulsan, Ulsan, South Korea",
+            "name": "Joon-Choul Shin"
+          },
+          {
+            "orcid_id": "https://orcid.org/0000-0003-0020-1040",
+            "affiliation": "Department of IT Convergence, University of Ulsan, Ulsan, South Korea",
+            "name": "Cheol-Young Ock"
+          }
+        ],
+        "link": [
+          {
+            "type": "fulltext",
+            "url": "https://ieeexplore.ieee.org/document/8399736/"
+          }
+        ],
+        "abstract": "With the advent of robust deep learning, neural machine translation (NMT) has achieved great progress and recently become the dominant paradigm in machine translation (MT). However, it is still confronted with the challenge of word ambiguities that force NMT to choose among several translation candidates that represent different senses of an input word. This research presents a case study using Korean word sense disambiguation (WSD) to improve NMT performance. First, we constructed a Korean lexical semantic network (LSN) as a large-scale lexical semantic knowledge base. Then, based on the Korean LSN, we built a Korean WSD preprocessor that can annotate the correct sense of Korean words in the training corpus. Finally, we conducted a series of translation experiments using Korean-English, Korean-French, Korean-Spanish, and Korean-Japanese language pairs. The experimental results show that our Korean WSD system can significantly improve the translation quality of NMT in terms of the BLEU, TER, and DLRATIO metrics. On average, it improved the precision by 2.94 BLEU points and improved translation error prevention by 4.04 TER points and 4.51 DLRATIO points for all the language pairs.",
+        "title": "Effect of Word Sense Disambiguation on Neural Machine Translation: A Case Study in Korean"
+      },
+      "id": "00017d67480c4314a41af376f01f0239",
+      "created_date": "2021-03-29T21:43:03Z"
+    },
+    {
+      "last_updated": "2025-08-20T01:44:21Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "10.1186/s12888-024-06253-6",
+            "type": "doi"
+          },
+          {
+            "id": "1471-244X",
+            "type": "eissn"
+          }
+        ],
+        "journal": {
+          "volume": "24",
+          "number": "1",
+          "country": "GB",
+          "issns": [
+            "1471-244X"
+          ],
+          "publisher": "BMC",
+          "language": [
+            "EN"
+          ],
+          "title": "BMC Psychiatry"
+        },
+        "month": "11",
+        "end_page": "17",
+        "keywords": [
+          "Precision psychiatry",
+          "Depression",
+          "Speech biomarkers",
+          "Machine learning"
+        ],
+        "year": "2024",
+        "start_page": "1",
+        "subject": [
+          {
+            "code": "RC435-571",
+            "scheme": "LCC",
+            "term": "Psychiatry"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "ki:elements GmbH",
+            "name": "Felix Menne"
+          },
+          {
+            "affiliation": "ki:elements GmbH",
+            "name": "Felix Dörr"
+          },
+          {
+            "affiliation": "Department of Psychiatry, Psychotherapy and Psychosomatics, RWTH Aachen University",
+            "name": "Julia Schräder"
+          },
+          {
+            "affiliation": "ki:elements GmbH",
+            "name": "Johannes Tröger"
+          },
+          {
+            "affiliation": "Department of Psychiatry, Psychotherapy and Psychosomatics, RWTH Aachen University",
+            "name": "Ute Habel"
+          },
+          {
+            "affiliation": "ki:elements GmbH",
+            "name": "Alexandra König"
+          },
+          {
+            "affiliation": "Department of Psychiatry, Psychotherapy and Psychosomatics, RWTH Aachen University",
+            "name": "Lisa Wagels"
+          }
+        ],
+        "link": [
+          {
+            "content_type": "HTML",
+            "type": "fulltext",
+            "url": "https://doi.org/10.1186/s12888-024-06253-6"
+          }
+        ],
+        "abstract": "Abstract Background Psychiatry faces a challenge due to the lack of objective biomarkers, as current assessments are based on subjective evaluations. Automated speech analysis shows promise in detecting symptom severity in depressed patients. This project aimed to identify discriminating speech features between patients with major depressive disorder (MDD) and healthy controls (HCs) by examining associations with symptom severity measures. Methods Forty-four MDD patients from the Psychiatry Department, University Hospital Aachen, Germany and fifty-two HCs were recruited. Participants described positive and negative life events, which were recorded for analysis. The Beck Depression Inventory (BDI-II) and the Hamilton Rating Scale for Depression gauged depression severity. Transcribed audio recordings underwent feature extraction, including acoustics, speech rate, and content. Machine learning models including speech features and neuropsychological assessments, were used to differentiate between the MDD patients and HCs. Results Acoustic variables such as pitch and loudness differed significantly between the MDD patients and HCs (effect sizes 𝜼2 between 0.183 and 0.3, p < 0.001). Furthermore, variables pertaining to temporality, lexical richness, and speech sentiment displayed moderate to high effect sizes (𝜼2 between 0.062 and 0.143, p < 0.02). A support vector machine (SVM) model based on 10 acoustic features showed a high performance (AUC = 0.93) in differentiating between HCs and patients with MDD, comparable to an SVM based on the BDI-II (AUC = 0.99, p = 0.01). Conclusions This study identified robust speech features associated with MDD. A machine learning model based on speech features yielded similar results to an established pen-and-paper depression assessment. In the future, these findings may shape voice-based biomarkers, enhancing clinical diagnosis and MDD monitoring.",
+        "title": "The voice of depression: speech features as biomarkers for major depressive disorder"
+      },
+      "id": "000257eb03d74e96ac419d6b7951a9e4",
+      "created_date": "2024-11-17T12:40:26Z"
+    },
+    {
+      "last_updated": "2025-12-01T04:41:19Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "2095-8099",
+            "type": "pissn"
+          },
+          {
+            "id": "10.1016/j.eng.2024.10.021",
+            "type": "doi"
+          }
+        ],
+        "journal": {
+          "volume": "54",
+          "number": "",
+          "country": "NL",
+          "issns": [
+            "2095-8099",
+            "2096-0026"
+          ],
+          "publisher": "Elsevier",
+          "language": [
+            "EN"
+          ],
+          "title": "Engineering"
+        },
+        "month": "11",
+        "end_page": "387",
+        "keywords": [
+          "Energy management",
+          "Electric vehicles",
+          "Reinforcement learning",
+          "Machine learning",
+          "Open-source benchmark"
+        ],
+        "year": "2025",
+        "start_page": "370",
+        "subject": [
+          {
+            "code": "TA1-2040",
+            "scheme": "LCC",
+            "term": "Engineering (General). Civil engineering (General)"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "School of Mechanical Engineering, Beijing Institute of Technology, Beijing 100081, China",
+            "name": "Yong Wang"
+          },
+          {
+            "affiliation": "School of Mechanical Engineering, Beijing Institute of Technology, Beijing 100081, China; Corresponding author.",
+            "name": "Hongwen He"
+          },
+          {
+            "affiliation": "College of Computer Science, Sichuan University, Chengdu 610065, China",
+            "name": "Yuankai Wu"
+          },
+          {
+            "affiliation": "School of Mechanical Engineering, Beijing Institute of Technology, Beijing 100081, China",
+            "name": "Pei Wang"
+          },
+          {
+            "affiliation": "School of Mechanical Engineering, Beijing Institute of Technology, Beijing 100081, China",
+            "name": "Haoyu Wang"
+          },
+          {
+            "affiliation": "Shenzhen International Graduate School, Tsinghua University, Shenzhen 518000, China",
+            "name": "Renzong Lian"
+          },
+          {
+            "affiliation": "The Hong Kong Polytechnic University, Hong Kong 999077, China",
+            "name": "Jingda Wu"
+          },
+          {
+            "affiliation": "School of Mechanical Engineering, Guangxi University, Nanning 530000, China",
+            "name": "Qin Li"
+          },
+          {
+            "affiliation": "School of Mechanical Engineering, Beijing Institute of Technology, Beijing 100081, China",
+            "name": "Xiangfei Meng"
+          },
+          {
+            "affiliation": "School of Mechanical Engineering, Beijing Institute of Technology, Beijing 100081, China",
+            "name": "Yingjuan Tang"
+          },
+          {
+            "affiliation": "School of Mechanical Engineering, Beijing Institute of Technology, Beijing 100081, China",
+            "name": "Fengchun Sun"
+          },
+          {
+            "affiliation": "Department of Mechanical and Mechatronics Engineering, University of Waterloo, Waterloo, ON N2L3G1, Canada",
+            "name": "Amir Khajepour"
+          }
+        ],
+        "link": [
+          {
+            "type": "fulltext",
+            "url": "http://www.sciencedirect.com/science/article/pii/S2095809924007136"
+          }
+        ],
+        "abstract": "An effective energy management strategy (EMS) is essential to optimize the energy efficiency of electric vehicles (EVs). With the advent of advanced machine learning techniques, the focus on developing sophisticated EMS for EVs is increasing. Here, we introduce LearningEMS: a unified framework and open-source benchmark designed to facilitate rapid development and assessment of EMS. LearningEMS is distinguished by its ability to support a variety of EV configurations, including hybrid EVs, fuel cell EVs, and plug-in EVs, offering a general platform for the development of EMS. The framework enables detailed comparisons of several EMS algorithms, encompassing imitation learning, deep reinforcement learning (RL), offline RL, model predictive control, and dynamic programming. We rigorously evaluated these algorithms across multiple perspectives: energy efficiency, consistency, adaptability, and practicability. Furthermore, we discuss state, reward, and action settings for RL in EV energy management, introduce a policy extraction and reconstruction method for learning-based EMS deployment, and conduct hardware-in-the-loop experiments. In summary, we offer a unified and comprehensive framework that comes with three distinct EV platforms, over 10  000 km of EMS policy data set, ten state-of-the-art algorithms, and over 160 benchmark tasks, along with three learning libraries. Its flexible design allows easy expansion for additional tasks and applications. The open-source algorithms, models, data sets, and deployment processes foster additional research and innovation in EV and broader engineering domains.",
+        "title": "LearningEMS: A Unified Framework and Open-Source Benchmark for Learning-Based Energy Management of Electric Vehicles"
+      },
+      "id": "00025ccee56e4098a89bd02a3bd3c371",
+      "created_date": "2025-12-01T04:41:19Z"
+    },
+    {
+      "last_updated": "2025-08-19T22:29:42Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "1752-1424",
+            "type": "eissn"
+          },
+          {
+            "id": "1752-1416",
+            "type": "pissn"
+          },
+          {
+            "id": "10.1049/rpg2.12731",
+            "type": "doi"
+          }
+        ],
+        "journal": {
+          "volume": "17",
+          "number": "9",
+          "country": "GB",
+          "issns": [
+            "1752-1416",
+            "1752-1424"
+          ],
+          "publisher": "Wiley",
+          "language": [
+            "EN"
+          ],
+          "title": "IET Renewable Power Generation"
+        },
+        "month": "07",
+        "end_page": "2301",
+        "keywords": [
+          "artificial intelligence",
+          "data mining",
+          "mathematical programming",
+          "power system planning",
+          "power system restoration",
+          "power system security"
+        ],
+        "year": "2023",
+        "start_page": "2290",
+        "subject": [
+          {
+            "code": "TJ807-830",
+            "scheme": "LCC",
+            "term": "Renewable energy sources"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "School of Electrical & Electronic Engineering North China Electric Power University Baoding China",
+            "name": "Tong Liu"
+          },
+          {
+            "affiliation": "School of Electrical & Electronic Engineering North China Electric Power University Baoding China",
+            "name": "Xueping Gu"
+          },
+          {
+            "affiliation": "School of Electrical & Electronic Engineering North China Electric Power University Baoding China",
+            "name": "Shaoyan Li"
+          },
+          {
+            "affiliation": "School of Electrical & Electronic Engineering North China Electric Power University Baoding China",
+            "name": "Yansong Bai"
+          },
+          {
+            "affiliation": "State Grid Hebei Electric Power Company Shijiazhuang China",
+            "name": "Tieqiang Wang"
+          },
+          {
+            "affiliation": "State Grid Hebei Electric Power Company Shijiazhuang China",
+            "name": "Xiaodong Yang"
+          }
+        ],
+        "link": [
+          {
+            "content_type": "HTML",
+            "type": "fulltext",
+            "url": "https://doi.org/10.1049/rpg2.12731"
+          }
+        ],
+        "abstract": "Abstract The existing static voltage stability margin evaluation methods cannot meet the actual demand of current power grid well in terms of calculation speed and accuracy. Thus, this paper proposes a static voltage stability margin prediction method based on a graph attention network (GAT) and a long short‐term memory network (LSTM) to predict the static voltage stability margin of a power system accurately, fast, and effectively, considering new energy uncertainty. First, an innovative machine learning framework named the GAT‐LSTM is designed to extract highly representative power grid operation features considering the spatial‐temporal correlation of the power grid operation. Then, a static voltage stability margin prediction method based on the GAT‐LSTM is developed. Particularly, considering the influence of new energy power uncertainty, two loss functions of certainty and uncertainty are used in the proposed method to predict the voltage stability margin and voltage fluctuation range. Finally, the IEEE39‐bus power system and a practical power system are employed to verify the proposed method. The results show that the computational speed of the proposed method is greatly improved compared to the traditional methods not based on machine learning; the computation results are more accurate and reliable than the existing machine learning methods. Compared with the existing methods, the proposed method has higher scalability and applicability.",
+        "title": "Static voltage stability margin prediction considering new energy uncertainty based on graph attention networks and long short‐term memory networks"
+      },
+      "id": "0002e12b418043ddbfbd841ee8e9d420",
+      "created_date": "2023-06-22T08:59:21Z"
+    },
+    {
+      "last_updated": "2026-02-21T04:39:23Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "2095-6339",
+            "type": "pissn"
+          },
+          {
+            "id": "10.1016/j.iswcr.2025.09.004",
+            "type": "doi"
+          }
+        ],
+        "journal": {
+          "volume": "14",
+          "number": "1",
+          "country": "CN",
+          "issns": [
+            "2095-6339",
+            "2589-059X"
+          ],
+          "publisher": "KeAi Communications Co., Ltd.",
+          "language": [
+            "EN"
+          ],
+          "title": "International Soil and Water Conservation Research"
+        },
+        "month": "03",
+        "end_page": "",
+        "keywords": [
+          "Gully erosion",
+          "The global scale",
+          "Google earth imagery",
+          "Random forests",
+          "Land use/cover"
+        ],
+        "year": "2026",
+        "start_page": "100572",
+        "subject": [
+          {
+            "code": "TA1-2040",
+            "scheme": "LCC",
+            "term": "Engineering (General). Civil engineering (General)"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "Division of Geography and Tourism, Department of Earth and Environmental Sciences, KU Leuven, Leuven, Belgium; Shaanxi Key Laboratory of Earth Surface System and Environmental Carrying Capacity, College of Urban and Environmental Sciences, Northwest University, Xi'an, China; State Key Laboratory of Soil Erosion and Dryland Farming on the Loess Plateau, Institute of Soil and Water Conservation, Chinese Academy of Sciences and Ministry of Water Resources, Yangling, China",
+            "name": "Yixian Chen"
+          },
+          {
+            "affiliation": "Division of Geography and Tourism, Department of Earth and Environmental Sciences, KU Leuven, Leuven, Belgium; Research Foundation Flanders (FWO), Brussels, Belgium",
+            "name": "Sofie De Geeter"
+          },
+          {
+            "affiliation": "Division of Geography and Tourism, Department of Earth and Environmental Sciences, KU Leuven, Leuven, Belgium; Faculty of Earth Sciences and Spatial Management, Maria-Curie Sklodowska University, Lublin, Poland",
+            "name": "Jean Poesen"
+          },
+          {
+            "affiliation": "Division of Geography and Tourism, Department of Earth and Environmental Sciences, KU Leuven, Leuven, Belgium; Department of Science, Roma Tre University, Rome, Italy",
+            "name": "Francis Matthews"
+          },
+          {
+            "affiliation": "Department of Earth Sciences, VU University Amsterdam, Amsterdam, the Netherlands",
+            "name": "Benjamin Campforts"
+          },
+          {
+            "affiliation": "Department of Science, Roma Tre University, Rome, Italy; Department of Environmental Sciences, Environmental Geosciences, University of Basel, Basel, Switzerland",
+            "name": "Pasquale Borrelli"
+          },
+          {
+            "affiliation": "European Commission, Joint Research Centre, Ispra, (VA), Italy",
+            "name": "Panos Panagos"
+          },
+          {
+            "affiliation": "Division of Geography and Tourism, Department of Earth and Environmental Sciences, KU Leuven, Leuven, Belgium; Corresponding author.",
+            "name": "Matthias Vanmaercke"
+          }
+        ],
+        "link": [
+          {
+            "type": "fulltext",
+            "url": "http://www.sciencedirect.com/science/article/pii/S209563392500111X"
+          }
+        ],
+        "abstract": "Gully formation is a significant driver of soil erosion and land degradation worldwide and often leads to important downstream impacts. Nonetheless, our understanding of the global patterns and the factors controlling this process remains limited. Here, we present the first global assessment of gully density's spatial patterns. Using mapped observations from over 17,000 representative study sites worldwide, we trained random forest models that simulate both the susceptibility to gullying at a 1 km2 resolution and the corresponding gully head density (GHD). Through an interpretable machine learning framework, we demonstrate that global GHD patterns result from a combination of environmental factors with non-linear interactions, leading to significant regional variations in the dominant factors controlling GHD. We distinguish between gully hotspots driven primarily by natural factors such as topography, geomorphology, tectonics, pedology or climate and those where land use and land cover play a dominant role. Based on these insights, we identified critical global areas of gully erosion, i.e., hotspots where gully occurrence is likely highly sensitive to anthropogenic drivers. These include the Chinese Loess Plateau, the Ethiopian Highlands, and large parts of the Mediterranean and Sahel regions. Also desert regions are often characterized by high GHDs. However, in these cases, their occurrence is mainly driven by natural factors. The insights we provide are valuable to inform land management and targeted erosion mitigation strategies.",
+        "title": "Global patterns of gully occurrence and their sensitivity to environmental changes"
+      },
+      "id": "00032352531d45a585974b338f8af727",
+      "created_date": "2026-02-21T04:39:23Z"
+    },
+    {
+      "last_updated": "2025-08-19T22:49:21Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "10.3390/en16114403",
+            "type": "doi"
+          },
+          {
+            "id": "1996-1073",
+            "type": "eissn"
+          }
+        ],
+        "journal": {
+          "volume": "16",
+          "number": "11",
+          "country": "CH",
+          "issns": [
+            "1996-1073"
+          ],
+          "publisher": "MDPI AG",
+          "language": [
+            "EN"
+          ],
+          "title": "Energies"
+        },
+        "month": "05",
+        "keywords": [
+          "lithium-ion battery",
+          "battery management system",
+          "machine learning",
+          "cloud",
+          "artificial intelligence",
+          "state of charge"
+        ],
+        "year": "2023",
+        "start_page": "4403",
+        "subject": [
+          {
+            "code": "T",
+            "scheme": "LCC",
+            "term": "Technology"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "Hubei Longzhong Laboratory, Hubei University of Arts and Science, Xiangyang 441000, China",
+            "name": "Dapai Shi"
+          },
+          {
+            "affiliation": "Institute of Transportation Studies, University of California-Davis, Davis, CA 95616, USA",
+            "name": "Jingyuan Zhao"
+          },
+          {
+            "affiliation": "Department of Mechanical Engineering, University of California, Merced, CA 95343, USA",
+            "name": "Chika Eze"
+          },
+          {
+            "affiliation": "Hubei Key Laboratory of Power System Design and Test for Electrical Vehicle, Hubei University of Arts and Science, Xiangyang 441053, China",
+            "name": "Zhenghong Wang"
+          },
+          {
+            "affiliation": "BYD Automotive Engineering Research Institute, Shenzhen 518118, China",
+            "name": "Junbin Wang"
+          },
+          {
+            "affiliation": "BYD Automotive Engineering Research Institute, Shenzhen 518118, China",
+            "name": "Yubo Lian"
+          },
+          {
+            "affiliation": "Institute of Transportation Studies, University of California-Davis, Davis, CA 95616, USA",
+            "name": "Andrew F. Burke"
+          }
+        ],
+        "link": [
+          {
+            "content_type": "text/html",
+            "type": "fulltext",
+            "url": "https://www.mdpi.com/1996-1073/16/11/4403"
+          }
+        ],
+        "abstract": "As the popularity of electric vehicles (EVs) and smart grids continues to rise, so does the demand for batteries. Within the landscape of battery-powered energy storage systems, the battery management system (BMS) is crucial. It provides key functions such as battery state estimation (including state of charge, state of health, battery safety, and thermal management) as well as cell balancing. Its primary role is to ensure safe battery operation. However, due to the limited memory and computational capacity of onboard chips, achieving this goal is challenging, as both theory and practical evidence suggest. Given the immense amount of battery data produced over its operational life, the scientific community is increasingly turning to cloud computing for data storage and analysis. This cloud-based digital solution presents a more flexible and efficient alternative to traditional methods that often require significant hardware investments. The integration of machine learning is becoming an essential tool for extracting patterns and insights from vast amounts of observational data. As a result, the future points towards the development of a cloud-based artificial intelligence (AI)-enhanced BMS. This will notably improve the predictive and modeling capacity for long-range connections across various timescales, by combining the strength of physical process models with the versatility of machine learning techniques.",
+        "title": "Cloud-Based Artificial Intelligence Framework for Battery Management System"
+      },
+      "id": "00035a0f03674bbc864f63ce0130db45",
+      "created_date": "2023-06-09T13:06:46Z"
+    },
+    {
+      "last_updated": "2025-08-20T01:07:30Z",
+      "bibjson": {
+        "identifier": [
+          {
+            "id": "1687-0530",
+            "type": "pissn"
+          },
+          {
+            "id": "2356-8550",
+            "type": "eissn"
+          },
+          {
+            "id": "10.21608/jesaun.2024.326709.1374",
+            "type": "doi"
+          }
+        ],
+        "journal": {
+          "volume": "53",
+          "number": "1",
+          "country": "EG",
+          "issns": [
+            "1687-0530",
+            "2356-8550"
+          ],
+          "publisher": "Assiut University, Faculty of Engineering",
+          "language": [
+            "AR",
+            "EN"
+          ],
+          "title": "JES: Journal of Engineering Sciences"
+        },
+        "month": "1",
+        "end_page": "22",
+        "keywords": [
+          "dem",
+          "gnss-rtk",
+          "agricultural",
+          "machine learning",
+          "egypt"
+        ],
+        "year": "2025",
+        "start_page": "1",
+        "subject": [
+          {
+            "code": "TA1-2040",
+            "scheme": "LCC",
+            "term": "Engineering (General). Civil engineering (General)"
+          }
+        ],
+        "author": [
+          {
+            "affiliation": "Faculty of Engineering, Aswan University, Aswan, Egypt",
+            "name": "Ashraf abdallah"
+          },
+          {
+            "affiliation": "Department of Civil Engineering, Jordan University of Science and Technology, Irbid, Jordan",
+            "name": "Bara&#039; Al-MISTAREHI"
+          },
+          {
+            "affiliation": "Department of City Planning and Design, Jordan University of Science and Technology,  Irbid, Jordan",
+            "name": "Amir SHTAYAT"
+          }
+        ],
+        "link": [
+          {
+            "content_type": "pdf",
+            "type": "fulltext",
+            "url": "https://jesaun.journals.ekb.eg/article_393447_9546e355affffebb2c5da930aaeba9a0.pdf"
+          }
+        ],
+        "abstract": "Agriculture is a vital component of Egypt's economy; therefore, using Digital Elevation Models (DEMs) in agricultural planning in Egypt has significant benefits regarding water management, site appropriateness assessment, flood risk mitigation, and infrastructure construction. It is also essential for planners to make more informed decisions, optimize resource allocation, and support sustainable farming practices. This research paper investigates the accuracy of obtaining DEM data from four free global models (STRM30, ALOS30, COP30, and TanDEM-X90). The global DEM data has been compared to an actual GNSS-RTK DEM data surveyed onsite for two agricultural block areas in Aswan, the southern Government of Egypt. The two blocks are a part of a national project. For Block I and II, the RMSE of the Model STRM30 was 2.92 m and 3.59 m, respectively, indicating a poorer solution. Regarding accuracy, the ALOS30 model ranks third, reporting an RMSE of 2.58 m for block II and 3.30 m for block I. COP30 has an RMSE value of 1.06 m for blocks I and II and.91 m overall. TanDEM-X90 is the most accurate model in this investigation; block I provided an RMSE of 0.90 m with an SD of 0.58 m (SD95% = 0.38 m). After removing the anomalies, the model's stated RMSE for block II was 0.34 m, with an SD value of 0.62 m and 1.03 m. According to the classification using machine learning algorithms, with an accuracy of 84.7% for block I and 85% for block II, TanDEM-X90 is the best solution.",
+        "title": "Evaluation of the Applications of using Global free Digital Elevation Models and GNSS-RTK data for Agricultural purposes in Egypt using Machine Learning"
+      },
+      "id": "0003a09e2d69440b8c2e6bd7023de8fe",
+      "created_date": "2024-12-27T16:38:15Z"
+    }
+  ],
+  "next": "https://doaj.org/api/v4/search/articles/machine%20learning?page=2&pageSize=10",
+  "last": "https://doaj.org/api/v4/search/articles/machine%20learning?page=18981&pageSize=10"
+}

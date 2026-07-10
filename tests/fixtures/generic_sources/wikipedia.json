@@ -1,0 +1,41 @@
+{
+  "batchcomplete": "",
+  "continue": {
+    "sroffset": 3,
+    "continue": "-||"
+  },
+  "query": {
+    "searchinfo": {
+      "totalhits": 4170
+    },
+    "search": [
+      {
+        "ns": 0,
+        "title": "Inteligência artificial",
+        "pageid": 12722,
+        "size": 71351,
+        "wordcount": 8031,
+        "snippet": "de 2001, veja A.I. - <span class=\"searchmatch\">Inteligência</span> <span class=\"searchmatch\">Artificial</span>. Se procura outros significados, veja IA (desambiguação). <span class=\"searchmatch\">Inteligência</span> <span class=\"searchmatch\">artificial</span> (frequentemente abreviada",
+        "timestamp": "2026-06-13T16:30:06Z"
+      },
+      {
+        "ns": 0,
+        "title": "Segurança da inteligência artificial",
+        "pageid": 7143090,
+        "size": 97371,
+        "wordcount": 10042,
+        "snippet": "Segurança da <span class=\"searchmatch\">inteligência</span> <span class=\"searchmatch\">artificial</span> (do termo em inglês AI Safety) é um campo interdisciplinar que se preocupa com a prevenção de acidentes, uso indevido",
+        "timestamp": "2026-05-23T01:48:10Z"
+      },
+      {
+        "ns": 0,
+        "title": "Risco existencial da inteligência artificial geral",
+        "pageid": 7153786,
+        "size": 157114,
+        "wordcount": 16894,
+        "snippet": "Risco existencial da <span class=\"searchmatch\">inteligência</span> <span class=\"searchmatch\">artificial</span> geral é a hipótese de que o progresso substancial da <span class=\"searchmatch\">inteligência</span> <span class=\"searchmatch\">artificial</span> generativa (IAG) poderia resultar",
+        "timestamp": "2026-05-23T01:48:38Z"
+      }
+    ]
+  }
+}

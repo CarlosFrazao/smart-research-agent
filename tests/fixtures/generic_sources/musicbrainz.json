@@ -1,0 +1,247 @@
+{
+  "created": "2026-07-10T19:52:51.909Z",
+  "count": 21324,
+  "offset": 0,
+  "recordings": [
+    {
+      "id": "46fe768c-7b38-4147-9f02-815b9f0759e2",
+      "score": 100,
+      "artist-credit-id": "edbf1ee2-3861-3d95-b971-8f243cbc7e54",
+      "title": "Bohemian Rhapsody",
+      "length": 130400,
+      "disambiguation": "live, 1992-04-20: Wembley Stadium, London, UK",
+      "video": null,
+      "artist-credit": [
+        {
+          "name": "Queen",
+          "artist": {
+            "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+            "name": "Queen",
+            "sort-name": "Queen",
+            "disambiguation": "UK rock group",
+            "aliases": [
+              {
+                "sort-name": "皇后乐队",
+                "type-id": "894afba6-2816-3c24-8072-eadb66bd04bc",
+                "name": "皇后乐队",
+                "locale": "zh_Hans_CN",
+                "type": "Artist name",
+                "primary": true,
+                "begin-date": null,
+                "end-date": null
+              },
+              {
+                "sort-name": "クイーン",
+                "type-id": "894afba6-2816-3c24-8072-eadb66bd04bc",
+                "name": "クイーン",
+                "locale": "ja",
+                "type": "Artist name",
+                "primary": true,
+                "begin-date": null,
+                "end-date": null
+              }
+            ]
+          }
+        }
+      ],
+      "releases": [
+        {
+          "id": "4ed8b5b5-6cd8-4a0a-a686-41ac276825e0",
+          "artist-credit-id": "949a7fd5-fe73-3e8f-922e-01ff4ca958f7",
+          "count": 2,
+          "title": "The Freddie Mercury Tribute",
+          "artist-credit": [
+            {
+              "name": "Various Artists",
+              "artist": {
+                "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+                "name": "Various Artists",
+                "sort-name": "Various Artists",
+                "disambiguation": "add compilations to this artist"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "a29bc8d9-9b3e-3a13-98c9-257dd4020eb0",
+            "type-id": "6fd474e2-6b58-3102-9d17-d6f7eb7da0a0",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "The Freddie Mercury Tribute Concert",
+            "primary-type": "Album",
+            "secondary-types": [
+              "Live"
+            ],
+            "secondary-type-ids": [
+              "6fd474e2-6b58-3102-9d17-d6f7eb7da0a0"
+            ]
+          },
+          "track-count": 27,
+          "media": [
+            {
+              "id": "501ded19-ee76-30d9-bd53-b189e80a5660",
+              "position": 1,
+              "track": [
+                {
+                  "id": "a9734ac9-91b7-39a7-b4a9-c9cc5088d27b",
+                  "number": "1",
+                  "title": "Bohemian Rhapsody",
+                  "length": 130400
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "17eb3129-0f17-403f-bea0-b524d6ffb770",
+      "score": 100,
+      "artist-credit-id": "60ae677c-0566-3074-a500-9ae7ba261602",
+      "title": "Bohemian Rhapsody",
+      "length": 316026,
+      "video": null,
+      "artist-credit": [
+        {
+          "name": "The Phones",
+          "artist": {
+            "id": "f7b5c78e-e832-4782-94f7-5c788ab6ddd9",
+            "name": "The Phones",
+            "sort-name": "Phones, The",
+            "disambiguation": "Australian a cappella group"
+          }
+        }
+      ],
+      "releases": [
+        {
+          "id": "07490e7c-f458-4753-b35a-69b80a964c31",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "count": 1,
+          "title": "Voices",
+          "status": "Official",
+          "release-group": {
+            "id": "1711436f-cd41-302b-be3a-1580d8f821b1",
+            "type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Voices",
+            "primary-type": "Album"
+          },
+          "track-count": 14,
+          "media": [
+            {
+              "id": "61351979-243b-353a-8443-8f4f20f9de4a",
+              "position": 1,
+              "track": [
+                {
+                  "id": "a1773d90-e2d4-3f77-91da-df38f76afa8c",
+                  "number": "9",
+                  "title": "Bohemian Rhapsody",
+                  "length": 316026
+                }
+              ],
+              "track-count": 14,
+              "track-offset": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "d480d302-577d-44c0-b502-99b678d11640",
+      "score": 100,
+      "artist-credit-id": "528bb715-eb07-3136-b429-745f6915eea4",
+      "title": "Bohemian Rhapsody",
+      "length": 424000,
+      "video": null,
+      "artist-credit": [
+        {
+          "name": "Áspid",
+          "artist": {
+            "id": "779c364e-3a3a-4a0a-a843-f22358ed0bb3",
+            "name": "Áspid",
+            "sort-name": "Áspid",
+            "disambiguation": "Spanish metal",
+            "aliases": [
+              {
+                "sort-name": "Aspid",
+                "name": "Aspid",
+                "locale": null,
+                "type": null,
+                "primary": null,
+                "begin-date": null,
+                "end-date": null
+              }
+            ]
+          }
+        }
+      ],
+      "first-release-date": "2004",
+      "releases": [
+        {
+          "id": "7063ccc5-f7c3-470c-8758-6d077e892c0a",
+          "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+          "artist-credit-id": "528bb715-eb07-3136-b429-745f6915eea4",
+          "count": 1,
+          "title": "Latiendo vivo",
+          "status": "Official",
+          "artist-credit": [
+            {
+              "name": "Áspid",
+              "artist": {
+                "id": "779c364e-3a3a-4a0a-a843-f22358ed0bb3",
+                "name": "Áspid",
+                "sort-name": "Áspid",
+                "disambiguation": "Spanish metal"
+              }
+            }
+          ],
+          "release-group": {
+            "id": "aa88b5a3-37d9-310e-8e23-4e05ebdd96fc",
+            "type-id": "6fd474e2-6b58-3102-9d17-d6f7eb7da0a0",
+            "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+            "title": "Latiendo vivo",
+            "primary-type": "Album",
+            "secondary-types": [
+              "Live"
+            ],
+            "secondary-type-ids": [
+              "6fd474e2-6b58-3102-9d17-d6f7eb7da0a0"
+            ]
+          },
+          "date": "2004",
+          "country": "ES",
+          "release-events": [
+            {
+              "date": "2004",
+              "area": {
+                "id": "471c46a7-afc5-31c4-923c-d0444f5053a4",
+                "name": "Spain",
+                "sort-name": "Spain",
+                "iso-3166-1-codes": [
+                  "ES"
+                ]
+              }
+            }
+          ],
+          "track-count": 16,
+          "media": [
+            {
+              "id": "a1ae8f4f-5668-3e41-9202-9d7797369dd6",
+              "position": 1,
+              "track": [
+                {
+                  "id": "5aec89d0-6135-3626-af35-31336dae66f3",
+                  "number": "13",
+                  "title": "Bohemian Rhapsody",
+                  "length": 424000
+                }
+              ],
+              "track-count": 16,
+              "track-offset": 12
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

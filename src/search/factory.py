@@ -326,10 +326,10 @@ class SearcherFactory:
         try:
             from src.search.generic_api_searcher import (
                 GenericAPISearcher,
-                list_generic_source_ids,
+                list_enabled_generic_source_ids,
             )
 
-            for _gid in list_generic_source_ids():
+            for _gid in list_enabled_generic_source_ids():
                 if _gid in searchers:
                     continue  # não sobrescrever um searcher dedicado
                 try:

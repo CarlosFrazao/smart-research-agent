@@ -1,0 +1,780 @@
+{
+  "totalHits": 549606,
+  "limit": 3,
+  "offset": 0,
+  "scrollId": "",
+  "results": [
+    {
+      "acceptedDate": "",
+      "arxivId": null,
+      "authors": [
+        {
+          "name": "Ratsch, Gunnar"
+        },
+        {
+          "name": "Scholkopf, Bernhard"
+        },
+        {
+          "name": "Vincent, P."
+        },
+        {
+          "name": "LeCun, Y"
+        },
+        {
+          "name": "Ong, C."
+        },
+        {
+          "name": "Braun, M.L."
+        },
+        {
+          "name": "Rasmussen, Carl Edward"
+        },
+        {
+          "name": "Rasmussen, CE"
+        },
+        {
+          "name": "Rätsch, G."
+        },
+        {
+          "name": "Bengio, S."
+        },
+        {
+          "name": "Müller, K.-R."
+        },
+        {
+          "name": "Müller, KR"
+        },
+        {
+          "name": "LeCunn, Yann"
+        },
+        {
+          "name": "Muller, Klaus-Robert"
+        },
+        {
+          "name": "Vincent , P."
+        },
+        {
+          "name": "Pereira, Fernando"
+        },
+        {
+          "name": "Vincent, Pascal"
+        },
+        {
+          "name": "Bottou, Leon"
+        },
+        {
+          "name": "Pereira, F"
+        },
+        {
+          "name": ","
+        },
+        {
+          "name": "Braun, ML"
+        },
+        {
+          "name": "Ong, CS"
+        },
+        {
+          "name": "Rasmussen, C.E."
+        },
+        {
+          "name": "Smola, A"
+        },
+        {
+          "name": "Sonnenburg, S."
+        },
+        {
+          "name": "Holmes, G"
+        },
+        {
+          "name": "Bengio, S"
+        },
+        {
+          "name": "Weston, Jason"
+        },
+        {
+          "name": "Williamson, RC"
+        },
+        {
+          "name": "Sonnenburg, S"
+        },
+        {
+          "name": "Williamson, Robert C."
+        },
+        {
+          "name": "Bottou, L."
+        },
+        {
+          "name": "Holmes, G."
+        },
+        {
+          "name": "Ong, Cheng Soon"
+        },
+        {
+          "name": "Pereira, F."
+        },
+        {
+          "name": "Braun, M."
+        },
+        {
+          "name": "Sonnenburg, Soren"
+        },
+        {
+          "name": "Smola, Alexander"
+        },
+        {
+          "name": "Williamson, R.C."
+        },
+        {
+          "name": "Holmes , G."
+        },
+        {
+          "name": "Schölkopf, B"
+        },
+        {
+          "name": "Holmes, Geoffrey"
+        },
+        {
+          "name": "Braun, Mikio L."
+        },
+        {
+          "name": "Bengio, Samy"
+        },
+        {
+          "name": "Schölkopf, B."
+        },
+        {
+          "name": "Rasmussen, C."
+        },
+        {
+          "name": "Williamson, R."
+        },
+        {
+          "name": "Rätch, G"
+        },
+        {
+          "name": "Weston, J"
+        },
+        {
+          "name": "Smola, A."
+        },
+        {
+          "name": "Ong, C.S."
+        },
+        {
+          "name": "Müller, K."
+        },
+        {
+          "name": "Bottou, L"
+        },
+        {
+          "name": "Weston, J."
+        },
+        {
+          "name": "Vincent, P"
+        },
+        {
+          "name": "LeCun, Y."
+        }
+      ],
+      "citationCount": 0,
+      "contributors": [],
+      "outputs": [
+        "https://api.core.ac.uk/v3/outputs/29197653",
+        "https://api.core.ac.uk/v3/outputs/45740200",
+        "https://api.core.ac.uk/v3/outputs/58831667",
+        "https://api.core.ac.uk/v3/outputs/210983357",
+        "https://api.core.ac.uk/v3/outputs/326985241",
+        "https://api.core.ac.uk/v3/outputs/516205221"
+      ],
+      "createdDate": "2012-03-20T00:00:00+00:00",
+      "dataProviders": [
+        {
+          "id": 677,
+          "name": "Research Commons@Waikato",
+          "url": "https://api.core.ac.uk/v3/data-providers/677",
+          "logo": "https://api.core.ac.uk/data-providers/677/logo"
+        },
+        {
+          "id": 1000,
+          "name": "Max Planck Society eDoc Server",
+          "url": "https://api.core.ac.uk/v3/data-providers/1000",
+          "logo": "https://api.core.ac.uk/data-providers/1000/logo"
+        },
+        {
+          "id": 653,
+          "name": "CUED - Cambridge University Engineering Department",
+          "url": "https://api.core.ac.uk/v3/data-providers/653",
+          "logo": "https://api.core.ac.uk/data-providers/653/logo"
+        },
+        {
+          "id": 1005,
+          "name": "MPG.PuRe",
+          "url": "https://api.core.ac.uk/v3/data-providers/1005",
+          "logo": "https://api.core.ac.uk/data-providers/1005/logo"
+        }
+      ],
+      "depositedDate": "2012-03-20T00:00:00+00:00",
+      "abstract": "Open source tools have recently reached a level of maturity which makes them suitable for building large-scale real-world systems. At the same time, the field of machine learning has developed a large body of powerful learning algorithms for diverse applications. However, the true potential of these methods is not used, since existing implementations are not openly shared, resulting in software with low usability, and weak interoperability. We argue that this situation can be significantly improved by increasing incentives for researchers to publish their software under an open source model. Additionally, we outline the problems authors are faced with when trying to publish algorithmic implementations of machine learning methods. We believe that a resource of peer reviewed software accompanied by short articles would be highly valuable to both the machine learning and the general scientific community",
+      "documentType": "",
+      "doi": null,
+      "downloadUrl": "",
+      "fieldOfStudy": "Journal Article",
+      "fullText": "Not available for public API users.",
+      "id": 8916209,
+      "identifiers": [
+        {
+          "identifier": "29197653",
+          "type": "core_id"
+        },
+        {
+          "identifier": "oai:researchcommons.waikato.ac.nz:10289/3928",
+          "type": "oai_id"
+        },
+        {
+          "identifier": "45740200",
+          "type": "core_id"
+        },
+        {
+          "identifier": "oai:edoc.mpg.de:350382",
+          "type": "oai_id"
+        },
+        {
+          "identifier": "58831667",
+          "type": "core_id"
+        },
+        {
+          "identifier": "210983357",
+          "type": "core_id"
+        },
+        {
+          "identifier": "oai:pure.mpg.de:item_1790203",
+          "type": "oai_id"
+        },
+        {
+          "identifier": "326985241",
+          "type": "core_id"
+        },
+        {
+          "identifier": "oai:generic.eprints.org:333593/core653",
+          "type": "oai_id"
+        },
+        {
+          "identifier": "516205221",
+          "type": "core_id"
+        },
+        {
+          "identifier": "oai:pure.mpg.de:item_3379303",
+          "type": "oai_id"
+        },
+        {
+          "identifier": "oai:researchcommons.waikato.ac.nz:10289/3928",
+          "type": "oai"
+        },
+        {
+          "identifier": "oai:edoc.mpg.de:350382",
+          "type": "oai"
+        },
+        {
+          "identifier": "oai:pure.mpg.de:item_1790203",
+          "type": "oai"
+        },
+        {
+          "identifier": "oai:generic.eprints.org:333593/core653",
+          "type": "oai"
+        },
+        {
+          "identifier": "oai:pure.mpg.de:item_3379303",
+          "type": "oai"
+        }
+      ],
+      "title": "The need for open source software in machine learning",
+      "language": {
+        "code": "en",
+        "name": "English"
+      },
+      "magId": null,
+      "oaiIds": [
+        "oai:researchcommons.waikato.ac.nz:10289/3928",
+        "oai:edoc.mpg.de:350382",
+        "oai:pure.mpg.de:item_1790203",
+        "oai:generic.eprints.org:333593/core653",
+        "oai:pure.mpg.de:item_3379303"
+      ],
+      "publishedDate": "2007-01-01T00:00:00+00:00",
+      "publisher": "",
+      "pubmedId": null,
+      "references": [
+        {
+          "id": "16571036",
+          "title": "A history of scientiﬁc and technical periodicals: the origins and development of the scientiﬁc and technological press,",
+          "authors": [],
+          "date": "1962",
+          "doi": "10.1086/349715",
+          "raw": "David A. Kronick. A history of scientiﬁc and technical periodicals: the origins and development of the scientiﬁc and technological press, 1665-1790. Scarecrow Press, New York, 1962."
+        },
+        {
+          "id": "16571037",
+          "title": "Author’s reply to the “comments on the Core Vector Machines: Fast SVM Training on Very Large Data Sets”.",
+          "authors": [],
+          "date": "2007",
+          "doi": null,
+          "raw": "Ivor W. Tsang and James T. Kwok. Author’s reply to the “comments on the Core Vector Machines: Fast SVM Training on Very Large Data Sets”. Journal of Machine Learning Research, 2007. submitted."
+        },
+        {
+          "id": "16571038",
+          "title": "Basic linear algebra subprograms for fortran usage.",
+          "authors": [],
+          "date": "1979",
+          "doi": "10.1145/355841.355847",
+          "raw": "Charles L. Lawson, Richard J. Hanson, David Kincaid, and Fred T. Krogh. Basic linear algebra subprograms for fortran usage. ACM Trans. Math. Soft., 5:308–323, 1979."
+        },
+        {
+          "id": "16571039",
+          "title": "Christin Sch¨ afer, and Bernhard Sch¨ olkopf. Large scale multiple kernel learning.",
+          "authors": [],
+          "date": "2006",
+          "doi": null,
+          "raw": "S¨ oren Sonnenburg, Gunnar R¨ atsch, Christin Sch¨ afer, and Bernhard Sch¨ olkopf. Large scale multiple kernel learning. Journal of Machine Learning Research, 7:1531–1565, July 2006."
+        },
+        {
+          "id": "16571040",
+          "title": "Comments on the “core vector machines: Fast SVM training on very large data sets”.",
+          "authors": [],
+          "date": "2007",
+          "doi": null,
+          "raw": "Ga¨ elle Loosli and St´ ephane Canu. Comments on the “core vector machines: Fast SVM training on very large data sets”. Journal of Machine Learning Research, 8:291–301, 2007."
+        },
+        {
+          "id": "16571041",
+          "title": "Creative commons – the next generation: Creative commons licence use ﬁve years on.",
+          "authors": [],
+          "date": "2007",
+          "doi": "10.2966/scrip.040107.72",
+          "raw": "Jessica Coates. Creative commons – the next generation: Creative commons licence use ﬁve years on. SCRIPT-ed, 4(1), 2007. http://www.law.ed.ac.uk/ahrc/script-ed/vol4-1/coates.asp."
+        },
+        {
+          "id": "16571042",
+          "title": "ELEFANT: A python machine learning toolbox.",
+          "authors": [],
+          "date": "2007",
+          "doi": null,
+          "raw": "Kishor Gawande, Christfried Webers, Alexander J. Smola, and S.V.N. Vishwanathan. ELEFANT: A python machine learning toolbox. In SciPy Conference, 2007."
+        },
+        {
+          "id": "16571043",
+          "title": "Explaining code for publication.",
+          "authors": [],
+          "date": "2003",
+          "doi": "10.1002/spe.537",
+          "raw": "Harold Thimbleby. Explaining code for publication. Software Practice and Experience, 33(10): 975–1001, 2003."
+        },
+        {
+          "id": "16571044",
+          "title": "Fundamental issues with open source software development.",
+          "authors": [],
+          "date": "2004",
+          "doi": "10.5210/fm.v9i4.1137",
+          "raw": "Michelle Levesque. Fundamental issues with open source software development. First Monday, 9 (4), April 2004. http://www.firstmonday.org/issues/issue9_4/levesque/index.html."
+        },
+        {
+          "id": "16571045",
+          "title": "Guide. Society for Industrial and Applied Mathematics,",
+          "authors": [],
+          "date": "1999",
+          "doi": "10.1137/1.9780898719604.ch2",
+          "raw": "LAPACK Users’ Guide. Society for Industrial and Applied Mathematics, Philadelphia, PA, third edition, 1999. ISBN 0-89871-447-8 (paperback)."
+        },
+        {
+          "id": "16571046",
+          "title": "How to pick an open source license. http://blogs.zdnet.com/Burnette/?p=130 and http://blogs.zdnet.com/Burnette/?p=131,",
+          "authors": [],
+          "date": "2006",
+          "doi": null,
+          "raw": "Ed Burnette. How to pick an open source license. http://blogs.zdnet.com/Burnette/?p=130 and http://blogs.zdnet.com/Burnette/?p=131, 2006."
+        },
+        {
+          "id": "16571047",
+          "title": "Large scale semi-supervised linear svms.",
+          "authors": [],
+          "date": "2006",
+          "doi": "10.1145/1148170.1148253",
+          "raw": "Vikas Sindhwani and S. Sathiya. Keerthi. Large scale semi-supervised linear svms. In SIGIR ’06: Proceedings of the 29th annual international ACM SIGIR conference on Research and development in information retrieval, pages 477–484, New York, NY, USA, 2006. ACM Press. 2465SONNENBURG, BRAUN, ONG, ET AL."
+        },
+        {
+          "id": "16571048",
+          "title": "Legal issues relating to free and open source software.",
+          "authors": [],
+          "date": "2003",
+          "doi": null,
+          "raw": "Brian Fitzgerald and Graham Bassett. Legal issues relating to free and open source software. In Legal Issues Relating to Free and Open Source Software, pages 11–36. Queensland University of Technology, School of Law, 2003. http://www.law.qut.edu.au/files/open_source_book.pdf."
+        },
+        {
+          "id": "16571049",
+          "title": "Let data speak to data.",
+          "authors": [],
+          "date": "2005",
+          "doi": "10.1038/438531a",
+          "raw": "Nature. Let data speak to data. Nature, 438(7068):531, 2005. Open Source Initative. http://www.opensource.org/docs/osd."
+        },
+        {
+          "id": "16571050",
+          "title": "LIBSVM: A library for support vector machines,",
+          "authors": [],
+          "date": "2001",
+          "doi": "10.1145/1961189.1961199",
+          "raw": "Chih-Chung Chang and Chih-Jen Lin. LIBSVM: A library for support vector machines, 2001. Software available at http://www.csie.ntu.edu.tw/˜cjlin/libsvm."
+        },
+        {
+          "id": "16571051",
+          "title": "Licensing and open source software. In Legal Issues Relating to Free and Open Source Software,",
+          "authors": [],
+          "date": "2003",
+          "doi": "10.5033/ifosslr.v1i2.26",
+          "raw": "Mark Webbink. Licensing and open source software. In Legal Issues Relating to Free and Open Source Software, pages 1–11. Queensland University of Technology, School of Law, 2003. http://www.law.qut.edu.au/files/open_source_book.pdf. David A. Wheeler. Make your open source software GPL-compatible. or else."
+        },
+        {
+          "id": "16571052",
+          "title": "Open source licenses and the creative commons framework: License selection and comparison.",
+          "authors": [],
+          "date": "2006",
+          "doi": "10.4018/978-1-59140-999-1.ch030",
+          "raw": "Yi-Hsuan Lin, Tung-Mei Ko, Tyng-Ruey Chuang, and Kwei-Jay Lin. Open source licenses and the creative commons framework: License selection and comparison. Journal of Information Science and Engineering, 22:1–17, 2006."
+        },
+        {
+          "id": "16571053",
+          "title": "Open source software development as a special type of academic research (critique of vulgar Raymondism).",
+          "authors": [],
+          "date": "1999",
+          "doi": "10.5210/fm.v4i10.696",
+          "raw": "Nikolai Bezroukov. Open source software development as a special type of academic research (critique of vulgar Raymondism). First Monday, 4(10), October 1999. http://www.firstmonday.org/issues/issue4_10/bezroukov/index.html."
+        },
+        {
+          "id": "16571054",
+          "title": "Open source tools and toolkits for bioinformatics: signiﬁcance, and where are we?",
+          "authors": [],
+          "date": "2006",
+          "doi": null,
+          "raw": "Jason E. Strajich and Hilmar Lapp. Open source tools and toolkits for bioinformatics: signiﬁcance, and where are we? Brieﬁngs in Bioinformatics, 7(3):287–296, 2006."
+        },
+        {
+          "id": "16571055",
+          "title": "Orange: From experimental machine learning to interactive data mining, white paper http://www.ailab.si/orange.",
+          "authors": [],
+          "date": "2004",
+          "doi": "10.1007/978-3-540-30116-5_58",
+          "raw": "Janez. Demsar and Blaz. Zupan. Orange: From experimental machine learning to interactive data mining, white paper http://www.ailab.si/orange. Technical report, Faculty of Computer and Information Science, University of Ljubljana., 2004."
+        },
+        {
+          "id": "16571056",
+          "title": "Parallel software for training large scale support vector machines on multiprocessor systems.",
+          "authors": [],
+          "date": "2006",
+          "doi": "10.1007/11557265_7",
+          "raw": "Luca Zanni, Thomas Seraﬁni, and Gaetano Zanghirati. Parallel software for training large scale support vector machines on multiprocessor systems. Journal of Machine Learning Research, 7: 1467–1492, July 2006."
+        },
+        {
+          "id": "16571057",
+          "title": "Scientiﬁc communication – a vanity fair?",
+          "authors": [],
+          "date": "1999",
+          "doi": null,
+          "raw": "Georg Franck. Scientiﬁc communication – a vanity fair? Science, 286(5437):53–55, 1999."
+        },
+        {
+          "id": "16571058",
+          "title": "Soft margins for AdaBoost.",
+          "authors": [],
+          "date": "2001",
+          "doi": null,
+          "raw": "Gunnar R¨ atsch, Takashi Onoda, and Klaus-Robert M¨ uller. Soft margins for AdaBoost. Machine Learning, 42(3):287–320, 2001. Data is hosted at http://ida.first.fraunhofer.de/projects/bench."
+        },
+        {
+          "id": "16571059",
+          "title": "SVMTorch: Support vector machines for large-scale regression problems.",
+          "authors": [],
+          "date": "2001",
+          "doi": "10.1007/3-540-45665-1_2",
+          "raw": "Ronan Collobert and Samy Bengio. SVMTorch: Support vector machines for large-scale regression problems. Journal of Machine Learning Research, 1:143–160, 2001. ISSN 1533-7928."
+        },
+        {
+          "id": "16571060",
+          "title": "TAO user manual (revision 1.8).",
+          "authors": [],
+          "date": "2004",
+          "doi": "10.2514/6.2004-4450",
+          "raw": "Steven J. Benson, Lois Curfman-McInnes, Jorge Mor´ e, and Jason Sarich. TAO user manual (revision 1.8). Technical Report ANL/MCS-TM-242, Mathematics and Computer Science Division, Argonne National Laboratory, 2004. http://www.mcs.anl.gov/tao."
+        },
+        {
+          "id": "16571061",
+          "title": "The Art of UNIX Programming.",
+          "authors": [],
+          "date": "2004",
+          "doi": null,
+          "raw": "Eric S. Raymond. The Art of UNIX Programming. Addison-Wesley, 2004."
+        },
+        {
+          "id": "16571062",
+          "title": "The cathedral & the bazaar.",
+          "authors": [],
+          "date": "2000",
+          "doi": "10.5210/fm.v3i2.578",
+          "raw": "Eric S. Raymond. The cathedral & the bazaar. 2000. http://www.tuxedo.org/˜esr."
+        },
+        {
+          "id": "16571063",
+          "title": "The economic motivation of open source software: Stakeholder perspectives.",
+          "authors": [],
+          "date": "2007",
+          "doi": "10.1109/mc.2007.147",
+          "raw": "Dirk Riehle. The economic motivation of open source software: Stakeholder perspectives. IEEE Computer, 40(4):25–32, 2007."
+        },
+        {
+          "id": "16571064",
+          "title": "the free encyclopedia.",
+          "authors": [],
+          "date": null,
+          "doi": "10.4135/9781412950657.n52",
+          "raw": "Wikipedia. Copyleft – Wikipedia, the free encyclopedia. http://en.wikipedia.org/wiki/Copyleft, 2007a. [Online; accessed 2-July-2007]."
+        },
+        {
+          "id": "16571065",
+          "title": "the free encyclopedia. http://en.wikipedia.org/wiki/SPICE, 2007b. [Online; accessed 29-June-2007]. Ian H. Witten and Eibe Frank. Data Mining: Practical machine learning tools and techniques.",
+          "authors": [],
+          "date": null,
+          "doi": null,
+          "raw": "Wikipedia. SPICE – Wikipedia, the free encyclopedia. http://en.wikipedia.org/wiki/SPICE, 2007b. [Online; accessed 29-June-2007]. Ian H. Witten and Eibe Frank. Data Mining: Practical machine learning tools and techniques."
+        },
+        {
+          "id": "16571066",
+          "title": "The future of scientiﬁc journals: Lessons from the past.",
+          "authors": [],
+          "date": "1994",
+          "doi": null,
+          "raw": "Ann C. Schaffner. The future of scientiﬁc journals: Lessons from the past. Information Technology and Libraries, 13(4):239–247, 1994."
+        },
+        {
+          "id": "16571067",
+          "title": "The intellectual origins of modern economic growth.",
+          "authors": [],
+          "date": "2005",
+          "doi": "10.1007/3-7908-1658-2_2",
+          "raw": "Joel Mokyr. The intellectual origins of modern economic growth. The Journal of Economic History, 65(2):285–351, 2005."
+        },
+        {
+          "id": "16571068",
+          "title": "The many meanings of open source.",
+          "authors": [],
+          "date": "2004",
+          "doi": "10.1109/ms.2004.1259206",
+          "raw": "Cristina Gacek and Budi Arief. The many meanings of open source. IEEE Software, 21(1):34–40, 2004."
+        },
+        {
+          "id": "16571069",
+          "title": "The Pragmatic Programmer.",
+          "authors": [],
+          "date": "2000",
+          "doi": null,
+          "raw": "Andrew Hunt and David Thomas. The Pragmatic Programmer. Addison-Wesley, 2000. 2464MACHINE LEARNING OPEN SOURCE SOFTWARE Christopher M. Kelty. Free software/free science. First Monday, 6(12), December 2001. http://www.firstmonday.org/issues/issue6_12/kelty/index.html."
+        },
+        {
+          "id": "16571070",
+          "title": "The Rise of Open Source Licensing. Turre Publishing,",
+          "authors": [],
+          "date": "2005",
+          "doi": null,
+          "raw": "Mikko V¨ alim¨ aki. The Rise of Open Source Licensing. Turre Publishing, 2005. Pascal Vincent, Yoshua Bengio, and Nicolas Chapados. http://plearn.org."
+        },
+        {
+          "id": "16571071",
+          "title": "The Sciences of the Artiﬁcial.",
+          "authors": [],
+          "date": "1969",
+          "doi": "10.2307/3008782",
+          "raw": "Herbert A. Simon. The Sciences of the Artiﬁcial. MIT Press, Cambridge, Massachusetts, ﬁrst edition, 1969."
+        },
+        {
+          "id": "16571072",
+          "title": "Torch: A modular machine learning software library.",
+          "authors": [],
+          "date": "2002",
+          "doi": "10.1145/1015330.1015415",
+          "raw": "Ronan Collobert, Samy Bengio, and J. Mariethoz. Torch: A modular machine learning software library. Technical report, IDIAP, 2002. IDIAP-RR 02-46."
+        }
+      ],
+      "sourceFulltextUrls": [],
+      "updatedDate": "",
+      "yearPublished": 2007,
+      "journals": [],
+      "links": [
+        {
+          "type": "display",
+          "url": "https://core.ac.uk/works/8916209"
+        }
+      ]
+    },
+    {
+      "acceptedDate": "",
+      "arxivId": null,
+      "authors": [
+        {
+          "name": "van Rijn J.N."
+        },
+        {
+          "name": "Mohr F."
+        }
+      ],
+      "citationCount": 0,
+      "contributors": [],
+      "outputs": [
+        "https://api.core.ac.uk/v3/outputs/641684400"
+      ],
+      "createdDate": "2025-09-05T01:56:34+01:00",
+      "dataProviders": [
+        {
+          "id": 1630,
+          "name": "Intellectum (Universidad de La Sabana)",
+          "url": "https://api.core.ac.uk/v3/data-providers/1630",
+          "logo": "https://api.core.ac.uk/data-providers/1630/logo"
+        }
+      ],
+      "depositedDate": "2025-01-31T16:43:09+00:00",
+      "abstract": "Learning curves are a concept from social sciences that has been adopted in the context of machine learning to assess the performance of a learning algorithm with respect to a certain resource, e.g., the number of training examples or the number of training iterations. Learning curves have important applications in several machine learning contexts, most notably in data acquisition, early stopping of model training, and model selection. For instance, learning curves can be used to model the performance of the combination of an algorithm and its hyperparameter configuration, providing insights into their potential suitability at an early stage and often expediting the algorithm selection process. Various learning curve models have been proposed to use learning curves for decision making. Some of these models answer the binary decision question of whether a given algorithm at a certain budget will outperform a certain reference performance, whereas more complex models predict the entire learning curve of an algorithm. We contribute a framework that categorises learning curve approaches using three criteria: the decision-making situation they address, the intrinsic learning curve question they answer and the type of resources they use. We survey papers from the literature and classify them into this framework. © The Author(s), under exclusive licence to Springer Science+Business Media LLC, part of Springer Nature 2024",
+      "documentType": "",
+      "doi": "10.1007/s10994-024-06619-7",
+      "downloadUrl": "",
+      "fieldOfStudy": "Artículo de revista",
+      "fullText": "Not available for public API users.",
+      "id": 171513974,
+      "identifiers": [
+        {
+          "identifier": "641684400",
+          "type": "core_id"
+        },
+        {
+          "identifier": "10.1007/s10994-024-06619-7",
+          "type": "doi"
+        },
+        {
+          "identifier": "oai:intellectum.unisabana.edu.co:10818/63236",
+          "type": "oai_id"
+        },
+        {
+          "identifier": "oai:intellectum.unisabana.edu.co:10818/63236",
+          "type": "oai"
+        }
+      ],
+      "title": "Learning curves for decision making in supervised machine learning: a survey",
+      "magId": null,
+      "oaiIds": [
+        "oai:intellectum.unisabana.edu.co:10818/63236"
+      ],
+      "publishedDate": "2024-01-01T00:00:00+00:00",
+      "publisher": "",
+      "pubmedId": null,
+      "references": [],
+      "sourceFulltextUrls": [],
+      "updatedDate": "",
+      "yearPublished": 2024,
+      "journals": [],
+      "links": [
+        {
+          "type": "display",
+          "url": "https://core.ac.uk/works/171513974"
+        }
+      ]
+    },
+    {
+      "acceptedDate": "",
+      "arxivId": null,
+      "authors": [
+        {
+          "name": "Woungang, Isaac"
+        },
+        {
+          "name": "Kaski, Samuel"
+        },
+        {
+          "name": "Yuan, Kai"
+        },
+        {
+          "name": "Alakuijala, Minttu"
+        },
+        {
+          "name": "McLean, Reginald"
+        },
+        {
+          "name": "Marttinen, Pekka"
+        },
+        {
+          "name": "Farsad, Nariman"
+        }
+      ],
+      "citationCount": 0,
+      "contributors": [],
+      "outputs": [
+        "https://api.core.ac.uk/v3/outputs/655068188"
+      ],
+      "createdDate": "2025-09-23T19:36:11+01:00",
+      "dataProviders": [
+        {
+          "id": 663,
+          "name": "Aaltodoc Publication Archive",
+          "url": "https://api.core.ac.uk/v3/data-providers/663",
+          "logo": "https://api.core.ac.uk/data-providers/663/logo"
+        }
+      ],
+      "depositedDate": "2025-03-19T06:19:38+00:00",
+      "abstract": "Publisher Copyright: © 2025, Transactions on Machine Learning Research.Natural language is often the easiest and most convenient modality for humans to specify tasks for robots. However, learning to ground language to behavior typically requires impractical amounts of diverse, language-annotated demonstrations collected on each target robot. In this work, we aim to separate the problem of what to accomplish from how to accomplish it, as the former can benefit from substantial amounts of external observation-only data, and only the latter depends on a specific robot embodiment. To this end, we propose Video-Language Critic, a reward model that can be trained on readily available cross-embodiment data using contrastive learning and a temporal ranking objective, and use it to score behavior traces from a separate actor. When trained on Open X-Embodiment data, our reward model enables 2x more sample-efficient policy training on Meta-World tasks than a sparse reward only, despite a significant domain gap. Using in-domain data but in a challenging task generalization setting on Meta-World, we further demonstrate more sample-efficient training than is possible with prior language-conditioned reward models that are either trained with binary classification, use static images, or do not leverage the temporal information present in video data.1.Peer reviewe",
+      "documentType": "",
+      "doi": null,
+      "downloadUrl": "",
+      "fieldOfStudy": "A1 Alkuperäisartikkeli tieteellisessä aikakauslehdessä",
+      "fullText": "Not available for public API users.",
+      "id": 275869639,
+      "identifiers": [
+        {
+          "identifier": "655068188",
+          "type": "core_id"
+        },
+        {
+          "identifier": "oai:aaltodoc.aalto.fi:123456789/134690",
+          "type": "oai_id"
+        },
+        {
+          "identifier": "oai:aaltodoc.aalto.fi:123456789/134690",
+          "type": "oai"
+        }
+      ],
+      "title": "Video-Language Critic : Transferable Reward Functions for Language-Conditioned Robotics",
+      "magId": null,
+      "oaiIds": [
+        "oai:aaltodoc.aalto.fi:123456789/134690"
+      ],
+      "publishedDate": "2025-01-01T00:00:00+00:00",
+      "publisher": "",
+      "pubmedId": null,
+      "references": [],
+      "sourceFulltextUrls": [],
+      "updatedDate": "",
+      "yearPublished": 2025,
+      "journals": [
+        {
+          "title": null,
+          "identifiers": []
+        },
+        {
+          "title": null,
+          "identifiers": []
+        }
+      ],
+      "links": [
+        {
+          "type": "display",
+          "url": "https://core.ac.uk/works/275869639"
+        }
+      ]
+    }
+  ],
+  "searchId": "e65ba1860f1180f240dbbdaee5ac751c"
+}
