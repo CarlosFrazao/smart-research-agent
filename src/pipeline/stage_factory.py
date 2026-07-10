@@ -592,9 +592,12 @@ class StageFactory:
         """Factory para SynthesizeStage."""
         from src.pipeline.stages.synthesize_stage import SynthesizeStage
         from src.synthesizer import Synthesizer
+        from src.feedback_ranker import FeedbackRanker
+        from src.feedback_store import FeedbackStore
 
         synthesizer = Synthesizer(llm_client=self._deps.get("llm_client"))
-        return SynthesizeStage(synthesizer=synthesizer)
+        feedback_ranker = FeedbackRanker(store=FeedbackStore())
+        return SynthesizeStage(synthesizer=synthesizer, feedback_ranker=feedback_ranker)
 
     def _create_report_stage(self) -> PipelineStage:
         """Factory para ReportStage."""

@@ -384,10 +384,54 @@ class Orchestrator:
                 eq = ExpandedQuery(query=data, type="hitl_pivot", priority="alta")
                 if eq not in context.expanded_queries:
                     context.expanded_queries.append(eq)
-        elif action == "exclude_source" or action == "veto":
-            logger.info(f"HITL Decision: Veto aplicado a: {data}")
-        elif action == "expand_scope" or action == "expand":
-            logger.info(f"HITL Decision: Expansão solicitada: {data}")
+        elif action in ("exclude_source", "veto"):
+            source_to_exclude = (
+                data.get("source") if isinstance(data, dict) else str(data)
+            )
+            if source_to_exclude:
+                # Filtrar resultados da fonte vetada de ranked_results.
+                original_count = len(context.ranked_results)
+                context.ranked_results = [
+                    r
+                    for r in context.ranked_results
+                    if getattr(r, "source", None) != source_to_exclude
+                ]
+                removed = original_count - len(context.ranked_results)
+                logger.info(
+                    "HITL veto applied: removed %d results from source '%s'",
+                    removed,
+                    source_to_exclude,
+                )
+                # Registrar como sinal negativo no feedback_store (se disponível).
+                if hasattr(self, "feedback_store") and self.feedback_store:
+                    try:
+                        self.feedback_store.record(
+                            user_id=getattr(context, "user_id", "anonymous"),
+                            query=context.query,
+                            result_id=f"hitl_veto:{source_to_exclude}",
+                            signal="not_useful",
+                            source_name=source_to_exclude,
+                        )
+                    except Exception:
+                        logger.debug(
+                            "feedback_store.record falhou silenciosamente durante HITL veto",
+                            exc_info=True,
+                        )
+            else:
+                logger.info("HITL veto recebido sem fonte definida; ignorado.")
+        elif action in ("expand_scope", "expand"):
+            expand_hint = data.get("hint") if isinstance(data, dict) else str(data)
+            logger.info("HITL expand_scope triggered with hint: %s", expand_hint)
+            # Adicionar hint ao contexto para que stages subsequentes possam usar.
+            if not hasattr(context, "expand_hints"):
+                context.expand_hints = []
+            context.expand_hints.append(expand_hint)
+            # TODO-FASE2: implementar re-execução do SearchStage com sources adicionais
+            # Por ora, o hint é registrado e o pipeline continua com results atuais.
+            logger.warning(
+                "HITL expand_scope: hint registrado mas full re-search not yet implemented. "
+                "Context will use existing results."
+            )
         else:
             logger.info(f"HITL Decision: Ação padrão (incluir/ignorar): {action}")
 

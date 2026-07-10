@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 from src.pipeline.pipeline import PipelineContext, PipelineStage
 from src.query_validator import QueryValidator
 from src.ranker import QualityRanker
-from src.types import RankedResult, SearchResult, SourcePlan
+from src.types import RankedResult, SearchResult, SourcePlan, generate_result_id
 from src.utils.circuit_breaker import (
     CircuitBreakerOpen,
     CircuitBreakerRegistry,
@@ -324,6 +324,8 @@ class SearchStage(PipelineStage):
                         if cached is not None:
                             logger.debug(f"Cache hit: {cache_key}")
                             deserialized = self._deserialize_cached(cached)
+                            for r in deserialized:
+                                r.result_id = generate_result_id(source_name, r.url)
                             cached_results.extend(deserialized)
                             continue
                     except Exception as e:
@@ -434,6 +436,9 @@ class SearchStage(PipelineStage):
                 # FASE 0.4: Sanitizar descrições de fontes não-confiáveis
                 if self.sanitizer and source_name in UNTRUSTED_SOURCES:
                     result = await self._sanitize_results(result, source_name)
+                # 4.1: Gerar result_id canônico para cada resultado
+                for r in result:
+                    r.result_id = generate_result_id(source_name, r.url or "")
                 return source_name, query, result
         except CircuitBreakerOpen:
             logger.warning(f"Circuit breaker OPEN para '{source_name}' — pulando")
@@ -560,6 +565,9 @@ class SearchStage(PipelineStage):
                         )
             except Exception as e:
                 logger.error(f"Fallback SerpAPI falhou para '{q_str}': {e}")
+        # Gerar result_id para resultados do fallback
+        for r in all_results:
+            r.result_id = generate_result_id("serpapi", r.url or "")
         return all_results
 
     @staticmethod

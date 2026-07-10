@@ -1,3 +1,14 @@
+# AVISO: Este arquivo é documentação de referência de design, NÃO é carregado por nenhum código.
+# Os searchers e seus timeouts/max_results são instanciados pela SearcherFactory
+# (src/search/factory.py) com valores hardcoded/derivados de config.py, não a partir daqui.
+# Para alterar comportamento real de uma fonte, edite: src/search/factory.py e src/config.py.
+# Issue de rastreamento: conectar este YAML ao código é tarefa futura planejada
+# (ver MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md — Tarefa 2.1, Opção B).
+#
+# Observação de design (2026-07-09):
+#   Mantido como documentação de capacidades de cada fonte. NÃO remova sem migrar os valores
+#   para a SearcherFactory, sob risco de quem editar aqui achar que muda o comportamento.
+
 sources:
   github:
     enabled: true

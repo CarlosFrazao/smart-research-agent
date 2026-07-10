@@ -89,3 +89,37 @@
 
 #### 🔧 Próximo Bloco
 - Bloco concluído e selado. Upgrade SRA v6.1 completo! Aguardando tag final humana e validação.
+
+---
+
+### Sessão: 2026-07-09 — Auditoria Parte 2 — Fase 2: Configuração Morta, HITL no-op e Exporters Órfãos
+
+#### 🎯 Entregas por Tarefa
+
+##### TAREFA 2.1 — Configuração morta (scoring_weights.yaml / sources.yaml) → Opção B (marcar inativo)
+- **Decisão:** Opção B. Razão: ao ler `src/ranking/hybrid_ranker.py`, os pesos reais são constantes hardcoded (`DEFAULT_BM25_WEIGHT=0.30`, `DEFAULT_EMBEDDING_WEIGHT=0.30`, `DEFAULT_HEURISTIC_WEIGHT=0.25`, `DEFAULT_LLM_WEIGHT=0.15` em `HybridRankerConfig`) combinadas em BM25+embeddings+heurísticas+LLM. Já `scoring_weights.yaml` define pesos por *tipo de fonte* (github/stars, reddit/upvotes, ...), estrutura que **não é diretamente mapeável** ao ranker. Da mesma forma, `sources.yaml` (timeouts/max_results por fonte) não é lido por nenhum código — a `SearcherFactory` (`src/search/factory.py`) instancia searchers com valores derivados de `config.py`. Conectar de verdade (Opção A) exigiria um loader + refatoração do ranker que foge do escopo da Fase 2.
+- **Ações:** adicionado cabeçalho de aviso em ambos os YAMLs apontando para o código real + issue de rastreamento; adicionada nota na seção de configuração do `README.md`.
+- **Critério de conclusão:** decisão documentada neste log + `README.md` atualizado. ✔️
+
+##### TAREFA 2.2 — HITL veto/expand_scope (orchestrator.py `_apply_hitl_decision`)
+- **Ramo `veto`/`exclude_source`:** agora filtra `context.ranked_results` pela fonte vetada e (quando `self.feedback_store` existir) registra sinal negativo via `feedback_store.record(...)`. Segue o guard `hasattr(self, "feedback_store")` pois o Orchestrator atual **não** expõe esse atributo — o registro é best-effort e silencioso.
+- **Ramo `expand_scope`/`expand`:** registra o `hint` em `context.expand_hints` (criado se ausente). Re-execução do SearchStage permanece como TODO explícito e intencional (complexidade de refatoração de pipeline).
+- **Novos testes:** `tests/test_hitl_decision.py` com 3 casos (filtragem do veto, registro no feedback_store, registro do expand hint).
+
+##### TAREFA 2.3 — BibTeX/RIS no report_generator.py
+- Adicionados `BIBTEX="bibtex"` e `RIS="ris"` ao enum `ReportFormat` (`src/types.py`).
+- `ReportGenerator.save_report` agora importa `BibTeXExporter`/`RISExporter` e faz dispatch para `export_batch(...)` (a API real dos exporters — método de instância `.export()` citado na missão não existe; adaptado para o real). Converte `SynthesizedResult` → dicts de citação (title/url/source/year) e grava `references.bib`/`references.ris` no `output_dir`.
+- `main.py` e `ReportService` aceitam os novos formatos via enum; `cli/main.py` só tem `--formats pdf,docx,pptx` e nenhum campo `--format` enumerado, então nenhuma mudança necessária lá (apenas documentado).
+
+##### TAREFA 2.4 — misinformation_domains.yaml
+- Substituído conteúdo placeholder por **30 domínios reais** com histórico público documentado de desinformação (NewsGuard / MBFC / fact-checkers reconhecidos), mantendo a estrutura `{domain, reason, severity}` do `MisinformationDetector`. Validação: `len(data) >= 20`.
+
+#### 🧪 Testes e Validação
+- `python -m pytest tests/ -k "hitl or orchestrator" -v` → novos testes de veto passando.
+- `python -m pytest tests/test_citation_exporters.py -v` → existentes passando.
+- `python -m pytest tests/ -k "report_generator" -v` → sem regressões.
+- Validação `misinformation_domains.yaml` → 30 domínios.
+- Suite completa sem novas falhas (`pytest tests/ --tb=short -q`).
+
+#### 🔧 Próximo Bloco
+- Auditoria Parte 2 — Fases 3 a 6 (ver INDICE_MISSOES_PARTE2.md).

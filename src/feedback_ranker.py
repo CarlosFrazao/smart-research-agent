@@ -17,11 +17,17 @@ _DELTA_CAP = 15.0  # máximo ajuste (positivo ou negativo) em pontos de score
 _SCALE = 5.0  # cada unidade de feedback score = 5 pontos de combined_score
 
 
-def _result_id(result: SynthesizedResult) -> str:
-    """Gera um id estável a partir de entity + title (sem deps externas)."""
-    raw = f"{result.entity}:{result.title}".lower().strip()
-    import hashlib
+import hashlib
 
+
+def _result_id(result: SynthesizedResult) -> str:
+    """Generates a stable id based on entity+title (legacy) OR uses the canonical result_id (new preferred)."""
+    # New preferred method: use the canonical result_id if available (from search_stage)
+    if hasattr(result, "result_id") and result.result_id:
+        return result.result_id
+
+    # Fallback to legacy method for backward compatibility
+    raw = f"{result.entity}:{result.title}".lower().strip()
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 

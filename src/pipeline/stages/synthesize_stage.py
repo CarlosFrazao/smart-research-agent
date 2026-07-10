@@ -5,6 +5,7 @@ Responsabilidades:
   - Clusterizar semanticamente resultados por entidade com fallback léxico.
   - Consolidar clusters em instâncias de SynthesizedResult.
   - Construir o EvidenceGraph (Grafo de Evidências) cruzando as claims e contradições.
+  - Aplicar FeedbackRanker para ajustar scores baseados em feedback histórico (Fase 4).
 """
 
 from __future__ import annotations
@@ -16,7 +17,9 @@ from typing import List, Optional
 from src.pipeline.pipeline import PipelineContext, PipelineStage
 from src.synthesizer import Synthesizer
 from src.evidence_graph import EvidenceGraph
-from src.types import RankedResult
+from src.feedback_ranker import FeedbackRanker
+from src.feedback_store import FeedbackStore
+from src.types import RankedResult, SynthesizedResult
 
 logger = logging.getLogger("pipeline.synthesize_stage")
 
@@ -26,6 +29,7 @@ class SynthesizeStage(PipelineStage):
 
     Delega a deduplicação e clusterização para a classe `Synthesizer` e constrói
     o grafo de claims cruzadas usando `EvidenceGraph`.
+    Aplica FeedbackRanker após a síntese para ajustar scores com base em feedback histórico.
     """
 
     name = "synthesize"
@@ -33,10 +37,12 @@ class SynthesizeStage(PipelineStage):
     def __init__(
         self,
         synthesizer: Optional[Synthesizer] = None,
+        feedback_ranker: Optional[FeedbackRanker] = None,
         confirm_threshold: float = 0.50,
         contradict_threshold: float = 0.35,
     ):
         self.synthesizer = synthesizer or Synthesizer()
+        self.feedback_ranker = feedback_ranker or FeedbackRanker()
         self.confirm_threshold = confirm_threshold
         self.contradict_threshold = contradict_threshold
 
@@ -67,7 +73,9 @@ class SynthesizeStage(PipelineStage):
 
         # ── Loop de Decisão HITL baseada em achados de detectores ─────────────
         orchestrator = context.extras.get("orchestrator") if context.extras else None
-        hitl_dialog = getattr(orchestrator, "hitl_dialog", None) if orchestrator else None
+        hitl_dialog = (
+            getattr(orchestrator, "hitl_dialog", None) if orchestrator else None
+        )
         findings = []
 
         if hitl_dialog and results:
@@ -77,12 +85,21 @@ class SynthesizeStage(PipelineStage):
                 try:
                     report = conflict_detector.detect(results)
                     for conflict in report.conflicts:
-                        claims_str = ", ".join([f"'{c.context}' (valor: {c.value} {c.unit} via {c.source_name})" for c in conflict.claims])
-                        findings.append({
-                            "type": "contradiction",
-                            "content": f"Divergência sobre {conflict.metric_name}: {claims_str}",
-                            "urgency": 0.85 if conflict.severity in ("critical", "high") else 0.60,
-                        })
+                        claims_str = ", ".join(
+                            [
+                                f"'{c.context}' (valor: {c.value} {c.unit} via {c.source_name})"
+                                for c in conflict.claims
+                            ]
+                        )
+                        findings.append(
+                            {
+                                "type": "contradiction",
+                                "content": f"Divergência sobre {conflict.metric_name}: {claims_str}",
+                                "urgency": 0.85
+                                if conflict.severity in ("critical", "high")
+                                else 0.60,
+                            }
+                        )
                 except Exception as e:
                     logger.warning(f"Falha no ConflictDetector em SynthesizeStage: {e}")
 
@@ -96,35 +113,46 @@ class SynthesizeStage(PipelineStage):
                         intent=context.intent,
                     )
                     for gap in getattr(gap_analysis, "gaps", []):
-                        findings.append({
-                            "type": "gap",
-                            "content": f"Lacuna identificada: {gap.description} (aspecto: {gap.aspect})",
-                            "urgency": 0.80 if gap.severity in ("critical", "high") else 0.50,
-                        })
+                        findings.append(
+                            {
+                                "type": "gap",
+                                "content": f"Lacuna identificada: {gap.description} (aspecto: {gap.aspect})",
+                                "urgency": 0.80
+                                if gap.severity in ("critical", "high")
+                                else 0.50,
+                            }
+                        )
                 except Exception as e:
                     logger.warning(f"Falha no GapDetector em SynthesizeStage: {e}")
 
             # 3. Misinformation Detector (Fontes Suspeitas)
             try:
                 from src.misinformation_detector import MisinformationDetector
+
                 misinfo_detector = MisinformationDetector()
                 for r in results:
                     is_flagged, penalty, reason = misinfo_detector.check_url(r.url)
                     if is_flagged:
-                        findings.append({
-                            "type": "suspicious_source",
-                            "content": f"Fonte não confiável detectada: {r.url} (Motivo: {reason})",
-                            "urgency": 0.90,
-                        })
+                        findings.append(
+                            {
+                                "type": "suspicious_source",
+                                "content": f"Fonte não confiável detectada: {r.url} (Motivo: {reason})",
+                                "urgency": 0.90,
+                            }
+                        )
             except Exception as e:
-                logger.warning(f"Falha no MisinformationDetector em SynthesizeStage: {e}")
+                logger.warning(
+                    f"Falha no MisinformationDetector em SynthesizeStage: {e}"
+                )
 
             # Executa o diálogo interativo para cada finding relevante
             session_id = getattr(context, "session_id", "default")
             for finding in findings:
                 dialog = await hitl_dialog.evaluate_finding(session_id, finding)
                 if dialog:
-                    decision = await hitl_dialog.await_user_decision(dialog, timeout=180)
+                    decision = await hitl_dialog.await_user_decision(
+                        dialog, timeout=180
+                    )
                     if decision:
                         await orchestrator._apply_hitl_decision(decision, context)
 
@@ -132,7 +160,15 @@ class SynthesizeStage(PipelineStage):
         context.synthesized_results = synthesized
         context.set("evidence_graph", evidence_graph)
 
-        # 4. Registra metadados e logs
+        # 4. Aplica FeedbackRanker para ajustar scores com base em feedback histórico (Fase 4)
+        try:
+            context.synthesized_results = self.feedback_ranker.apply(
+                context.synthesized_results
+            )
+        except Exception as e:
+            logger.warning(f"SynthesizeStage: FeedbackRanker falhou (não fatal): {e}")
+
+        # 5. Registra metadados e logs
         total_claims = len(evidence_graph.claims)
         total_relations = len(evidence_graph.relations)
 

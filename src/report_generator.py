@@ -1328,8 +1328,19 @@ class ReportGenerator:
         query: str,
         output_dir: str = "./reports",
         formats: list[ReportFormat] | None = None,
+        results: list[SynthesizedResult] | None = None,
     ) -> str:
-        """Salva o relatório no disco."""
+        """Salva o relatório no disco.
+
+        Args:
+            report: Conteúdo Markdown do relatório.
+            query: Query original da pesquisa (usada para gerar o slug do arquivo).
+            output_dir: Diretório de saída.
+            formats: Formatos de exportação adicionais além do Markdown (PDF, DOCX,
+                PPTX, BIBTEX, RIS).
+            results: Resultados sintetizados da pesquisa. Necessários apenas para os
+                formatos de citação (BIBTEX/RIS); opcional para os demais.
+        """
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
         normalized = (
@@ -1380,4 +1391,65 @@ class ReportGenerator:
             except Exception as e:
                 logger.warning(f"Falha na exportação PPTX (não crítico): {e}")
 
+        if ReportFormat.BIBTEX in extra_formats:
+            try:
+                from src.exporters.bibtex_exporter import BibTeXExporter
+
+                citations = self._build_citation_dicts(results)
+                if citations:
+                    bib_path = os.path.join(output_dir, f"{base_name}.bib")
+                    BibTeXExporter.export_batch(citations, filename=bib_path)
+                    logger.info(f"BibTeX exportado: {bib_path}")
+            except Exception as e:
+                logger.warning(f"Falha na exportação BibTeX (não crítico): {e}")
+
+        if ReportFormat.RIS in extra_formats:
+            try:
+                from src.exporters.ris_exporter import RISExporter
+
+                citations = self._build_citation_dicts(results)
+                if citations:
+                    ris_path = os.path.join(output_dir, f"{base_name}.ris")
+                    RISExporter.export_batch(citations, filename=ris_path)
+                    logger.info(f"RIS exportado: {ris_path}")
+            except Exception as e:
+                logger.warning(f"Falha na exportação RIS (não crítico): {e}")
+
         return md_path
+
+    def _build_citation_dicts(
+        self, results: list[SynthesizedResult] | None
+    ) -> list[dict]:
+        """Converte resultados sintetizados em dicionários de citação para os exporters.
+
+        Os `BibTeXExporter`/`RISExporter` consomem uma lista de dicts com as chaves
+        ``title``, ``authors``, ``year``, ``url`` e ``source``. Aqui extraímos esses
+        campos de cada `SynthesizedResult`, usando a primeira URL disponível e a
+        primeira fonte como metadados de citação. Se ``results`` for None ou vazio,
+        retorna lista vazia (exportação de citação é pulada silenciosamente).
+
+        Args:
+            results: Lista de resultados sintetizados do relatório.
+
+        Returns:
+            list[dict]: Dicionários de citação prontos para ``export_batch``.
+        """
+        if not results:
+            return []
+        citations: list[dict] = []
+        for r in results:
+            if not getattr(r, "title", None):
+                continue
+            urls = getattr(r, "urls", []) or []
+            sources = getattr(r, "sources", []) or []
+            metrics = getattr(r, "metrics", {}) or {}
+            citations.append(
+                {
+                    "title": r.title,
+                    "authors": metrics.get("authors", []),
+                    "year": metrics.get("year", datetime.now().year),
+                    "url": urls[0] if urls else "",
+                    "source": sources[0] if sources else "web",
+                }
+            )
+        return citations

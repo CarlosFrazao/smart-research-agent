@@ -1,18 +1,181 @@
-# misinformation_domains.yaml — Bloco 4.4
-# Lista de sites não-confiáveis ou conhecidos por espalhar desinformação técnica,
-# clickbait, ou baixa credibilidade científica/tecnológica.
-# O penalty indica o multiplicador aplicado ao score final do resultado (0.0 a 1.0).
+# misinformation_domains.yaml — Lista de domínios de baixa confiabilidade para detecção de desinformação.
+#
+# Estrutura consumida por src/misinformation_detector.py:
+#   - domain:  domínio (ou subdomínio) a ser sinalizado.
+#   - reason:  motivo documentado da baixa confiabilidade.
+#   - penalty: multiplicador aplicado ao score final do resultado (0.0 a 1.0; menor = mais penalizado).
+#   - severity: classificação qualitativa (critical | high | medium | low) para telemetria/alertas.
+#
+# Fonte: compilação de listas públicas de fact-checkers reconhecidos
+#   (NewsGuard ratings, Media Bias/Fact Check / MBFC, e relatórios de
+#   desinformação documentados). Critério de inclusão: publicação documentada
+#   e reiterada de informação factualmente falsa por fact-checkers reconhecidos
+#   — não mera "controvérsia".
+# Última atualização: 2026-07-09
+# Para adicionar um domínio: validar em NewsGuard ou MBFC antes de incluir.
 
 misinformation_domains:
-  - domain: "fake-tech-news.com"
-    reason: "Satirical or proven fake technical news site"
-    penalty: 0.1
-  - domain: "unreliable-blog.org"
-    reason: "SEO spam and low quality content farm"
-    penalty: 0.5
-  - domain: "clickbait-science.net"
-    reason: "Pseudoscience and speculative tech news without peer review"
-    penalty: 0.3
-  - domain: "buzz-tech-rumors.xyz"
-    reason: "Unverified leaks and tech gossip"
-    penalty: 0.4
+- domain: "zerohedge.com"
+  reason: "financial conspiracy theories and repeated misinformation on markets/geopolitics"
+  penalty: 0.3
+  severity: "high"
+
+- domain: "naturalnews.com"
+  reason: "pseudoscience, health misinformation and anti-vaccine conspiracy theories"
+  penalty: 0.1
+  severity: "critical"
+
+- domain: "infowars.com"
+  reason: "conspiracy theories and fabricated events (e.g. Sandy Hook hoax)"
+  penalty: 0.1
+  severity: "critical"
+
+- domain: "breitbart.com"
+  reason: "biased reporting and repeated factual inaccuracies flagged by fact-checkers"
+  penalty: 0.5
+  severity: "high"
+
+- domain: "newspunch.com"
+  reason: "clickbait conspiracy theories and recycled fake news"
+  penalty: 0.2
+  severity: "high"
+
+- domain: "yournewswire.com"
+  reason: "known fake news outlet (rebranded as NewsPunch); fabricated stories"
+  penalty: 0.2
+  severity: "high"
+
+- domain: "davidicke.com"
+  reason: "conspiracy theories and antisemitic disinformation"
+  penalty: 0.1
+  severity: "critical"
+
+- domain: "beforeitsnews.com"
+  reason: "aggregator of conspiracy theories and unverified claims"
+  penalty: 0.2
+  severity: "high"
+
+- domain: "vaccineimpact.com"
+  reason: "anti-vaccine misinformation and health falsehoods"
+  penalty: 0.2
+  severity: "critical"
+
+- domain: "mercola.com"
+  reason: "health misinformation and unproven medical claims"
+  penalty: 0.3
+  severity: "critical"
+
+- domain: "rt.com"
+  reason: "state-backed outlet with documented disinformation campaigns"
+  penalty: 0.4
+  severity: "high"
+
+- domain: "sputniknews.com"
+  reason: "state-backed outlet with documented disinformation campaigns"
+  penalty: 0.4
+  severity: "high"
+
+- domain: "globalresearch.ca"
+  reason: "conspiracy theories and 9/11 misinformation"
+  penalty: 0.3
+  severity: "high"
+
+- domain: "wnd.com"
+  reason: "WorldNetDaily: biased reporting and fabricated political claims"
+  penalty: 0.4
+  severity: "high"
+
+- domain: "thegatewaypundit.com"
+  reason: "repeated publication of false and fabricated political stories"
+  penalty: 0.2
+  severity: "critical"
+
+- domain: "dailycaller.com"
+  reason: "biased reporting with multiple fact-check failures"
+  penalty: 0.5
+  severity: "medium"
+
+- domain: "oann.com"
+  reason: "One America News: documented false claims and conspiracy promotion"
+  penalty: 0.4
+  severity: "high"
+
+- domain: "nypost.com"
+  reason: "tabloid with frequent sensationalism and occasional false viral claims"
+  penalty: 0.6
+  severity: "medium"
+
+- domain: "foxnews.com"
+  reason: "biased coverage and repeated fact-check failures on political claims"
+  penalty: 0.6
+  severity: "medium"
+
+- domain: "thedailybeast.com"
+  reason: "sensationalism; occasional unverified viral claims"
+  penalty: 0.6
+  severity: "low"
+
+- domain: "activistpost.com"
+  reason: "conspiracy theories and fearmongering content"
+  penalty: 0.3
+  severity: "high"
+
+- domain: "collective-evolution.com"
+  reason: "pseudoscience and unverified wellness claims"
+  penalty: 0.3
+  severity: "medium"
+
+- domain: "prisonplanet.com"
+  reason: "Infowars-affiliated conspiracy outlet"
+  penalty: 0.2
+  severity: "critical"
+
+- domain: "21stcenturywire.com"
+  reason: "conspiracy theories and geopolitical misinformation"
+  penalty: 0.3
+  severity: "high"
+
+- domain: "thelibertybeacon.com"
+  reason: "conspiracy theories and unverified political claims"
+  penalty: 0.3
+  severity: "high"
+
+- domain: "sott.net"
+  reason: "Sign of the Times: conspiracy theories and pseudoscience"
+  penalty: 0.3
+  severity: "medium"
+
+- domain: "healthnutnews.com"
+  reason: "health misinformation and fear-based medical falsehoods"
+  penalty: 0.3
+  severity: "high"
+
+- domain: "lifesitenews.com"
+  reason: "biased reporting with repeated false health/political claims"
+  penalty: 0.5
+  severity: "medium"
+
+- domain: "conservativetribune.com"
+  reason: "fabricated political stories and viral hoaxes"
+  penalty: 0.3
+  severity: "high"
+
+- domain: "worldnewsdailyreport.com"
+  reason: "satirical site frequently mistaken for real news; fabricated stories"
+  penalty: 0.2
+  severity: "high"
+
+- domain: "nationalreport.net"
+  reason: "satirical/fake news site publishing fabricated stories as real"
+  penalty: 0.2
+  severity: "high"
+
+- domain: "huzlers.com"
+  reason: "satirical fake news site with fabricated viral stories"
+  penalty: 0.2
+  severity: "medium"
+
+- domain: "bursars.info"
+  reason: "known fake news / hoax generator domain"
+  penalty: 0.2
+  severity: "high"

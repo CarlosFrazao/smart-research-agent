@@ -150,13 +150,49 @@ class ReportStage(PipelineStage):
         report_md = self.assemble_report(query, metadata, results, sections)
 
         # Seção de arquiteturas de repositórios (gerada pelo VerificationStage com Scout)
-        repo_architectures = context.extra.get("repo_architectures", []) if hasattr(context, "extra") else []
+        repo_architectures = (
+            context.extra.get("repo_architectures", [])
+            if hasattr(context, "extra")
+            else []
+        )
         if repo_architectures:
             arch_section = "\n## 🔍 Mapa de Arquitetura dos Concorrentes (Scout)\n\n"
             for repo in repo_architectures:
                 arch_section += f"### {repo.get('url', 'Repositório')}\n\n"
-                arch_section += repo.get("architecture_map", "_Não disponível._") + "\n\n"
+                arch_section += (
+                    repo.get("architecture_map", "_Não disponível._") + "\n\n"
+                )
             report_md += arch_section
+
+        # 4.7: Auditoria de claims via ResearchAuditor (§14.1)
+        # Chama auditor.audit() após gerar o relatório, antes de retornar ao usuário.
+        # É não-fatal: se a auditoria falhar, o relatório sem auditoria é retornado.
+        orchestrator = context.extras.get("orchestrator") if context.extras else None
+        if (
+            orchestrator
+            and hasattr(orchestrator, "auditor")
+            and orchestrator.auditor is not None
+        ):
+            try:
+                audit_result = await orchestrator.auditor.audit(
+                    report_text=report_md,
+                    existing_results=context.ranked_results or [],
+                )
+                # Adiciona notas de auditoria ao contexto
+                context.audit_result = audit_result
+                # Se o auditor enriqueceu o report_text, usar o enriquecido
+                if (
+                    hasattr(audit_result, "enriched_content")
+                    and audit_result.enriched_content
+                ):
+                    report_md = audit_result.enriched_content
+                    logger.info(
+                        f"ReportStage: relatório enriquecido pelo ResearchAuditor "
+                        f"({audit_result.total_claims} claims, "
+                        f"{audit_result.verified_claims} verificadas)"
+                    )
+            except Exception as e:
+                logger.warning("ResearchAuditor failed (non-fatal): %s", e)
 
         # Salva resultados no contexto do pipeline
         context.report = report_md
@@ -431,8 +467,12 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
                 op_name = getattr(op_config, "name", "")
                 cost_opt = getattr(op_config, "cost_optimization", False)
                 if not cost_opt and op_name in ("concorrencia", "radar", "black_ops"):
-                    prompt = self.persona_loader.build_enhanced_prompt(prompt, "sage_strategy")
-                    logger.info("ReportStage: persona Sage injetada para modo '%s'.", op_name)
+                    prompt = self.persona_loader.build_enhanced_prompt(
+                        prompt, "sage_strategy"
+                    )
+                    logger.info(
+                        "ReportStage: persona Sage injetada para modo '%s'.", op_name
+                    )
 
         return prompt
 

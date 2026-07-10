@@ -28,12 +28,22 @@ class ReportService:
         """
         return await self.report_generator.generate(query, synthesized, metadata)
 
-    def save(self, report: str, query: str, formats: list[Any] | None = None) -> str:
+    def save(
+        self,
+        report: str,
+        query: str,
+        formats: list[Any] | None = None,
+        results: list[Any] | None = None,
+    ) -> str:
         """
         Salva o relatório fisicamente no disco nas extensões solicitadas.
         """
         return self.report_generator.save_report(
-            report, query, self.config.output_dir, formats=formats
+            report,
+            query,
+            self.config.output_dir,
+            formats=formats,
+            results=results,
         )
 
     def sync_to_vault(self, filepath: str) -> None:

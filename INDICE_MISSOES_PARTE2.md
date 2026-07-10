@@ -10,9 +10,9 @@
 
 | Fase | Arquivo da Missão | Prioridade | Pré-req | Status |
 |---|---|---|---|---|
-| **Fase 1** | `MISSAO_PARTE2_FASE1_CONECTORES_E_FIACAO.md` | 🔴 CRÍTICA | Nenhum | ⏳ Pendente |
-| **Fase 2** | `MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md` | 🟠 Alta | Fase 1 | ⏳ Pendente |
-| **Fase 3** | `MISSAO_PARTE2_FASE3_SEGURANCA_API.md` | 🔴 CRÍTICA | Fase 1 | ⏳ Pendente |
+| **Fase 1** | `MISSAO_PARTE2_FASE1_CONECTORES_E_FIACAO.md` | 🔴 CRÍTICA | Nenhum | ✅ Concluída (commit `ab9ca71`) |
+| **Fase 2** | `MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md` | 🟠 Alta | Fase 1 | ✅ Concluída (commit `5075b046b`) |
+| **Fase 3** | `MISSAO_PARTE2_FASE3_SEGURANCA_API.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída (commit `ebf8b61`) |
 | **Fase 4** | `MISSAO_PARTE2_FASE4_FEEDBACK_RESULTID.md` | 🔴 CRÍTICA | Fase 1 | ⏳ Pendente |
 | **Fase 5** | `MISSAO_PARTE2_FASE5_INFRA_E_DIVIDA_TECNICA.md` | 🟡 Média | Fases 1-4 | ⏳ Pendente |
 | **Fase 6** | `MISSAO_PARTE2_FASE6_UNIVERSAL_SEARCHER.md` | 🟢 Alta (novo valor) | Fases 1-5 | ⏳ Pendente |
@@ -72,11 +72,12 @@ Fase 1 → (Fase 2 + Fase 3 + Fase 4 em paralelo, pois não dependem entre si) �
 - CORS aberto com `allow_origins=["*"]` + bind em `0.0.0.0`
 - CI sem `pip-audit` (scanning de vulnerabilidades de dependências)
 
-### Fase 4 — Sistema de Feedback Quebrado (CRÍTICA)
+### Fase 4 — Sistema de Feedback Quebrado (CRÍTICA) + ResearchAuditor órfão ⭐
 - `POST /feedback` gera `result_id = sha1(query)`, `FeedbackRanker` usa `sha1(entity:title)` — nunca coincidem
 - `FeedbackRanker` nunca instanciado em produção (só em testes)
 - `SanitizationStage.run()` é literalmente `pass` (toda pesquisa executa etapa que não faz nada)
 - `source_name` falta no `FeedbackStore.record()` (pré-requisito de dado para personalização)
+- ⭐ **NOVO (§14.1):** `ResearchAuditor` — loop completo de fact-checking/verificação de claims, implementado com docstring de integração, instanciado em `stage_factory.py`, mas **nunca chamado** em nenhum stage. Maior impacto percebido pelo usuário de toda a auditoria.
 
 ### Fase 5 — Dívida Técnica de Infraestrutura
 - `httpx`, `tiktoken`, `tenacity`, `redis` usados em 15+ arquivos mas não declarados em `pyproject.toml`

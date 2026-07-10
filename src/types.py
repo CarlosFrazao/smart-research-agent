@@ -78,8 +78,22 @@ if "types" not in sys.modules or not hasattr(sys.modules["types"], "MappingProxy
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
+import hashlib
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+def generate_result_id(source_name: str, url: str) -> str:
+    """
+    Gera um ID canônico e determinístico para um resultado de pesquisa.
+
+    O ID é baseado em (source_name, url) — dois resultados do mesmo URL
+    e mesma fonte sempre produzem o mesmo ID, independente de quando foram buscados.
+
+    Use este ID em todo o pipeline: FeedbackStore, FeedbackRanker, HITL, UI.
+    """
+    raw = f"{source_name}:{url}".lower().strip()
+    return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
 class SRAModel(BaseModel):
@@ -131,6 +145,8 @@ class ReportFormat(StrEnum):
     PDF = "pdf"
     DOCX = "docx"
     PPTX = "pptx"
+    BIBTEX = "bibtex"
+    RIS = "ris"
 
 
 class Verdict(StrEnum):
@@ -219,6 +235,8 @@ class SearchResult(SRAModel):
         citations: URLs citadas como referência.
         contradictions: Descrições de contradições detectadas.
         hallucination_flags: Sinalizadores de possível alucinação.
+        result_id: ID canônico gerado a partir da combinação source+url para
+            deduplicação única (gerado por generate_result_id()).
     """
 
     source: str = Field(min_length=1)
@@ -236,6 +254,7 @@ class SearchResult(SRAModel):
     citations: list[str] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
     hallucination_flags: list[str] = Field(default_factory=list)
+    result_id: str = Field(default="", description="Canonical result identifier")
 
 
 class RankedResult(SearchResult):
@@ -318,6 +337,8 @@ class SynthesizedResult(SRAModel):
         read_min: Estimativa de tempo de leitura em minutos.
         evidence_quality: Qualidade geral de evidência do cluster.
         hallucination_flags: Flags de alertas de qualidade/hallucination.
+        result_id: ID canônico herdado do resultado primário do cluster (para
+            correspondência determinística com o FeedbackStore/FeedbackRanker).
     """
 
     entity: str = Field(min_length=1)
@@ -325,6 +346,7 @@ class SynthesizedResult(SRAModel):
     description: str
     sources: list[str] = Field(default_factory=list)
     urls: list[str] = Field(default_factory=list)
+    result_id: str = Field(default="", description="Canonical result identifier")
     combined_score: float = Field(ge=0.0)
     metrics: dict[str, Any] = Field(default_factory=dict)
     highlights: list[str] = Field(default_factory=list)

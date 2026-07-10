@@ -167,6 +167,10 @@ async def cmd_research(args):
                         formats.append(ReportFormat.DOCX)
                     elif fmt_strip == "pptx":
                         formats.append(ReportFormat.PPTX)
+                    elif fmt_strip == "bibtex":
+                        formats.append(ReportFormat.BIBTEX)
+                    elif fmt_strip == "ris":
+                        formats.append(ReportFormat.RIS)
             report = await orchestrator.research(args.query, formats=formats)
 
         if args.output:

@@ -107,6 +107,7 @@ def get_orchestrator(config: Config | None = None) -> Orchestrator:
             config = Config()
         _orchestrator = Orchestrator(config)
         from src.hitl_manager import HITLManager
+
         if not hasattr(_orchestrator, "hitl_manager"):
             _orchestrator.hitl_manager = HITLManager()
     return _orchestrator
@@ -153,6 +154,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     # Registra HITLManager como singleton primeiro
     from src.hitl_manager import HITLManager
+
     hitl = HITLManager()
     container.register_instance("hitl_manager", hitl)
 
@@ -329,10 +331,15 @@ def _register_rest_endpoints(app: FastAPI) -> None:
     async def feedback_endpoint(body: dict):
         """
         Registra feedback via REST (usado pelo dashboard).
-        Body: { query: str, signal: str }  — signal: helpful | not_helpful
+        Body: { query: str, signal: str, result_id?: str, source_name?: str }
+        - signal: helpful | not_helpful | useful | bookmark | irrelevant | outdated
+        - result_id (novo): ID canônico do resultado específico (se omitido, derivado da query)
+        - source_name (novo): Nome da fonte para rastreio de feedback por fonte
         """
         query = body.get("query", "")
         signal_raw = body.get("signal", "")
+        result_id_direct = body.get("result_id")
+        source_name = body.get("source_name", "")
 
         signal_map = {"helpful": "useful", "not_helpful": "not_useful"}
         signal = signal_map.get(signal_raw, signal_raw)
@@ -341,8 +348,17 @@ def _register_rest_endpoints(app: FastAPI) -> None:
             store = FeedbackStore()
             import hashlib
 
-            result_id = hashlib.sha1(query.lower().encode()).hexdigest()[:12]
-            entry = store.record(result_id=result_id, signal=signal, query=query)
+            # Se result_id foi enviado, usa diretamente; senão, deriva da query (compatibilidade)
+            if result_id_direct:
+                result_id = result_id_direct
+            else:
+                result_id = hashlib.sha1(query.lower().encode()).hexdigest()[:12]
+            entry = store.record(
+                result_id=result_id,
+                signal=signal,
+                query=query,
+                source_name=source_name or None,
+            )
             return {"recorded": True, "entry": entry}
         except ValueError as e:
             return {"recorded": False, "error": str(e)}
@@ -1352,7 +1368,13 @@ def _register_mcp_tools(app: FastAPI) -> None:
             """
             try:
                 store = FeedbackStore()
-                entry = store.record(result_id=result_id, signal=signal, query=query)
+                # Passa source_name se fornecido (nova feature Fase 4)
+                entry = store.record(
+                    result_id=result_id,
+                    signal=signal,
+                    query=query,
+                    source_name=source_name or None,
+                )
                 logger.info(f"[record_feedback] {result_id} → {signal}")
 
                 source_feedback_recorded = False
@@ -1479,10 +1501,14 @@ async def confidence_check(claim: str, sources: list[str]) -> str:
 
 class MonitorFeedRequest(BaseModel):
     name: str = Field(..., description="Nome legível do feed")
-    url: str = Field(..., description="URL do feed, owner/repo para GitHub, ou query para arXiv")
+    url: str = Field(
+        ..., description="URL do feed, owner/repo para GitHub, ou query para arXiv"
+    )
     source_type: str = Field(..., description="rss, github, arxiv ou webhook")
     topics: list[str] = Field(default_factory=list, description="Tags temáticas")
-    poll_interval: int = Field(default=300, description="Intervalo de polling em segundos")
+    poll_interval: int = Field(
+        default=300, description="Intervalo de polling em segundos"
+    )
 
 
 @app.post("/api/v1/monitor/feeds", status_code=201)

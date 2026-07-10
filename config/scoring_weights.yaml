@@ -1,3 +1,16 @@
+# AVISO: Este arquivo é documentação de referência de design, NÃO é carregado por nenhum código.
+# Para alterar pesos reais, edite: src/ranking/hybrid_ranker.py
+#   - Constantes DEFAULT_BM25_WEIGHT, DEFAULT_EMBEDDING_WEIGHT, DEFAULT_HEURISTIC_WEIGHT, DEFAULT_LLM_WEIGHT (HybridRankerConfig)
+#   - DOMAIN_AUTHORITY, FRESHNESS_HALFLIFE, _get_source_quality (em hybrid_ranker.py)
+# Issue de rastreamento: conectar este YAML ao código é tarefa futura planejada (ver MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md — Tarefa 2.1, Opção B).
+#
+# Observação de design (2026-07-09):
+#   Os pesos abaixo são por TIPO DE FONTE (github/stars, reddit/upvotes, ...), enquanto o
+#   HybridRanker combina sinais globais BM25 + embeddings + heurísticas + LLM. As estruturas
+#   não são diretamente mapeáveis, por isso este YAML foi mantido como documentação e não
+#   conectado. Se for conectado no futuro, criar um loader em src/config/yaml_loader.py e
+#   expor os valores para HybridRankerConfig.
+
 weights:
   github:
     stars: 0.30

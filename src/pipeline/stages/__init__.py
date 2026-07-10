@@ -4,6 +4,10 @@ Cada módulo aqui implementa `PipelineStage` (`src/pipeline/pipeline.py`)
 delegando a um serviço/analyzer já existente no codebase.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from src.pipeline.stages.intent_stage import IntentStage
 from src.pipeline.stages.storm_stage import StormStage
 from src.pipeline.stages.expand_stage import ExpandStage
@@ -51,10 +55,64 @@ class GapFillStage(PipelineStage):
 
 
 class SanitizationStage(PipelineStage):
-    name = "audit"
+    name = "sanitization"
+    critical = False
+
+    def __init__(self, sanitizer=None):
+        self.sanitizer = sanitizer
 
     async def run(self, context: PipelineContext) -> None:
-        pass
+        """Sanitiza os resultados de busca usando LLMSanitizer.
+
+        Aplica sanitização de prompt injection nas descrições dos resultados
+        de busca brutos. Falhas são não-críticas: o pipeline continua mesmo
+        se a sanitização falhar.
+        """
+        from src.security.llm_sanitizer import LLMSanitizer
+
+        results = getattr(context, "search_results", None) or getattr(
+            context, "raw_results", None
+        )
+        if not results:
+            logger.info("SanitizationStage: sem resultados para sanitizar")
+            return
+
+        # Obtém o sanitizer do contexto ou cria um novo
+        sanitizer = self.sanitizer
+        if sanitizer is None:
+            orchestrator = (
+                context.extras.get("orchestrator") if context.extras else None
+            )
+            if orchestrator and hasattr(orchestrator, "sanitizer"):
+                sanitizer = orchestrator.sanitizer
+
+        if sanitizer is None:
+            logger.debug("SanitizationStage: LLMSanitizer não disponível")
+            return
+
+        sanitized_count = 0
+        for result in results:
+            desc = getattr(result, "description", "") or ""
+            if not desc or len(desc) < 100:
+                continue  # Texto curto: pulado (conforme LLMSanitizer)
+            try:
+                sanitized = await sanitizer.sanitize(desc)
+                if sanitized.was_injection_detected:
+                    logger.warning(
+                        "[SEGURANÇA] Prompt injection detectado em '%s' URL=%s",
+                        getattr(result, "source", "unknown"),
+                        getattr(result, "url", ""),
+                    )
+                if hasattr(result, "description"):
+                    result.description = sanitized.cleaned
+                    sanitized_count += 1
+            except Exception as e:
+                logger.warning(f"SanitizationStage: falha ao sanitizar resultado: {e}")
+
+        if sanitized_count:
+            logger.info(
+                f"SanitizationStage: {sanitized_count} resultado(s) sanitizado(s)"
+            )
 
 
 from src.pipeline.stages.report_stage import ReportStage

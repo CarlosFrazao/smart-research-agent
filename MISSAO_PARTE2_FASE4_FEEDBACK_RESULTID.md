@@ -226,12 +226,66 @@ class TestFeedbackCycleIntegration:
         )
 ```
 
+---
+
+### TAREFA 4.7 — Conectar `ResearchAuditor` ao `report_stage.py` ⭐ (achado §14.1 — maior impacto percebido)
+
+**Arquivo alvo:** `src/pipeline/stages/report_stage.py` (e eventualmente `src/orchestrator.py`)
+
+**Contexto:** `src/research_auditor.py` implementa um **loop completo de verificação de claims/fact-checking**:
+- Extrai claims do relatório final via LLM
+- Valida cada uma contra as fontes já coletadas (`ConfidenceScorerV2`)
+- Detecta gaps (claims não verificadas ou de fonte única)
+- Relança buscas focadas nos gaps (com teto de iterações e orçamento via `token_economy.Budget`)
+- Devolve o relatório enriquecido com notas de auditoria
+
+O `ResearchAuditor` **está instanciado** em `src/pipeline/stage_factory.py:175` como `orchestrator.auditor = ResearchAuditor(...)`. O próprio docstring da classe documenta como deve ser chamado:
+```python
+# docstring de research_auditor.py:
+# Integração com o Orchestrator: auditor = ResearchAuditor(...); audit = await auditor.audit(...)
+```
+
+Mas `orchestrator.auditor.audit(...)` **nunca é chamado** em nenhum stage — é literalmente o módulo mais completo e documentado de todos os achados de "módulo órfão" desta auditoria.
+
+**O que fazer:**
+
+1. Abrir `src/research_auditor.py` e ler a assinatura completa de `audit()`.
+2. Abrir `src/pipeline/stages/report_stage.py` e localizar onde o relatório final é gerado.
+3. Chamar `auditor.audit()` **após** a geração do relatório e **antes** de retornar ao usuário:
+
+```python
+# Em report_stage.py, no método run():
+# Gera o relatório (como já faz hoje)
+report_text = await self.report_generator.generate(context)
+
+# NOVO: Auditoria de claims (§14.1)
+if hasattr(context, "orchestrator") and hasattr(context.orchestrator, "auditor"):
+    try:
+        audit_result = await context.orchestrator.auditor.audit(
+            report_text=report_text,
+            existing_results=context.ranked_results,
+        )
+        # Adicionar notas de auditoria ao relatório ou ao contexto
+        context.audit_result = audit_result
+        # Se o auditor enriqueceu o report_text, usar o enriquecido:
+        if hasattr(audit_result, "enriched_report"):
+            report_text = audit_result.enriched_report
+    except Exception as e:
+        logger.warning("ResearchAuditor failed (non-fatal): %s", e)
+        # Continuar com relatório sem auditoria — não travar o pipeline
+```
+> Adapte conforme a assinatura real de `auditor.audit()` — leia o docstring completo antes de escrever.
+
+4. Garantir que o budget de auditoria seja configurável (o mecanismo já existe em `token_economy.Budget` — só verifique como o auditor o usa internamente).
+
 **Validação:**
 ```bash
-python -m pytest tests/test_feedback_cycle_integration.py -v
+python -m pytest tests/ -k "auditor or research_auditor" -v  # testes existentes devem passar
+python -m py_compile src/pipeline/stages/report_stage.py     # sem erros de sintaxe
 ```
 
 ---
+
 
 ### TAREFA 4.6 — Implementar `SanitizationStage.run()` (dívida técnica crítica)
 
@@ -275,6 +329,8 @@ python -m pytest tests/ -k "sanitiz" -v  # testes existentes de sanitização
 - [ ] `python -m pytest tests/test_feedback_cycle_integration.py -v` → todos passam
 - [ ] `python -m pytest tests/ -k "feedback or ranker" -v` → sem regressões
 - [ ] `SanitizationStage.run()` implementado e não mais um `pass`
+- [ ] `orchestrator.auditor.audit()` chamado em `report_stage.py` após geração do relatório ⭐ (§14.1)
+- [ ] `python -m pytest tests/ -k "auditor or research_auditor" -v` → sem regressões
 - [ ] `python -m pytest tests/ --tb=short -q` → suíte completa sem novas falhas
 
 ---

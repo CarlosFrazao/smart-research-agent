@@ -34,7 +34,13 @@ class FeedbackStore:
         self.source_path = self.path.parent / "_feedback_sources.jsonl"
         self.source_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def record(self, result_id: str, signal: str, query: str = "") -> dict:
+    def record(
+        self,
+        result_id: str,
+        signal: str,
+        query: str = "",
+        source_name: str | None = None,
+    ) -> dict:
         """Grava um sinal de feedback. Retorna o registro persistido."""
         if not result_id:
             raise ValueError("result_id não pode ser vazio")
@@ -47,11 +53,12 @@ class FeedbackStore:
             "result_id": result_id,
             "signal": signal,
             "query": query,
+            "source_name": source_name,
             "timestamp": datetime.now(UTC).isoformat(),
         }
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        logger.info(f"Feedback gravado: {result_id} → {signal}")
+        logger.info(f"Feedback gravado: {result_id} → {signal} (source={source_name})")
         return entry
 
     def load_all(self) -> list[dict]:
