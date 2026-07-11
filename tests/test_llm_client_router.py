@@ -1,7 +1,14 @@
+"""Tests for LLMClient integration with the active SmartModelRouter.
+
+NOTE: the legacy `src.model_router.ModelRouter` was removed in Fase 6.
+Model routing now lives in `src.clients.smart_model_router.SmartModelRouter`,
+which returns a `RoutingDecision(tier, model_id, score, reason)`.
+"""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from src.clients.llm_client import LLMClient, LLMProvider
-from src.model_router import ModelRouter
+from src.clients.smart_model_router import SmartModelRouter, ModelTier
 
 
 def _make_client(
@@ -10,7 +17,7 @@ def _make_client(
     with patch("anthropic.AsyncAnthropic"):
         client = LLMClient(
             provider,
-            {"api_key": "test-key", "model": "claude-sonnet-4-5"},
+            {"api_key": "test-key", "model": "claude-sonnet-4-6"},
             model_router=router,
         )
     return client
@@ -20,7 +27,7 @@ def _make_client(
 
 
 def test_llm_client_accepts_model_router():
-    router = ModelRouter()
+    router = SmartModelRouter()
     client = _make_client(router=router)
     assert client.model_router is router
 
@@ -72,19 +79,20 @@ async def test_complete_no_router_passes_temperature_and_max_tokens():
 
 @pytest.mark.asyncio
 async def test_complete_with_router_routes_simple_task():
-    router = ModelRouter()
+    router = SmartModelRouter()
     client = _make_client(router=router)
     client.generate = AsyncMock(return_value="answer")
 
-    await client.complete("classify this", task_type="intent_analysis")
+    await client.complete("classify this", task_type="intent")
 
-    assert client.model == "claude-sonnet-4-5"
+    # model is restored to the configured default after the call
+    assert client.model == "claude-sonnet-4-6"
 
 
 @pytest.mark.asyncio
 async def test_complete_with_router_uses_routed_model_during_call():
     """The model is temporarily switched to the routed model during generate()."""
-    router = ModelRouter()
+    router = SmartModelRouter()
     client = _make_client(router=router)
 
     used_models = []
@@ -95,15 +103,18 @@ async def test_complete_with_router_uses_routed_model_during_call():
 
     client.generate = capture_model
 
-    await client.complete("prompt", task_type="intent_analysis")
+    await client.complete("prompt", task_type="intent")
 
-    assert used_models[0] == "claude-haiku-4-5"
+    # intent -> free tier (haiku) unless groq-free override kicks in
+    assert used_models[0] in (
+        "claude-haiku-4-5-20251001",
+        "meta-llama/llama-3.1-8b-instruct:free",
+    )
 
 
 @pytest.mark.asyncio
 async def test_complete_with_router_restores_original_model_after_call():
-    """After complete(), self.model is restored to the configured default."""
-    router = ModelRouter()
+    router = SmartModelRouter()
     client = _make_client(router=router)
     original = client.model
     client.generate = AsyncMock(return_value="ok")
@@ -115,8 +126,7 @@ async def test_complete_with_router_restores_original_model_after_call():
 
 @pytest.mark.asyncio
 async def test_complete_with_router_restores_model_even_on_error():
-    """Model is restored even when generate() raises an exception."""
-    router = ModelRouter()
+    router = SmartModelRouter()
     client = _make_client(router=router)
     original = client.model
     client.generate = AsyncMock(side_effect=RuntimeError("API error"))
@@ -132,7 +142,7 @@ async def test_complete_with_router_restores_model_even_on_error():
 
 @pytest.mark.asyncio
 async def test_complete_model_override_ignores_router():
-    router = ModelRouter()
+    router = SmartModelRouter()
     client = _make_client(router=router)
 
     used_models = []
@@ -144,10 +154,10 @@ async def test_complete_model_override_ignores_router():
     client.generate = capture
 
     await client.complete(
-        "prompt", task_type="intent_analysis", model_override="claude-opus-4-5"
+        "prompt", task_type="intent", model_override="claude-opus-4-8"
     )
 
-    assert used_models[0] == "claude-opus-4-5"
+    assert used_models[0] == "claude-opus-4-8"
 
 
 @pytest.mark.asyncio
@@ -163,7 +173,6 @@ async def test_complete_model_override_restores_original_model():
 
 @pytest.mark.asyncio
 async def test_complete_model_override_no_router_still_works():
-    """model_override works even without a router attached."""
     client = _make_client()
     used_models = []
 
@@ -178,22 +187,22 @@ async def test_complete_model_override_no_router_still_works():
     assert used_models[0] == "gemini-2.5-pro"
 
 
-# ─── complete(): different task_type levels ──────────────────────────────────
+# ─── complete(): different task_type tiers ──────────────────────────────────
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "task_type,expected_model",
+    "task_type,expected_tier",
     [
-        ("intent_analysis", "claude-haiku-4-5"),
-        ("query_expansion", "claude-sonnet-4-5"),
-        ("deep_research", "claude-opus-4-5"),
-        ("report_generation", "claude-opus-4-5"),
-        ("synthesis", "claude-sonnet-4-5"),
+        ("intent", "free"),
+        ("expand", "haiku"),
+        ("synthesis", "sonnet"),
+        ("report", "sonnet"),
+        ("deep", "opus"),
     ],
 )
-async def test_complete_routes_all_task_types(task_type, expected_model):
-    router = ModelRouter()
+async def test_complete_routes_all_task_types(task_type, expected_tier):
+    router = SmartModelRouter()
     client = _make_client(router=router)
     used_models = []
 
@@ -205,9 +214,10 @@ async def test_complete_routes_all_task_types(task_type, expected_model):
 
     await client.complete("test", task_type=task_type)
 
-    assert (
-        used_models[0] == expected_model
-    ), f"task_type={task_type}: expected {expected_model}, got {used_models[0]}"
+    # The routed model_id corresponds to the expected tier.
+    decision = router.route(task_type, "anthropic")
+    assert decision.tier == expected_tier
+    assert used_models[0] == decision.model_id
 
 
 # ─── backward compat: generate() signature unchanged ────────────────────────

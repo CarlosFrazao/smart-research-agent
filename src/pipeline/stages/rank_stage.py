@@ -215,6 +215,7 @@ def _cosine_similarity(a: Any, b: Any) -> float:
     """Similaridade de cosseno entre dois vetores numpy."""
     try:
         import numpy as np
+
         a_norm = np.linalg.norm(a)
         b_norm = np.linalg.norm(b)
         if a_norm == 0.0 or b_norm == 0.0:
@@ -251,8 +252,8 @@ def _reciprocal_rank_fusion(
 
 
 def cluster_similar_results(
-    ranked: list,           # list[RankedResult] — tipagem completa no código real
-    embeddings: dict,      # {url: np.ndarray} — reaproveitado do HybridRanker
+    ranked: list,  # list[RankedResult] — tipagem completa no código real
+    embeddings: dict,  # {url: np.ndarray} — reaproveitado do HybridRanker
     similarity_threshold: float = 0.88,  # configurável via env var CLUSTER_THRESHOLD
 ) -> None:
     """Agrupa resultados de FONTES DIFERENTES sobre o mesmo fato/evento.
@@ -267,7 +268,9 @@ def cluster_similar_results(
     - threshold=0.88 é ponto de partida teórico — validar com dados reais
       e ajustar via CLUSTER_SIMILARITY_THRESHOLD env var.
     """
-    threshold = float(os.environ.get("CLUSTER_SIMILARITY_THRESHOLD", similarity_threshold))
+    threshold = float(
+        os.environ.get("CLUSTER_SIMILARITY_THRESHOLD", similarity_threshold)
+    )
 
     for i, r_i in enumerate(ranked):
         result_i = getattr(r_i, "result", r_i)  # adaptar ao tipo real
@@ -294,7 +297,10 @@ def cluster_similar_results(
 
         if len(group) > 1:
             cid = f"cluster_{i}"
-            sources_in_group = [getattr(getattr(ranked[k], "result", ranked[k]), "source", "") for k in group]
+            sources_in_group = [
+                getattr(getattr(ranked[k], "result", ranked[k]), "source", "")
+                for k in group
+            ]
             for k in group:
                 result_k = getattr(ranked[k], "result", ranked[k])
                 result_k.cluster_id = cid
@@ -403,8 +409,12 @@ class RankStage:
                 cluster_similar_results(final_order, context.embeddings)
                 logger.debug(
                     "Clustering: %d resultados agrupados em clusters",
-                    sum(1 for r in final_order
-                        if getattr(getattr(r, "result", r), "cluster_id", None) is not None)
+                    sum(
+                        1
+                        for r in final_order
+                        if getattr(getattr(r, "result", r), "cluster_id", None)
+                        is not None
+                    ),
                 )
 
             context.ranked_results = final_order

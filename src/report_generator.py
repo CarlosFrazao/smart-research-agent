@@ -18,7 +18,14 @@ from src.clients.llm_client import LLMClient
 from src.comparator import Comparator
 from src.sentiment_analyzer import SentimentAnalyzer
 from src.temporal_analyzer import TemporalAnalyzer
-from src.types import ReportFormat, ResearchMetadata, SynthesizedResult
+from src.types import (
+    Domain,
+    ResearchMetadata,
+    ReportFormat,
+    SearchResult,
+    SynthesizedResult,
+)
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -794,6 +801,9 @@ class ReportGenerator:
                 is_english=is_english,
             )
         )
+        # Fase 6.5: seção de referências formatada por DomainPersona
+        # (APA / IEEE / Bluebook conforme o domínio da pesquisa).
+        lines.extend(self._build_references(results, metadata, is_english=is_english))
         cleaned_lines = [str(line) for line in lines if line is not None]
         return "\n".join(cleaned_lines)
 
@@ -1039,6 +1049,131 @@ class ReportGenerator:
             entry_lines.append("")
             lines += entry_lines
         return lines
+
+    # ── Fase 6.5: Referências formatadas por DomainPersona ────────────
+
+    def _build_references(
+        self,
+        results: list[SynthesizedResult],
+        metadata: ResearchMetadata,
+        is_english: bool = False,
+    ) -> list[str]:
+        """Constroi a seção de referências formatada academicamente.
+
+        Religa o ``DomainPersona`` (``src/domain_personas.py``), que
+        formata cada citação segundo a norma do domínio da pesquisa:
+          - Domínios técnicos (dev_tools, ai_ml, infrastructure, open_source)
+            → IEEE.
+          - Demais (saas_b2b, automation, general) → APA.
+
+        (Bluebook é exposto pela API ``format_bluebook`` para uso legal
+        explícito; o relatório padrão usa APA/IEEE conforme o domínio.)
+
+        Cada ``SynthesizedResult`` é adaptado para ``SearchResult``
+        (o contrato esperado por ``DomainPersona``), preservando título,
+        URL, fonte e metadados de coleta.
+        """
+        from src.domain_personas import DomainPersona
+
+        domain_str = getattr(metadata, "domain", "") or "general"
+        domain = self._resolve_domain(domain_str)
+
+        try:
+            persona = DomainPersona(domain)
+        except Exception as e:  # pragma: no cover - defensivo
+            logger.warning("ReportGenerator: falha ao criar DomainPersona: %s", e)
+            return []
+
+        refs: list[str] = []
+        for i, r in enumerate(results[:15]):
+            sr = self._to_search_result(r)
+            if sr is None:
+                continue
+            try:
+                citation = persona.format_citation(sr, index=i + 1)
+            except Exception as e:  # pragma: no cover - defensivo
+                logger.warning("ReportGenerator: falha ao formatar citação: %s", e)
+                continue
+            if citation and citation.strip():
+                refs.append(citation.strip())
+
+        if not refs:
+            return []
+
+        if is_english:
+            header = "## 9. References"
+            note = (
+                "_Formatted per "
+                + self._style_name(persona, domain)
+                + " citation style for the '"
+                + domain_str
+                + "' domain._"
+            )
+        else:
+            header = "## 9. Referências"
+            note = (
+                "_Formatado segundo a norma "
+                + self._style_name(persona, domain)
+                + " para o domínio '"
+                + domain_str
+                + "'._"
+            )
+        return ["---", "", header, "", note, ""] + refs
+
+    @staticmethod
+    def _resolve_domain(domain_str: str) -> "Domain":
+        """Mapeia a string de domínio (metadata) para o enum ``Domain``."""
+        try:
+            return Domain(domain_str)
+        except Exception:
+            return Domain.GENERAL
+
+    @staticmethod
+    def _style_name(persona: Any, domain: "Domain") -> str:
+        """Retorna o nome legível da norma aplicada (APA/IEEE/Bluebook)."""
+        try:
+            func_name = getattr(
+                persona._formatter, "__func__", persona._formatter
+            ).__name__
+            if func_name == "format_ieee":
+                return "IEEE"
+            if func_name == "format_bluebook":
+                return "Bluebook"
+        except Exception:
+            pass
+        return "APA"
+
+    @staticmethod
+    def _to_search_result(r: SynthesizedResult) -> SearchResult | None:
+        """Adapta um ``SynthesizedResult`` para o contrato ``SearchResult``."""
+        from datetime import datetime
+
+        if r is None:
+            return None
+        source = (r.sources[0] if r.sources else "synthesis") or "synthesis"
+        url = (r.urls[0] if r.urls else "") or ""
+        title = getattr(r, "title", "") or ""
+        if not title and not url:
+            return None
+        fetched_at = getattr(r, "last_seen", None) or getattr(r, "first_seen", None)
+        if fetched_at is None:
+            fetched_at = datetime.now()
+        raw: dict[str, Any] = {}
+        # Preserva a data de coleta bruta, se presente, para o DomainPersona.
+        if isinstance(fetched_at, datetime):
+            try:
+                raw["published_date"] = fetched_at.isoformat()
+            except Exception:
+                pass
+        return SearchResult(
+            source=source,
+            title=title,
+            url=url,
+            description=getattr(r, "description", "") or "",
+            metrics=dict(getattr(r, "metrics", {}) or {}),
+            raw=raw,
+            fetched_at=fetched_at,
+        )
 
     def _build_analysis(
         self,

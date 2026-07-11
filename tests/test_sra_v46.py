@@ -278,30 +278,6 @@ async def test_github_code_search_fallback():
 # ---------------------------------------------------------------------------
 
 
-def test_model_router_reasoning_tier():
-    from src.model_router import ModelRouter
-
-    cfg = _make_config(reasoning_models_enabled=True, openai_reasoning_model="o3-mini")
-    router = ModelRouter(config=cfg)
-    model = router.route("deep_research", "openai")
-    assert model == "o3-mini", f"Esperado 'o3-mini', obtido '{model}'"
-
-
-# ---------------------------------------------------------------------------
-# T7 — ModelRouter roteia para deepseek-r1 via provider deepseek
-# ---------------------------------------------------------------------------
-
-
-def test_model_router_deepseek_provider():
-    from src.model_router import ModelRouter
-
-    cfg = _make_config(reasoning_models_enabled=True, deepseek_model="deepseek-r1")
-    router = ModelRouter(config=cfg)
-    model = router.route("confidence_scoring", "deepseek")
-    assert model == "deepseek-r1", f"Esperado 'deepseek-r1', obtido '{model}'"
-
-
-# ---------------------------------------------------------------------------
 # T8 — Config tem defaults seguros para todos os novos flags
 # ---------------------------------------------------------------------------
 

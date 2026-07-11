@@ -212,6 +212,8 @@ class StageFactory:
             "graph_explorer",
             "gap",
             "synthesize",
+            "media_ingestion",
+            "quant_analysis",
             "report",
         ]
         return factory.create_pipeline(stage_names)
@@ -482,6 +484,12 @@ class StageFactory:
         # Verification Stage (Fase 1A — sandbox de código)
         self.register("verification", self._create_verification_stage, lazy=True)
 
+        # Media Ingestion Stage (Fase 6.3 — OCR/PDF/Vídeo/Vision)
+        self.register("media_ingestion", self._create_media_ingestion_stage, lazy=True)
+
+        # Quant Analysis Stage (Fase 6.4 — DataAnalyzer / Pandas sandbox)
+        self.register("quant_analysis", self._create_quant_analysis_stage, lazy=True)
+
     def _create_intent_stage(self) -> PipelineStage:
         """Factory para IntentStage."""
         from src.pipeline.stages.intent_stage import IntentStage
@@ -625,6 +633,22 @@ class StageFactory:
 
         return VerificationStage(
             code_agent=code_agent,
+            llm_client=self._deps.get("llm_client"),
+        )
+
+    def _create_media_ingestion_stage(self) -> PipelineStage:
+        """Factory para MediaIngestionStage (OCR/PDF/Vídeo/Vision — Fase 6.3)."""
+        from src.pipeline.stages.media_ingestion_stage import MediaIngestionStage
+
+        return MediaIngestionStage(
+            llm_client=self._deps.get("llm_client"),
+        )
+
+    def _create_quant_analysis_stage(self) -> PipelineStage:
+        """Factory para QuantAnalysisStage (DataAnalyzer / Pandas — Fase 6.4)."""
+        from src.pipeline.stages.quant_analysis_stage import QuantAnalysisStage
+
+        return QuantAnalysisStage(
             llm_client=self._deps.get("llm_client"),
         )
 

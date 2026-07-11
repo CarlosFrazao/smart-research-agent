@@ -504,7 +504,9 @@ def _register_rest_endpoints(app: FastAPI) -> None:
                     from src.trust_rule_store import TrustRuleStore
 
                     context = {
-                        "extra": {"trust_rules": TrustRuleStore().get_rules_for_user(user_id)}
+                        "extra": {
+                            "trust_rules": TrustRuleStore().get_rules_for_user(user_id)
+                        }
                     }
                 except Exception:
                     context = {"extra": {}}
