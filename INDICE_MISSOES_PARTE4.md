@@ -23,8 +23,8 @@ Transformar o SRA de uma ferramenta de pesquisa técnica/dev em um **canivete su
 
 | Fase | Arquivo da Missão | Prioridade | Pré-req | Status |
 |---|---|---|---|---|
-| **Fase 1** | `MISSAO_PARTE4_FASE1_FRESHNESS.md` | 🔴 CRÍTICA (bloqueante) | Plano Parte 3 completo | ⏳ Pendente |
-| **Fase 2** | `MISSAO_PARTE4_FASE2_FONTES_NOTICIAS.md` | 🔴 CRÍTICA | Fase 1 | ⏳ Pendente |
+| **Fase 1** | `MISSAO_PARTE4_FASE1_FRESHNESS.md` | 🔴 CRÍTICA (bloqueante) | Plano Parte 3 completo | ✅ Concluída (commit `2842542`) |
+| **Fase 2** | `MISSAO_PARTE4_FASE2_FONTES_NOTICIAS.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída |
 | **Fase 3** | `MISSAO_PARTE4_FASE3_LINEAGEM_ADVERSARIAL.md` | 🟠 Alta | Fases 1 e 2 | ⏳ Pendente |
 | **Fase 4** | `MISSAO_PARTE4_FASE4_MONITOR_TRENDING.md` | 🟠 Alta | Fases 1 e 2 | ⏳ Pendente |
 | **Fase 5** | `MISSAO_PARTE4_FASE5_ROTEAMENTO_POLIMENTO.md` | 🟡 Média (polimento final) | Fases 1-4 | ⏳ Pendente |
@@ -34,7 +34,7 @@ Transformar o SRA de uma ferramenta de pesquisa técnica/dev em um **canivete su
 ## 🛠️ SKILLS SELECIONADAS (em `E:\Meus LLMs\.claude\skills\`)
 
 | Skill | Caminho completo (absoluto) | Fases que usa |
-|-------|----------------------------|--------------| 
+|-------|----------------------------|--------------|
 | **python-pro** | `E:\Meus LLMs\.claude\skills\python-pro\SKILL.md` | 1, 2, 3, 4, 5 |
 | **test-driven-development** | `E:\Meus LLMs\.claude\skills\test-driven-development\SKILL.md` | 1, 2, 3, 4, 5 |
 | **clean-code** | `E:\Meus LLMs\.claude\skills\clean-code\SKILL.md` | 1, 3, 5 |
@@ -49,7 +49,7 @@ Transformar o SRA de uma ferramenta de pesquisa técnica/dev em um **canivete su
 
 ## 📦 RESUMO DAS FASES
 
-### Fase 1 — Corrigir o Freshness (`published_at` ausente) — BLOQUEANTE
+### Fase 1 — Corrigir o Freshness (`published_at` ausente) — BLOQUEANTE — CONCLUÍDA (commit `2842542`)
 Adicionar `SearchResult.published_at` em `types.py`. Corrigir `_compute_freshness()` no `HybridRanker` para usar a data real de publicação (com fallback para `fetched_at`). Adicionar meia-vidas específicas para fontes de notícia (12h para GDELT, 6h para redes sociais). Popular `published_at` nos searchers existentes que já têm essa data (RSS, HackerNews, Reddit). **Sem esta fase, nenhuma fonte de notícia consegue priorizar o mais recente.**
 
 ### Fase 2 — Fontes de Notícias Gerais
@@ -69,7 +69,7 @@ Adicionar domínios `universal` e `news` no `domains.yaml` com fontes de notíci
 ## 🚫 DELIBERADAMENTE FORA DO PLANO PARTE 4
 
 | Item | Motivo da exclusão |
-|------|--------------------| 
+|------|--------------------|
 | X/Twitter | API paga — custo e dependência comercial injustificáveis para o benefício |
 | Dados financeiros em tempo real | APIs pagas, decisão de orçamento |
 | Contornar paywall/robots.txt | Risco de ban de IP/chave, violação ética — fora por design |

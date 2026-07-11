@@ -1,0 +1,42 @@
+{
+  "posts": [
+    {
+      "uri": "3k2abc123def456",
+      "cid": "cid-1",
+      "author": {
+        "handle": "technews.bsky.social",
+        "displayName": "Tech News BR",
+        "avatar": "https://cdn.bsky.app/img/1"
+      },
+      "record": {
+        "text": "Lançado novo framework open source de agentes autônomos",
+        "createdAt": "2026-07-10T12:00:00.000Z",
+        "langs": ["pt"]
+      },
+      "replyCount": 12,
+      "repostCount": 48,
+      "likeCount": 215,
+      "indexedAt": "2026-07-10T12:01:30.000Z",
+      "embed": null
+    },
+    {
+      "uri": "3k2xyz789uvw012",
+      "cid": "cid-2",
+      "author": {
+        "handle": "devtips.bsky.social",
+        "displayName": "Dev Tips",
+        "avatar": "https://cdn.bsky.app/img/2"
+      },
+      "record": {
+        "text": "Thread sobre como otimizar pipelines de dados em Python",
+        "createdAt": "2026-07-09T20:30:00.000Z",
+        "langs": ["pt"]
+      },
+      "replyCount": 3,
+      "repostCount": 9,
+      "likeCount": 64,
+      "indexedAt": "2026-07-09T20:31:00.000Z",
+      "embed": null
+    }
+  ]
+}

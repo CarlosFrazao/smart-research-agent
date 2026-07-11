@@ -1,0 +1,32 @@
+{
+  "articles": [
+    {
+      "url": "https://example.com/news/gdelt-article-1",
+      "title": "Pesquisa em IA avança com novos modelos multilíngues",
+      "seendate": "2026-07-10T14:30:00Z",
+      "socialimage": "https://example.com/img1.jpg",
+      "domain": "example.com",
+      "language": "Portuguese",
+      "sourcecountry": "Brazil",
+      "tone": "-1.234"
+    },
+    {
+      "url": "https://news.example.org/gdelt-article-2",
+      "title": "Mercado de energia renovável bate recorde no trimestre",
+      "seendate": "2026-07-09T08:15:00Z",
+      "domain": "news.example.org",
+      "language": "Portuguese",
+      "sourcecountry": "Brazil",
+      "tone": "2.5"
+    },
+    {
+      "url": "https://tech.example.net/gdelt-article-3",
+      "title": "Nova regulamentação de dados entra em vigor na União Europeia",
+      "seendate": "2026-07-08T22:00:00Z",
+      "domain": "tech.example.net",
+      "language": "English",
+      "sourcecountry": "United Kingdom",
+      "tone": "0.0"
+    }
+  ]
+}

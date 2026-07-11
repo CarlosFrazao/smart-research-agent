@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import email.utils
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +38,8 @@ logger = logging.getLogger("search.generic_api")
 _SOURCE_DEF_CACHE: dict[str, dict[str, Any]] = {}
 
 # Regex de placeholders {nome} usados em headers e url_template.
-_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+# Suporta caminhos aninhados (ex: {author.handle}) para o url_template.
+_PLACEHOLDER_RE = re.compile(r"\{([\w.]+)\}")
 
 # Caminho padrão do catálogo (raiz-do-projeto/config/generic_sources.yaml).
 _CATALOG_PATH = (
@@ -120,9 +123,12 @@ def _resolve_field(item: Any, field_path: str | None) -> str:
 def _resolve_placeholders(template: str, source: Any) -> str:
     """Substitui ``{chave}`` em ``template`` por valores resolvidos de ``source``.
 
+    Suporta caminhos aninhados via JMESPath (ex: ``{author.handle}``), como
+    exigido por fontes como Bluesky/Mastodon (Fase 2 — Plano Parte 4).
+
     Args:
-        template: String com placeholders ``{chave}``.
-        source: dict de onde os valores são lidos (nível raiz da chave).
+        template: String com placeholders ``{chave}`` (chave pode ser ponto-aninhada).
+        source: dict/objeto de onde os valores são lidos.
 
     Returns:
         Template com placeholders resolvidos (chaves ausentes viram "").
@@ -132,12 +138,74 @@ def _resolve_placeholders(template: str, source: Any) -> str:
 
     def _sub(match: re.Match[str]) -> str:
         key = match.group(1)
-        if isinstance(source, dict):
-            val = source.get(key, "")
-            return str(val) if val is not None else ""
-        return ""
+        value = _resolve_field(source, key)
+        return value
 
     return _PLACEHOLDER_RE.sub(_sub, template)
+
+
+def parse_flexible_date(raw_value: Any) -> datetime | None:
+    """Converte um valor de data bruto de uma API em ``datetime`` (UTC-aware).
+
+    Aceita strings ISO-8601 (``2024-01-15T10:30:00Z``, com ou sem offset),
+    timestamps numéricos (segundos ou milissegundos) e objetos ``datetime``.
+    Usado pelo campo ``published_at_field`` da Fase 2 para popular
+    ``SearchResult.published_at`` (que alimenta o cálculo de freshness).
+
+    Args:
+        raw_value: Valor bruto (str/int/float/datetime) ou ``None``.
+
+    Returns:
+        ``datetime`` UTC-aware, ou ``None`` se não convertível.
+    """
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, datetime):
+        # Normaliza para UTC-aware (assume UTC se naive).
+        if raw_value.tzinfo is None:
+            return raw_value.replace(tzinfo=dt_timezone.utc)
+        return raw_value.astimezone(dt_timezone.utc)
+    if isinstance(raw_value, (int, float)):
+        # Timestamp: segundos se < 1e12, senão milissegundos.
+        ts = float(raw_value)
+        if ts > 1e12:
+            ts = ts / 1000.0
+        try:
+            return datetime.fromtimestamp(ts, tz=dt_timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(raw_value, str):
+        s = raw_value.strip()
+        if not s:
+            return None
+        # RSS usa RFC822 (ex: "Fri, 10 Jul 2026 14:30:00 GMT").
+        try:
+            rfc822 = email.utils.parsedate_to_datetime(s)
+            if rfc822 is not None:
+                if rfc822.tzinfo is None:
+                    rfc822 = rfc822.replace(tzinfo=dt_timezone.utc)
+                return rfc822.astimezone(dt_timezone.utc)
+        except (TypeError, ValueError):
+            pass
+        # ISO-8601: tenta fromisoformat (tolerante a 'Z').
+        candidate = s.replace("Z", "+00:00") if s.endswith("Z") else s
+        try:
+            dt = datetime.fromisoformat(candidate)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=dt_timezone.utc)
+            return dt.astimezone(dt_timezone.utc)
+        except ValueError:
+            pass
+        # Fallback para formatos comuns com espaço.
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=dt_timezone.utc)
+                return dt.astimezone(dt_timezone.utc)
+            except ValueError:
+                continue
+    return None
 
 
 class GenericAPISearcher(BaseSearcher):
@@ -207,6 +275,26 @@ class GenericAPISearcher(BaseSearcher):
             url = url.replace("{query}", query)
 
         headers = self._build_headers(defn.get("headers", {}) or {})
+
+        # Auth por query-param (ex: NewsAPI.org — apiKey={NEWSAPI_KEY}).
+        # Se requires_api_key=true e a chave não existir, degrada graciosamente
+        # (retorna []) em vez de disparar a requisição sem credencial.
+        auth_type = defn.get("auth_type")
+        requires_key = defn.get("requires_api_key", False)
+        if auth_type == "query_api_key":
+            api_key_param = defn.get("api_key_param", "apiKey")
+            env_key = defn.get("env_key")
+            api_key = os.environ.get(env_key or "", "") if env_key else ""
+            if not api_key:
+                if requires_key:
+                    logger.warning(
+                        "GenericAPISearcher[%s]: chave '%s' ausente — fonte pulada",
+                        self.source_id,
+                        env_key,
+                    )
+                    return []
+                api_key = ""
+            params[api_key_param] = api_key
 
         try:
             response = await self._http_request(
@@ -284,12 +372,29 @@ class GenericAPISearcher(BaseSearcher):
         snippet = _resolve_field(raw_result, defn.get("snippet_field"))
         item_url = _resolve_placeholders(defn.get("url_template", ""), raw_result)
 
-        return SearchResult(
+        result = SearchResult(
             source=self.source_id,
             title=title,
             url=item_url,
             description=snippet,
         )
+
+        # published_at (Fase 1/2): alimenta o cálculo de freshness. Campo
+        # especial — quando presente no YAML, é parseado para datetime UTC.
+        published_at_field = defn.get("published_at_field")
+        if published_at_field:
+            raw_date = _resolve_field(raw_result, published_at_field)
+            result.published_at = parse_flexible_date(raw_date)
+
+        # metrics_fields (opcional): mapa nome->JMESPath gravado em metrics.
+        metrics_fields = defn.get("metrics_fields")
+        if isinstance(metrics_fields, dict):
+            for metric_name, metric_path in metrics_fields.items():
+                value = _resolve_field(raw_result, metric_path)
+                if value not in ("", None):
+                    result.metrics[metric_name] = value
+
+        return result
 
     async def close(self) -> None:
         """Fecha o cliente HTTP herdado do BaseSearcher, se aberto."""

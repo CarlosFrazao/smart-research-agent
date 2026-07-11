@@ -1,0 +1,26 @@
+{
+  "status": "ok",
+  "totalResults": 2,
+  "articles": [
+    {
+      "source": {"id": "folha", "name": "Folha de S.Paulo"},
+      "author": "Redação",
+      "title": "Inflação desacelera e mercado revisa projeções para o ano",
+      "description": "Indicadores apontam alívio nos preços após política monetária restritiva.",
+      "url": "https://www1.folha.uol.com.br/mercado/artigo-1",
+      "urlToImage": "https://img.folha.uol.com.br/1.jpg",
+      "publishedAt": "2026-07-10T09:00:00Z",
+      "content": "Texto completo do artigo..."
+    },
+    {
+      "source": {"id": "g1", "name": "G1"},
+      "author": "Equipe de Economia",
+      "title": "Nova linha de trem interestadual é anunciada pelo governo",
+      "description": "Obra deve conectar capitais em menos de duas horas.",
+      "url": "https://g1.globo.com/politica/artigo-2",
+      "urlToImage": "https://img.g1.globo.com/2.jpg",
+      "publishedAt": "2026-07-09T17:45:00Z",
+      "content": "Texto completo do artigo..."
+    }
+  ]
+}

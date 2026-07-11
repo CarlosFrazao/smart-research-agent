@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Google News</title>
+    <link>https://news.google.com</link>
+    <description>Google News</description>
+    <item>
+      <title>Governo anuncia novo programa de inclusão digital</title>
+      <link>https://news.google.com/rss/articles/article-1</link>
+      <guid isPermaLink="false">CBMiE1Vhfnl4a0Nta1lm</guid>
+      <pubDate>Fri, 10 Jul 2026 14:30:00 GMT</pubDate>
+      <description>&lt;a href="https://example.com/a1"&gt;Fonte&lt;/a&gt; — Iniciativa prevê conexão em 5 mil escolas rurais até 2027.</description>
+      <source url="https://example.com">Portal Exemplo</source>
+    </item>
+    <item>
+      <title>Startup brasileira capta R$ 50 milhões em rodada série B</title>
+      <link>https://news.google.com/rss/articles/article-2</link>
+      <guid isPermaLink="false">CBMiE2Vhfnl4a0Nta1lm</guid>
+      <pubDate>Thu, 09 Jul 2026 09:15:00 GMT</pubDate>
+      <description>&lt;a href="https://example.com/a2"&gt;Tech News&lt;/a&gt; — Recursos destinados a expansão internacional.</description>
+      <source url="https://tech.example.org">Tech News</source>
+    </item>
+  </channel>
+</rss>

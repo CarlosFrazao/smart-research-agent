@@ -344,6 +344,30 @@ class SearcherFactory:
         except Exception as _e:
             logger.warning("Não foi possível carregar generic_sources.yaml: %s", _e)
 
+        # ── FASE 2: Registrar feeds RSS/Atom do catálogo generic_feeds.yaml ──
+        # GenericFeedSearcher transforma cada feed em uma fonte de busca sem
+        # escrever código Python novo. Searchers dedicados têm precedência.
+        try:
+            from src.search.generic_feed_searcher import (
+                GenericFeedSearcher,
+                list_enabled_generic_feed_ids,
+            )
+
+            for _fid in list_enabled_generic_feed_ids():
+                if _fid in searchers:
+                    continue  # não sobrescrever um searcher dedicado
+                try:
+                    searchers[_fid] = GenericFeedSearcher(_fid, cfg)
+                    logger.info(
+                        "Feed genérico '%s' registrado via GenericFeedSearcher", _fid
+                    )
+                except Exception as _e:
+                    logger.warning(
+                        "Falha ao registrar feed genérico '%s': %s", _fid, _e
+                    )
+        except Exception as _e:
+            logger.warning("Não foi possível carregar generic_feeds.yaml: %s", _e)
+
         return searchers
 
     @classmethod
@@ -395,6 +419,13 @@ class SearcherFactory:
             from src.search.generic_api_searcher import list_generic_source_ids
 
             known.update(list_generic_source_ids())
+        except Exception:
+            pass
+        # Feeds RSS/Atom do catálogo (FASE 2 — Plano Parte 4)
+        try:
+            from src.search.generic_feed_searcher import list_generic_feed_ids
+
+            known.update(list_generic_feed_ids())
         except Exception:
             pass
         return known

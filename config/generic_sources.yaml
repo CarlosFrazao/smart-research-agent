@@ -17,12 +17,26 @@
 #   title_field  Campo (JMESPath) do título dentro de cada item. Default: "title".
 #   snippet_field Campo (JMESPath) da descrição/snippet dentro de cada item.
 #   url_template Template da URL do resultado. Placeholders {campo} são
-#                substituídos por item["campo"] (nível raiz do item).
+#                resolvidos via JMESPath sobre o item (suporta aninhados como
+#                "record.text" e "author.handle").
 #   max_results  Máximo de resultados retornados. Default: 10.
 #   timeout      Timeout HTTP em segundos. Default: 15.
 #   headers      Headers HTTP. Valores {ENV_VAR} são resolvidos de os.environ.
 #   extra_params Parâmetros de query fixos adicionais.
 #   enabled      Se false, a fonte não é registrada pelo SearcherFactory.
+#
+# Extensões da Fase 2 (Plano Parte 4 — Fontes de Notícias):
+#   published_at_field  Campo (JMESPath) da data de publicação. Quando presente,
+#                o valor é parseado por src.search.generic_api_searcher.parse_flexible_date()
+#                e gravado em SearchResult.published_at (alimenta o freshness).
+#   metrics_fields       Mapa nome->JMESPath de métricas da fonte (ex: tone, likes),
+#                gravado em SearchResult.metrics.
+#   auth_type            "query_api_key": injeta a chave lida de os.environ[env_key]
+#                como parâmetro de query api_key_param (ex: NewsAPI).
+#   api_key_param        Nome do parâmetro de query da chave (ex: "apiKey").
+#   env_key              Variável de ambiente com a chave (ex: "NEWSAPI_KEY").
+#   requires_api_key     true => a fonte degrada graciosamente (retorna []) sem a chave.
+#   rate_limit_per_minute Limite declarativo (documentado; respeitado pelo caller).
 #
 # Limitações conhecidas (v1, deliberadas — ver EXPERIMENTAL_MODULES.md):
 #   - Sem paginação: apenas a primeira página de resultados é retornada.
@@ -198,5 +212,92 @@ sources:
     url_template: null
     max_results: 1
     timeout: 15
+
+  # ─────────────── Fontes de Notícia (Fase 2 — Plano Parte 4) ───────────────
+  # Adaptadas ao design JMESPath do GenericAPISearcher (title_field/snippet_field/
+  # url_template/result_path). published_at_field alimenta o freshness (Fase 1).
+  - id: "gdelt"
+    name: "GDELT Project (Global News Index)"
+    base_url: "https://api.gdeltproject.org/api/v2/doc/doc"
+    query_param: "query"
+    extra_params:
+      mode: "artlist"
+      format: "json"
+      maxrecords: "20"
+      sort: "datedesc"
+    result_path: "articles"
+    title_field: "title"
+    url_template: "{url}"
+    snippet_field: "seendate"
+    published_at_field: "seendate"   # alimenta SearchResult.published_at (freshness)
+    metrics_fields:
+      domain: "domain"
+      language: "language"
+      tone: "tone"
+    max_results: 20
+    requires_api_key: false
+    rate_limit_per_minute: 60
+    timeout: 10
+
+  - id: "newsapi_org"
+    name: "NewsAPI.org (Everything)"
+    base_url: "https://newsapi.org/v2/everything"
+    query_param: "q"
+    extra_params:
+      sortBy: "publishedAt"
+      language: "pt"
+    auth_type: "query_api_key"
+    api_key_param: "apiKey"
+    env_key: "NEWSAPI_KEY"
+    result_path: "articles"
+    title_field: "title"
+    url_template: "{url}"
+    snippet_field: "description"
+    published_at_field: "publishedAt"   # alimenta SearchResult.published_at
+    metrics_fields:
+      source_name: "source.name"
+      published_at: "publishedAt"
+    requires_api_key: true
+    rate_limit_per_minute: 33
+    max_results: 20
+    timeout: 10
+
+  - id: "bluesky"
+    name: "Bluesky (Public Posts)"
+    base_url: "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts"
+    query_param: "q"
+    extra_params:
+      limit: "20"
+      sort: "latest"
+    result_path: "posts"
+    title_field: "record.text"
+    url_template: "https://bsky.app/profile/{author.handle}/post/{uri}"
+    snippet_field: "record.text"
+    published_at_field: "indexedAt"
+    metrics_fields:
+      author: "author.displayName"
+      likes: "likeCount"
+    requires_api_key: false
+    max_results: 20
+    timeout: 8
+
+  - id: "mastodon_social"
+    name: "Mastodon (mastodon.social)"
+    base_url: "https://mastodon.social/api/v2/search"
+    query_param: "q"
+    extra_params:
+      type: "statuses"
+      limit: "20"
+    result_path: "statuses"
+    title_field: "content"
+    url_template: "{url}"
+    snippet_field: "content"
+    published_at_field: "created_at"
+    metrics_fields:
+      author: "account.username"
+      favourites: "favourites_count"
+    requires_api_key: false
+    max_results: 20
+    timeout: 8
 
   # Adicionar mais fontes aqui — sem escrever código Python.

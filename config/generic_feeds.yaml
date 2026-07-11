@@ -1,0 +1,35 @@
+# Catálogo de feeds RSS/Atom (Plano Parte 4 — Fase 2: Fontes de Notícias).
+#
+# Cada entrada vira uma fonte de busca disponível no SRA SEM escrever código
+# Python novo — o GenericFeedSearcher (src/search/generic_feed_searcher.py)
+# lê esta definição em runtime e transforma o feed em um searcher.
+#
+# Campos obrigatórios:
+#   id        Identificador único do feed (vira o nome do searcher).
+#   base_url  URL do feed com placeholder {query} (interpolado via urllib.quote).
+#   mapping   Mapa de papel->alias do item de feed:
+#               title:        elemento do título (default "title")
+#               url:          elemento do link (default "url")
+#               description:  elemento do resumo (default "description")
+#               published_at: elemento da data (default "published_at";
+#                             aceita published/pubDate/updated/issued)
+#
+# Campos opcionais:
+#   enabled      Se false, o feed não é registrado pelo SearcherFactory.
+#   max_results  Máximo de itens retornados. Default: 20.
+#   timeout      Timeout HTTP em segundos (urllib). Default: 10.
+#   requires_api_key  Sempre false para feeds públicos (documentação).
+
+feeds:
+  - id: "google_news_rss"
+    name: "Google News (RSS Search — pt-BR)"
+    enabled: true
+    base_url: "https://news.google.com/rss/search?q={query}&hl=pt-BR&gl=BR&ceid=BR:pt-419"
+    mapping:
+      title: "title"
+      url: "link"
+      description: "summary"
+      published_at: "published_at"
+    requires_api_key: false
+    max_results: 20
+    timeout: 10
