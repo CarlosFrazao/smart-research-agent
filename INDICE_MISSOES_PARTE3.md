@@ -15,7 +15,7 @@
 | **Fase 2** | `MISSAO_PARTE3_FASE2_MODELO_DADOS_TRUST.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída (commit `eefd2be` + `9f0d588`) |
 | **Fase 3** | `MISSAO_PARTE3_FASE3_GENERIC_API_SEARCHER.md` | 🟢 Alta (maior alavancagem) | Fases 1-2 | ✅ Concluída (commit `3a3e165`) |
 | **Fase 4** | `MISSAO_PARTE3_FASE4_CLUSTERING_CUSTO.md` | 🟠 Alta | Fases 1-3 | ✅ Concluída (commit pendente) |
-| **Fase 5** | `MISSAO_PARTE3_FASE5_UI_ALLOWLIST_TRANSPARENCIA.md` | 🟡 Média | Fases 1-4 | ⏳ Pendente |
+| **Fase 5** | `MISSAO_PARTE3_FASE5_UI_ALLOWLIST_TRANSPARENCIA.md` | 🟡 Média | Fases 1-4 | ✅ Concluída (commit pendente) |
 | **Fase 6** | `MISSAO_PARTE3_FASE6_RECONECTAR_E_LIMPAR.md` | 🔵 Média | Fases 1-5 | ⏳ Pendente |
 
 ---

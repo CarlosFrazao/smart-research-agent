@@ -187,6 +187,51 @@ with st.sidebar:
     st.checkbox("Data Analysis com Pandas", value=True)
     st.checkbox("Exportação de Citações (BibTeX/RIS)", value=True)
     st.divider()
+    st.markdown("### 🎯 Fontes de Confiança")
+    with st.expander("Gerenciar regras de fonte", expanded=False):
+        col_source, col_tier, col_add = st.columns([3, 2, 1])
+        with col_source:
+            new_source = st.text_input(
+                "Fonte",
+                placeholder="ex: reddit ou blog-duvidoso.com",
+                label_visibility="collapsed",
+                key="trust_new_source",
+            )
+        with col_tier:
+            new_tier = st.selectbox(
+                "Regra",
+                options=["allow", "deny"],
+                format_func=lambda x: (
+                    "✅ Sempre priorizar" if x == "allow" else "🚫 Nunca mostrar"
+                ),
+                label_visibility="collapsed",
+                key="trust_new_tier",
+            )
+        with col_add:
+            if st.button("➕", use_container_width=True, key="trust_add_btn"):
+                if new_source:
+                    rules = st.session_state.get("trust_rules", {})
+                    rules[new_source.strip().lower()] = new_tier
+                    st.session_state["trust_rules"] = rules
+                    st.rerun()
+
+        # Tabela das regras ativas
+        rules = st.session_state.get("trust_rules", {})
+        if rules:
+            st.markdown("**Regras ativas:**")
+            for source, tier in list(rules.items()):
+                c1, c2, c3 = st.columns([3, 2, 1])
+                c1.write(f"`{source}`")
+                c2.write("✅ Prioridade" if tier == "allow" else "🚫 Bloqueado")
+                if c3.button("🗑️", key=f"del_rule_{source}"):
+                    del rules[source]
+                    st.session_state["trust_rules"] = rules
+                    st.rerun()
+        else:
+            st.caption(
+                "Nenhuma regra configurada — todas as fontes são tratadas igualmente."
+            )
+    st.divider()
     st.info(
         "SRA v6.2.0 — Super Ferramenta de Pesquisa completa com suporte a EvidenceGraph."
     )
@@ -235,6 +280,9 @@ with tab_search:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
+                # FASE 5: repassa regras de allowlist/denylist para o pipeline
+                trust_rules = st.session_state.get("trust_rules", {})
+
                 status_text.info(
                     "🧬 [Intent Analyzer] Analisando intenção e extraindo conceitos..."
                 )
@@ -253,10 +301,13 @@ with tab_search:
                 status_bar.progress(75)
 
                 # Roda a orquestração assíncrona
-                result = loop.run_until_complete(orch.research(query))
+                result = loop.run_until_complete(
+                    orch.research(query, context_extra={"trust_rules": trust_rules})
+                )
 
-                # Salva a instância do orquestrador para uso em outras abas (ex: Grafo)
+                # Salva a instância do orquestrador e contexto para uso em outras abas (ex: Grafo)
                 st.session_state["orch"] = orch
+                st.session_state["orch_context"] = getattr(orch, "last_context", None)
 
                 status_bar.progress(100)
                 status_text.success("Orquestração concluída!")
@@ -266,6 +317,70 @@ with tab_search:
                 st.markdown(
                     result if isinstance(result, str) else json.dumps(result, indent=2)
                 )
+
+                # FASE 5: Painel de Transparência da Busca
+                with st.expander("🔍 Transparência da busca", expanded=False):
+                    ctx = st.session_state.get("orch_context")
+                    ranked = []
+                    if ctx is not None:
+                        ranked = getattr(ctx, "ranked_results", None) or []
+
+                    if ranked:
+                        st.markdown("**Fontes consultadas:**")
+                        sources_used: dict = {}
+                        for r in ranked:
+                            source = getattr(r, "source", "desconhecida")
+                            trust = getattr(r, "trust_tier", "neutral")
+                            if source not in sources_used:
+                                sources_used[source] = {
+                                    "count": 0,
+                                    "trust": trust,
+                                    "avg_confidence": [],
+                                }
+                            sources_used[source]["count"] += 1
+                            confidence = getattr(r, "confidence_score", None)
+                            if confidence:
+                                sources_used[source]["avg_confidence"].append(
+                                    confidence
+                                )
+
+                        for src, info in sorted(
+                            sources_used.items(),
+                            key=lambda x: x[1]["count"],
+                            reverse=True,
+                        ):
+                            avg_conf = (
+                                sum(info["avg_confidence"])
+                                / len(info["avg_confidence"])
+                                if info["avg_confidence"]
+                                else None
+                            )
+                            trust_emoji = {
+                                "allow": "✅",
+                                "deny": "🚫",
+                                "neutral": "⚪",
+                            }.get(info["trust"], "⚪")
+                            conf_str = f"{avg_conf:.0%}" if avg_conf else "N/A"
+                            st.markdown(
+                                f"- {trust_emoji} **{src}**: {info['count']} "
+                                f"resultado(s) | Confiança média: {conf_str}"
+                            )
+                    else:
+                        st.caption("Nenhum resultado ranqueado disponível para exibir.")
+
+                    # Custo estimado (se disponível no contexto)
+                    cost = None
+                    if ctx is not None:
+                        cost = (
+                            ctx.extra.get("estimated_cost_usd")
+                            if hasattr(ctx, "extra")
+                            else None
+                        )
+                    if cost:
+                        st.metric("Custo estimado (USD)", f"~${float(cost):.4f}")
+
+                    st.markdown("**Fontes com falha (circuit breaker):**")
+                    st.caption("Ver `/api/circuit-breakers` para detalhes completos.")
 
             except Exception as e:
                 st.error(f"Erro no pipeline: {e}")

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -259,6 +260,20 @@ class ScoreStage(PipelineStage):
                 r.confidence_score = min(
                     1.0, cluster_max / 100.0 if cluster_max > 1.0 else cluster_max
                 )
+
+        # 3.1 Boost para resultados com trust_tier == "allow" (FASE 5)
+        for r in scored:
+            if getattr(r, "trust_tier", "neutral") == "allow":
+                # Configurável via env var, default +0.1 (escala 0-1).
+                boost = float(os.environ.get("ALLOW_SOURCE_SCORE_BOOST", "0.1"))
+                # RankedResult usa `score` (0-100) e `confidence_score` (0-1);
+                # SynthesizedResult usa `combined_score` (0-100, sem teto).
+                if hasattr(r, "combined_score"):
+                    r.combined_score = min(100.0, r.combined_score + boost * 100)
+                if hasattr(r, "score"):
+                    r.score = min(100.0, r.score + boost * 100)
+                if hasattr(r, "confidence_score"):
+                    r.confidence_score = min(1.0, r.confidence_score + boost)
 
         # 4. Reordenar por confiança descendente (preservando score do ranker como tie-break)
         scored.sort(
@@ -575,7 +590,7 @@ class ScoreStage(PipelineStage):
         words = text.lower().split()
         if len(words) < 20:
             return False
-        bigrams = [f"{words[i]} {words[i+1]}" for i in range(len(words) - 1)]
+        bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
         if not bigrams:
             return False
         unique_ratio = len(set(bigrams)) / len(bigrams)

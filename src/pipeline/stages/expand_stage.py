@@ -123,6 +123,58 @@ class ExpandStageResult:
     error: str | None = None
 
 
+# ── Heurística de Query Vaga (FASE 5) ────────────────────────────────────────
+# Função pura, sem dependências de I/O ou do Claude Code, reutilizável tanto
+# no pipeline (via ExpandStage) quanto nos testes. Extraída do hook
+# `hooks/anti_query_vaga.py` para rodar também quando o SRA é acessado por
+# API/MCP por outros agentes — não apenas como UserPromptSubmit hook.
+_VAGUE_ONLY_RE = re.compile(
+    r"^(isso|aquilo|esse\s+troco|tipo\s+assim|ne|né|aí|pesquisa|busca|"
+    r"search|find|olha|veja|mostra|faz|faça|tenta|ok|sim|não|nao)\.?$",
+    re.IGNORECASE,
+)
+
+_QUESTION_STARTERS_RE = re.compile(
+    r"^(como|qual|quando|onde|por\s*que|porqu[eê]|quem|o\s*que|"
+    r"what|how|why|where|when|which|who)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_query_too_vague(query: str) -> bool:
+    """Detecta queries que quase certamente não vão gerar resultado útil.
+
+    Heurística leve (sem chamada LLM):
+      - query < 15 chars (sem contexto suficiente);
+      - palavra(s) isolada(s) sem pontuação de pergunta;
+      - stack trace colado sem pergunta ("Traceback" / "Error:" / "Exception:");
+      - palavra vaga isolada (ex: "pesquisa", "busca", "isso").
+
+    Args:
+        query: Query original do usuário.
+
+    Returns:
+        bool: True se a query é considerada vaga demais para pesquisa útil.
+    """
+    trimmed = (query or "").strip()
+    if not trimmed:
+        return True
+    # Perguntas explícitas com ? ou iniciadas por interrogativo são válidas.
+    if "?" in trimmed or _QUESTION_STARTERS_RE.match(trimmed):
+        return False
+    if len(trimmed) < 15:
+        return True
+    if len(trimmed.split()) <= 2:
+        return True
+    # Palavra vaga isolada sem referente.
+    if _VAGUE_ONLY_RE.match(trimmed):
+        return True
+    # Stack trace colado sem pergunta.
+    if re.search(r"(Traceback|Error:|Exception:)", trimmed) and "?" not in trimmed:
+        return True
+    return False
+
+
 class _InMemoryTTLCache:
     """Cache local simples usado apenas quando nenhum backend é injetado.
 
@@ -224,6 +276,55 @@ class ExpandStage:
         ter fallback; se a API falhar, o sistema não quebra").
         """
         start = time.perf_counter()
+
+        # FASE 5: detecção de query vaga ANTES de gastar o pipeline.
+        # Se a query for muito genérica, pausa via HITL para o usuário
+        # refinar antes de disparar buscas/expansões (economia de tokens).
+        if _is_query_too_vague(context.query):
+            orchestrator = context.extras.get("orchestrator")
+            session_id = context.extras.get("session_id", "default_session")
+            hitl_manager = (
+                getattr(orchestrator, "hitl_manager", None) if orchestrator else None
+            )
+            hitl_enabled = True
+            if orchestrator and hasattr(orchestrator, "config"):
+                hitl_enabled = getattr(orchestrator.config, "hitl_enabled", True)
+
+            if hitl_manager and hitl_enabled:
+                logger.info(
+                    f"[HITL] Query vaga detectada na sessão '{session_id}' — "
+                    f"pausando para esclarecimento antes da expansão."
+                )
+                clarification = await hitl_manager.request_approval(
+                    session_id=session_id,
+                    request_type="clarify_query",
+                    data={
+                        "original_query": context.query,
+                        "message": (
+                            f"A query '{context.query}' parece muito genérica. "
+                            "Pode dar mais contexto? Exemplo: em vez de 'python', "
+                            "tente 'como fazer X em Python'."
+                        ),
+                    },
+                    timeout=300.0,
+                )
+                if (
+                    clarification
+                    and isinstance(clarification, dict)
+                    and clarification.get("refined_query")
+                ):
+                    refined = str(clarification["refined_query"]).strip()
+                    if refined:
+                        logger.info(
+                            "Query refinada via HITL (FASE 5): '%s' → '%s'",
+                            context.query,
+                            refined,
+                        )
+                        context.query = refined
+                else:
+                    logger.info(
+                        "Usuário não refinou a query vaga — continuando com original."
+                    )
 
         # FASE 6.5: extrai operadores de busca avançada (site:, filetype:,
         # intitle:) da query original ANTES da expansão. O texto limpo alimenta

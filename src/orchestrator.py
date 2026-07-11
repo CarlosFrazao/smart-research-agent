@@ -231,6 +231,29 @@ class Orchestrator:
             try:
                 context = await self._pipeline.run(context)
             finally:
+                # FASE 5: estimativa de custo final para o painel de transparência.
+                # Calculada sob demanda a partir do SourcePlan e do TokenEconomy;
+                # nunca quebra o pipeline se indisponível (best-effort).
+                try:
+                    from src.pipeline.stages.expand_stage import estimate_search_cost
+                    from src.token_economy import TokenEconomy
+
+                    if context.source_plan is not None:
+                        te = TokenEconomy()
+                        n_queries = max(len(context.expanded_queries), 1)
+                        est = estimate_search_cost(
+                            context.source_plan, te, n_queries=n_queries
+                        )
+                        context.extra["estimated_cost_usd"] = est
+                except Exception as cost_exc:  # noqa: BLE001 - best-effort
+                    logger.debug(
+                        "FASE 5: não foi possível estimar custo para transparência: %s",
+                        cost_exc,
+                    )
+                # Exponha o contexto final para a UI (transparência de busca) e
+                # ferramentas que queiram inspecionar ranked_results/custo sem
+                # acoplar o Orchestrador ao protocolo do PipelineContext.
+                self.last_context = context
                 await self.close_searchers()
             await self._report_progress(
                 progress_callback, self.TOTAL_PROGRESS_STEPS, "Pesquisa concluida"

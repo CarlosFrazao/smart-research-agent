@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -233,6 +234,11 @@ class SearchStage(PipelineStage):
         if tasks:
             gathered = await self._execute_with_early_termination(tasks, context)
             all_results.extend(gathered)
+
+        # 4.1 (FASE 5): Aplicar regras de allowlist/denylist do usuário
+        # (context.extra["trust_rules"] = {source: "allow"|"deny"}). Preenche
+        # result.trust_tier e, se configurado, remove fontes "deny".
+        all_results = self._apply_trust_rules(all_results, context)
 
         # Injetar eventos do StreamMonitorAgent se disponível
         orchestrator = context.extras.get("orchestrator") if context.extras else None
@@ -590,3 +596,68 @@ class SearchStage(PipelineStage):
             except Exception as e:
                 logger.warning(f"Falha ao desserializar resultado do cache: {e}")
         return results
+
+    # ── FASE 5: Allowlist/Denylist (trust_rules) ─────────────────────────────
+
+    def _apply_trust_rules(
+        self, results: List[SearchResult], context: PipelineContext
+    ) -> List[SearchResult]:
+        """Aplica as regras de confiança do usuário aos resultados brutos.
+
+        Lê ``context.extra["trust_rules"]`` (mapa ``{source: "allow"|"deny"}``)
+        e preenche ``result.trust_tier`` para cada resultado. Fontes marcadas
+        como "deny" são removidas quando ``FILTER_DENIED_SOURCES=true``
+        (default), garantindo que o usuário nunca receba conteúdo de uma fonte
+        que ele explicitamente bloqueou.
+
+        Args:
+            results: Resultados brutos vindos dos searchers.
+            context: Contexto do pipeline (de onde vem as ``trust_rules``).
+
+        Returns:
+            List[SearchResult]: Resultados com ``trust_tier`` preenchido; as
+            fontes "deny" são filtradas conforme a flag de ambiente.
+        """
+        trust_rules = {}
+        extras = (
+            getattr(context, "extras", None) or getattr(context, "extra", None) or {}
+        )
+        raw_rules = extras.get("trust_rules", {})
+        if isinstance(raw_rules, dict):
+            # Normaliza chaves (fontes) para lowercase para matching robusto.
+            for source, tier in raw_rules.items():
+                if tier in ("allow", "deny", "neutral"):
+                    trust_rules.setdefault(str(source).strip().lower(), tier)
+
+        if not trust_rules:
+            return results
+
+        filter_denied = (
+            os.environ.get("FILTER_DENIED_SOURCES", "true").lower() == "true"
+        )
+
+        filtered: List[SearchResult] = []
+        for r in results:
+            source_key = (getattr(r, "source", "") or "").strip().lower()
+            tier = trust_rules.get(source_key, "neutral")
+            try:
+                r.trust_tier = tier
+            except Exception as e:  # pydantic validation / attr shielding
+                logger.debug(f"Não foi possível setar trust_tier em {r}: {e}")
+            if tier == "deny":
+                if filter_denied:
+                    logger.debug("Resultado de fonte negada '%s' excluído.", source_key)
+                    continue
+                logger.debug(
+                    "Resultado de fonte negada '%s' mantido (filtro desabilitado).",
+                    source_key,
+                )
+            filtered.append(r)
+
+        denied = len(results) - len(filtered)
+        if denied:
+            logger.info(
+                "SearchStage: %d resultado(s) de fontes 'deny' removidos por trust_rules.",
+                denied,
+            )
+        return filtered
