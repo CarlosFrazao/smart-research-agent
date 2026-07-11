@@ -1,7 +1,7 @@
 import logging
 import os
 import urllib.parse
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.clients.firecrawl_client import FirecrawlClient
@@ -345,11 +345,17 @@ class RedditSearcher(BaseSearcher):
 
     def _normalize_pushshift(self, post: dict) -> SearchResult:
         created = datetime.fromtimestamp(post.get("created_utc", 0)).isoformat()
+        published_at = None
+        try:
+            published_at = datetime.fromtimestamp(post.get("created_utc", 0), UTC)
+        except (ValueError, OSError, OverflowError):
+            published_at = None
         return SearchResult(
             source="reddit",
             title=post.get("title", "Sem titulo"),
             url=f"https://reddit.com{post.get('permalink', '')}",
             description=post.get("selftext", "")[:500] or post.get("url", ""),
+            published_at=published_at,
             metrics={
                 "upvotes": post.get("score", 0),
                 "comments": post.get("num_comments", 0),
@@ -371,11 +377,17 @@ class RedditSearcher(BaseSearcher):
             SearchResult: Objeto padronizado contendo os dados normalizados.
         """
         created = datetime.fromtimestamp(post.get("created_utc", 0)).isoformat()
+        published_at = None
+        try:
+            published_at = datetime.fromtimestamp(post.get("created_utc", 0), UTC)
+        except (ValueError, OSError, OverflowError):
+            published_at = None
         return SearchResult(
             source="reddit",
             title=post.get("title", "Sem titulo"),
             url=f"https://reddit.com{post.get('permalink', '')}",
             description=post.get("selftext", "")[:500],
+            published_at=published_at,
             metrics={
                 "upvotes": post.get("ups", 0),
                 "comments": post.get("num_comments", 0),

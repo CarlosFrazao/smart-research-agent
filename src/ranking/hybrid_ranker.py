@@ -60,6 +60,13 @@ FRESHNESS_HALFLIFE: Dict[str, float] = {
     "arxiv": 365.0,
     "stackoverflow": 180.0,
     "rss": 3.0,
+    # Fontes de notícia (Plano Parte 4 — Fase 2): meia-vida curta,
+    # conteúdo de minuto a minuto decai rápido.
+    "gdelt": 0.5,             # 12 horas
+    "google_news_rss": 0.5,   # 12 horas
+    "newsapi_org": 0.5,       # 12 horas
+    "bluesky": 0.25,          # 6 horas — rede social decai super rápido
+    "mastodon_social": 0.25,  # 6 horas
     "default": 30.0,
 }
 
@@ -580,15 +587,34 @@ class HybridRanker:
             )
 
     def _compute_freshness(self, result: SearchResult, now: datetime) -> float:
-        """Computa score de freshness (0-1) baseado na idade do resultado."""
-        fetched_at = getattr(result, "fetched_at", None)
-        if fetched_at is None:
+        """Computa score de freshness (0-1) baseado na idade do resultado.
+
+        Usa ``published_at`` quando disponível, com fallback para
+        ``fetched_at``. O tratamento é robusto a timezone (aware vs naive),
+        evitando ``TypeError: can't subtract offset-naive and offset-aware
+        datetimes``.
+        """
+        published_at = getattr(result, "published_at", None)
+        reference_time = published_at or getattr(result, "fetched_at", None)
+        if reference_time is None:
             return 0.5
 
         try:
-            if isinstance(fetched_at, str):
-                fetched_at = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
-            age_days = (now - fetched_at).total_seconds() / 86400.0
+            if isinstance(reference_time, str):
+                # Caso venha serializado como string do JSON (ISO-8601)
+                reference_time = datetime.fromisoformat(
+                    reference_time.replace("Z", "+00:00")
+                )
+
+            # Normalizar comparação para evitar erro de naive vs aware datetime.
+            # Se a referência tem tzinfo, compara com `now` (que é aware UTC).
+            # Caso contrário, usa um now naive para manter a subtração válida.
+            if reference_time.tzinfo is not None:
+                now_cmp = now
+            else:
+                now_cmp = datetime.now()
+
+            age_days = (now_cmp - reference_time).total_seconds() / 86400.0
         except Exception:
             return 0.5
 

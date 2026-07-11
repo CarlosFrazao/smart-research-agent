@@ -230,6 +230,8 @@ class SearchResult(SRAModel):
         metrics: Métricas específicas da fonte (stars, upvotes, points, etc).
         raw: Payload bruto da API de origem.
         fetched_at: Timestamp de coleta.
+        published_at: Data/hora de publicação original reportada pela fonte
+            (None quando indisponível — nesse caso o freshness usa fetched_at).
         confidence_score: Score de confiança calculado (0.0-1.0).
         evidence_quality: Qualidade da evidência.
         citations: URLs citadas como referência.
@@ -258,6 +260,10 @@ class SearchResult(SRAModel):
     metrics: dict[str, Any] = Field(default_factory=dict)
     raw: dict[str, Any] = Field(default_factory=dict)
     fetched_at: datetime = Field(default_factory=datetime.now)
+    published_at: datetime | None = None
+    """Data/hora de publicação original do conteúdo, conforme reportada pela
+    fonte. None = fonte não expõe timestamp de publicação (fallback: fetched_at
+    será usado pelo HybridRanker para o cálculo de freshness)."""
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence_quality: EvidenceQuality = "unknown"
     citations: list[str] = Field(default_factory=list)

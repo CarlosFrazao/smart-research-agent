@@ -372,11 +372,22 @@ class RSSSearcher(BaseSearcher):
         published = raw.get("published")
         weight = float(raw.get("weight", 1.0))
 
+        # Converte a data ISO-8601 (string) da fonte para datetime UTC aware.
+        published_at = None
+        if published and isinstance(published, str):
+            try:
+                published_at = datetime.fromisoformat(
+                    published.replace("Z", "+00:00")
+                )
+            except Exception:
+                published_at = None
+
         return SearchResult(
             source=f"rss:{feed_id}",
             title=title or "(sem título)",
             url=url,
             description=description[:500] if description else "",
+            published_at=published_at,
             metrics={
                 "feed_name": feed_name,
                 "feed_id": feed_id,

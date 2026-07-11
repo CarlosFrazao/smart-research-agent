@@ -7,6 +7,7 @@ circuit breaker e retry automatico.
 import asyncio
 import logging
 import time
+from datetime import datetime
 from typing import Any
 
 from src.search.base_searcher import BaseSearcher
@@ -126,16 +127,27 @@ class HNSearcher(BaseSearcher):
             hit.get("url")
             or f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
         )
+        # O Algolia HN retorna created_at como string ISO-8601 (UTC).
+        created_at_raw = hit.get("created_at", "")
+        published_at = None
+        if created_at_raw:
+            try:
+                published_at = datetime.fromisoformat(
+                    str(created_at_raw).replace("Z", "+00:00")
+                )
+            except Exception:
+                published_at = None
         return SearchResult(
             source="hackernews",
             title=hit.get("title", "Sem titulo"),
             url=url,
             description=hit.get("story_text", "")[:500],
+            published_at=published_at,
             metrics={
                 "points": hit.get("points", 0),
                 "comments": hit.get("num_comments", 0),
                 "author": hit.get("author", ""),
-                "created_at": hit.get("created_at", ""),
+                "created_at": created_at_raw,
                 "object_id": hit.get("objectID", ""),
             },
             raw=hit,
