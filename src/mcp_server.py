@@ -483,6 +483,56 @@ def _register_rest_endpoints(app: FastAPI) -> None:
         if not query:
             raise HTTPException(status_code=400, detail="query is required")
         session_id = body.get("session_id", "default_session")
+        dry_run = bool(body.get("dry_run", False))
+
+        # Fase 4: suporte a dry_run — calcula e retorna estimativa de custo
+        # pré-busca sem disparar a busca real no pipeline de pesquisa.
+        if dry_run:
+            try:
+                from src.source_planner import SourcePlanner
+                from src.token_economy import TokenEconomy
+                from src.pipeline.stages.expand_stage import estimate_search_cost
+
+                orc = container.orchestrator
+                intent = await orc.intent_analyzer.analyze(query)
+                expanded = await orc.query_expander.expand(query, intent)
+
+                planner = SourcePlanner(llm=getattr(orc, "llm", None))
+                # context mínimo para o planner (trust_rules opcional)
+                user_id = getattr(orc, "user_id", "anonymous") or "anonymous"
+                try:
+                    from src.trust_rule_store import TrustRuleStore
+
+                    context = {
+                        "extra": {"trust_rules": TrustRuleStore().get_rules_for_user(user_id)}
+                    }
+                except Exception:
+                    context = {"extra": {}}
+                plan = planner.plan(intent, expanded, context)
+
+                n_queries = max(1, len(expanded))
+                token_economy = getattr(orc, "token_economy", None) or TokenEconomy()
+                estimated_cost = estimate_search_cost(
+                    source_plan=plan,
+                    token_economy=token_economy,
+                    n_queries=n_queries,
+                )
+
+                return {
+                    "dry_run": True,
+                    "query": query,
+                    "estimated_cost_usd": estimated_cost,
+                    "n_queries": n_queries,
+                    "sources_primary": plan.primary,
+                    "sources_secondary": plan.secondary,
+                    "session_id": session_id,
+                }
+            except Exception as e:
+                logger.exception("Dry-run estimate failed")
+                raise HTTPException(
+                    status_code=500, detail=f"dry_run_failed: {e}"
+                ) from e
+
         # api_key e provider são aceitos no body para compatibilidade com o frontend
         # O orchestrator usa as chaves do .env por default; override não é logado
         try:

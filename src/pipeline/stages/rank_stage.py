@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import inspect
 import math
+import os
 import re
 import time
 from collections import Counter
@@ -210,6 +211,27 @@ def _extract_text(candidate: Any) -> str:
     return " ".join(parts)
 
 
+def _cosine_similarity(a: Any, b: Any) -> float:
+    """Similaridade de cosseno entre dois vetores numpy."""
+    try:
+        import numpy as np
+        a_norm = np.linalg.norm(a)
+        b_norm = np.linalg.norm(b)
+        if a_norm == 0.0 or b_norm == 0.0:
+            return 0.0
+        return float(np.dot(a, b) / (a_norm * b_norm))
+    except (ImportError, AttributeError, TypeError):
+        # Fallback simples se numpy não estiver disponível
+        # Normalizar para similaridade por produto escalar (não-cosseno)
+        try:
+            a_float, b_float = float(a), float(b)
+            if a_float == 0.0 or b_float == 0.0:
+                return 0.0
+            return float(a_float * b_float) / (abs(a_float) * abs(b_float))
+        except (ValueError, TypeError):
+            return 0.0
+
+
 def _reciprocal_rank_fusion(
     ranked_lists: list[list[int]], k: int = 60, weights: list[float] | None = None
 ) -> dict[int, float]:
@@ -226,6 +248,59 @@ def _reciprocal_rank_fusion(
         for rank, idx in enumerate(ranked_list):
             fused[idx] = fused.get(idx, 0.0) + weight / (k + rank + 1)
     return fused
+
+
+def cluster_similar_results(
+    ranked: list,           # list[RankedResult] — tipagem completa no código real
+    embeddings: dict,      # {url: np.ndarray} — reaproveitado do HybridRanker
+    similarity_threshold: float = 0.88,  # configurável via env var CLUSTER_THRESHOLD
+) -> None:
+    """Agrupa resultados de FONTES DIFERENTES sobre o mesmo fato/evento.
+
+    Modifica ranked[i].result.cluster_id e .corroborated_by in-place.
+    Threshold conservador: falso positivo (fundir resultados diferentes) é pior
+    que falso negativo (deixar de fundir resultados iguais).
+
+    REGRAS:
+    - Nunca clusteriza resultados da MESMA fonte — resultados de uma fonte
+      são provavelmente genuinamente distintos, não corroboração.
+    - threshold=0.88 é ponto de partida teórico — validar com dados reais
+      e ajustar via CLUSTER_SIMILARITY_THRESHOLD env var.
+    """
+    threshold = float(os.environ.get("CLUSTER_SIMILARITY_THRESHOLD", similarity_threshold))
+
+    for i, r_i in enumerate(ranked):
+        result_i = getattr(r_i, "result", r_i)  # adaptar ao tipo real
+        if result_i.cluster_id is not None:
+            continue  # já clusterizado
+        url_i = getattr(result_i, "url", "")
+        if url_i not in embeddings:
+            continue
+
+        group = [i]
+        for j in range(i + 1, len(ranked)):
+            r_j = ranked[j]
+            result_j = getattr(r_j, "result", r_j)
+            if result_j.cluster_id is not None:
+                continue
+            if result_j.source == result_i.source:
+                continue  # não clusteriza dentro da mesma fonte
+            url_j = getattr(result_j, "url", "")
+            if url_j not in embeddings:
+                continue
+            sim = _cosine_similarity(embeddings[url_i], embeddings[url_j])
+            if sim >= threshold:
+                group.append(j)
+
+        if len(group) > 1:
+            cid = f"cluster_{i}"
+            sources_in_group = [getattr(getattr(ranked[k], "result", ranked[k]), "source", "") for k in group]
+            for k in group:
+                result_k = getattr(ranked[k], "result", ranked[k])
+                result_k.cluster_id = cid
+                result_k.corroborated_by = [
+                    s for s in sources_in_group if s != result_k.source
+                ]
 
 
 async def _maybe_await(value: Any) -> Any:
@@ -321,6 +396,16 @@ class RankStage:
             reranked = await self._llm_rerank(query, fused_order, signals_used)
 
             final_order = self._apply_feedback(reranked, signals_used)
+
+            # 6. Clustering (Fase 4) - grupo resultados de diferentes fontes sobre o mesmo fato/evento
+            # usando vetores de embedding já calculados pelo HybridRanker
+            if hasattr(context, "embeddings") and context.embeddings:
+                cluster_similar_results(final_order, context.embeddings)
+                logger.debug(
+                    "Clustering: %d resultados agrupados em clusters",
+                    sum(1 for r in final_order
+                        if getattr(getattr(r, "result", r), "cluster_id", None) is not None)
+                )
 
             context.ranked_results = final_order
             duration_ms = round((time.perf_counter() - start) * 1000, 2)

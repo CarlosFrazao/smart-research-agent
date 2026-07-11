@@ -679,9 +679,14 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
                 if quality == "cited"
                 else "[BAIXA — VERIFICAR]"
             )
+            # Fase 4: mostrar corroboração de fontes
+            corroborated_by = getattr(r, "corroborated_by", [])
+            corroboration_note = ""
+            if corroborated_by:
+                corroboration_note = f" ✅ Confirmado por: {', '.join(corroborated_by)}"
             lines.append(
                 f"{i+1}. {confidence_tag} {r.title or '(sem título)'} "
-                f"({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n"
+                f"({', '.join(s for s in r.sources if s)}){corroboration_note} - score: {r.combined_score}\n"
                 f"   {(r.description or '')[:200]}..."
             )
         return "\n".join(lines)

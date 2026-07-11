@@ -618,4 +618,64 @@ class ExpandStage:
         return queries or [original_query]
 
 
-__all__ = ["ExpandStage", "ExpandStageResult", "PipelineContext", "ExpansionCache"]
+def estimate_search_cost(
+    source_plan: Any,
+    token_economy: Any,
+    n_queries: int = 1,
+) -> float:
+    """Estima o custo total (USD) de executar o `SourcePlan` fornecido.
+
+    Fórmula: Σ (custo_médio_estimado[fonte] × n_queries)
+    para cada fonte no plano (`primary` + `secondary`).
+    Retorna 0.0 se não houver fontes ou se o `token_economy` não fornecer
+    custos.
+
+    Args:
+        source_plan: Instância de `SourcePlan` (ou compatível por duck typing
+            com atributos `.primary` e `.secondary`).
+        token_economy: Instância de `TokenEconomy` (ou compatível com o método
+            `get_avg_cost_per_source(source_id) -> float`).
+        n_queries: Número de queries expandidas que serão executadas por fonte.
+
+    Returns:
+        float: Custo estimado em USD.
+    """
+    if source_plan is None or token_economy is None:
+        return 0.0
+
+    # Coleta todas as fontes do plano (primary + secondary)
+    all_sources: list[str] = []
+    for attr in ("primary", "secondary"):
+        sources_list = getattr(source_plan, attr, None) or []
+        all_sources.extend(sources_list)
+
+    # Remove duplicatas preservando ordem
+    seen: set[str] = set()
+    unique_sources: list[str] = []
+    for s in all_sources:
+        if s not in seen:
+            seen.add(s)
+            unique_sources.append(s)
+
+    total = 0.0
+    for source_id in unique_sources:
+        avg_cost = 0.0
+        try:
+            getter = getattr(token_economy, "get_avg_cost_per_source", None)
+            if callable(getter):
+                avg_cost = float(getter(source_id) or 0.0)
+        except Exception as exc:  # noqa: BLE001 - nunca deve quebrar a estimativa
+            logger.warning("estimate_search_cost: erro ao obter custo: %s", exc)
+            avg_cost = 0.0
+        total += avg_cost * max(int(n_queries), 1)
+
+    return round(total, 6)
+
+
+__all__ = [
+    "ExpandStage",
+    "ExpandStageResult",
+    "PipelineContext",
+    "ExpansionCache",
+    "estimate_search_cost",
+]

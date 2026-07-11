@@ -295,3 +295,51 @@ class TokenEconomy:
             key=lambda r: r.estimated_cost_usd,
             reverse=True,
         )[:n]
+
+    # ── Estimativa de Custo por Fonte (Fase 4) ────────────────────────────────
+
+    # Custos estimados padrão por fonte (USD por busca/consulta).
+    # Fontes gratuitas (scraping próprio, APIs públicas) = 0.0.
+    # Fontes pagas (Firecrawl, API de notícias etc.) = valor aproximado.
+    DEFAULT_SOURCE_COSTS: dict[str, float] = {
+        # Gratuitas (API pública / scraping próprio)
+        "github": 0.0,
+        "npm": 0.0,
+        "pypi": 0.0,
+        "crates": 0.0,
+        "arxiv": 0.0,
+        "reddit": 0.0,
+        "hackernews": 0.0,
+        "awesome": 0.0,
+        "web": 0.0,
+        "google": 0.001,  # via SerpAPI/CSE
+        "bing": 0.001,
+        "duckduckgo": 0.0,
+        "wikipedia": 0.0,
+        "open_library": 0.0,
+        "open_meteo": 0.0,
+        "pubmed": 0.0,
+        # Pagas
+        "firecrawl": 0.005,  # estimativa por credit
+        "newsapi": 0.0005,  # estimativa por requisição na tier gratuita convertida
+        "gnews": 0.001,
+        "serpapi": 0.005,
+        "scraperapi": 0.002,
+        "spider": 0.0015,
+        "jina": 0.0002,
+    }
+
+    def get_avg_cost_per_source(self, source_id: str) -> float:
+        """Retorna o custo médio estimado (USD) de uma consulta a uma fonte.
+
+        Se a fonte não estiver no catálogo de custos padrão, retorna 0.0
+        (assume-se fonte gratuita / sem custo direto de API). Isso é
+        conservador: nunca superestima o custo da busca.
+
+        Args:
+            source_id: Nome da fonte (ex: "github", "firecrawl", "newsapi").
+
+        Returns:
+            float: Custo estimado em USD por consulta a essa fonte.
+        """
+        return float(self.DEFAULT_SOURCE_COSTS.get(source_id, 0.0))

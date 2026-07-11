@@ -13,9 +13,10 @@
 |---|---|---|---|---|
 | **Fase 1** | `MISSAO_PARTE3_FASE1_ARQUITETURA_CRITICA.md` | 🔴 CRÍTICA | Parte 2 completa | ✅ Concluída |
 | **Fase 2** | `MISSAO_PARTE3_FASE2_MODELO_DADOS_TRUST.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída (commit `eefd2be` + `9f0d588`) |
-| **Fase 3** | `MISSAO_PARTE3_FASE3_GENERIC_API_SEARCHER.md` | 🟢 Alta (maior alavancagem) | Fases 1-2 | ✅ Concluída (commit pendente) |
-| **Fase 4** | `MISSAO_PARTE3_FASE4_CLUSTERING_CUSTO.md` | 🟠 Alta | Fases 1-3 | ⏳ Pendente |
+| **Fase 3** | `MISSAO_PARTE3_FASE3_GENERIC_API_SEARCHER.md` | 🟢 Alta (maior alavancagem) | Fases 1-2 | ✅ Concluída (commit `3a3e165`) |
+| **Fase 4** | `MISSAO_PARTE3_FASE4_CLUSTERING_CUSTO.md` | 🟠 Alta | Fases 1-3 | ✅ Concluída (commit pendente) |
 | **Fase 5** | `MISSAO_PARTE3_FASE5_UI_ALLOWLIST_TRANSPARENCIA.md` | 🟡 Média | Fases 1-4 | ⏳ Pendente |
+| **Fase 6** | `MISSAO_PARTE3_FASE6_RECONECTAR_E_LIMPAR.md` | 🔵 Média | Fases 1-5 | ⏳ Pendente |
 
 ---
 
@@ -52,6 +53,9 @@ Implementa `cluster_similar_results()` reutilizando embeddings já calculados pe
 
 ### Fase 5 — UI Allowlist/Denylist + Detecção de Query Vaga
 Move heurística de query vaga para dentro do `IntentAnalyzer` (HITL pré-pipeline). UI de allowlist/denylist no sidebar do Streamlit. Painel de transparência de busca (fontes tentadas, confiança por claim, custo estimado). Integra `trust_tier` no `SearchStage`/`ScoreStage`.
+
+### Fase 6 — Reconectar Componentes Ocultos e Limpeza
+Remove o ModelRouter legado (`src/model_router.py`). Reconecta as camadas de QA e avaliação de qualidade (`MultiLLMFactChecker` e `Ragas`/`TruLens`). Religa as ferramentas de processamento de mídia rica (`OCRExtractor`, `PDFParser`, `VideoTranscriber`, `VisionAnalyzer`) e de análise quantitativa (`DataAnalyzer` via sandbox Docker). Adiciona formatação de citações APA/IEEE/Bluebook (`DomainPersona` em `report_generator.py`).
 
 ---
 

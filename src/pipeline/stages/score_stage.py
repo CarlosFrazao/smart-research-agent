@@ -235,7 +235,32 @@ class ScoreStage(PipelineStage):
         if self.cfg.cross_validate and len(scored) > 1:
             scored = self._cross_validate_batch(scored)
 
-        # 3. Reordenar por confiança descendente (preservando score do ranker como tie-break)
+        # 3. Propagar max_score do cluster para todos os membros (Fase 4)
+        # O score do cluster deve ser o max() dos scores individuais — um resultado
+        # excelente + um mediano corroborando ainda é um resultado excelente, corroborado.
+        cluster_scores: dict[str, float] = {}
+        for r in scored:
+            cid = getattr(r, "cluster_id", None)
+            if cid:
+                # RankedResult usa `score` (0-100); SynthesizedResult usa `combined_score`
+                score = getattr(r, "combined_score", getattr(r, "score", 0.0))
+                cluster_scores[cid] = max(cluster_scores.get(cid, 0.0), score)
+
+        for r in scored:
+            cid = getattr(r, "cluster_id", None)
+            if cid and cid in cluster_scores:
+                # Usar max do cluster, não score individual
+                cluster_max = cluster_scores[cid]
+                if hasattr(r, "combined_score"):
+                    r.combined_score = cluster_max
+                if hasattr(r, "score"):
+                    r.score = cluster_max
+                # confidence_score: normaliza de 0-100 para 0-1 se necessário
+                r.confidence_score = min(
+                    1.0, cluster_max / 100.0 if cluster_max > 1.0 else cluster_max
+                )
+
+        # 4. Reordenar por confiança descendente (preservando score do ranker como tie-break)
         scored.sort(
             key=lambda r: (r.confidence_score, getattr(r, "score", 0.0)),
             reverse=True,
