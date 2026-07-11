@@ -365,6 +365,31 @@ with tab_search:
                                 f"- {trust_emoji} **{src}**: {info['count']} "
                                 f"resultado(s) | Confiança média: {conf_str}"
                             )
+
+                        # FASE 5 — Badges de tom/sentimento por resultado (GDELT).
+                        # Mostra um badge visual indicando o tom da cobertura de
+                        # cada notícia quando disponível (metrics.tone).
+                        st.divider()
+                        st.markdown("**🌈 Tom / Sentimento das notícias:**")
+                        tone_shown = 0
+                        for r in ranked:
+                            metrics = getattr(r, "metrics", {}) or {}
+                            tone = metrics.get("tone")
+                            title = getattr(r, "title", "") or "(sem título)"
+                            if isinstance(tone, (int, float)):
+                                if tone > 2.0:
+                                    badge = "🟢 **Positivo**"
+                                elif tone < -2.0:
+                                    badge = "🔴 **Crítico**"
+                                else:
+                                    badge = "⚪ **Neutro**"
+                                st.markdown(f"- {badge} `{tone:+.2f}` — {title[:80]}")
+                                tone_shown += 1
+                        if tone_shown == 0:
+                            st.caption(
+                                "Nenhum dado de tom disponível (fontes sem sinal "
+                                "de sentimento do GDELT)."
+                            )
                     else:
                         st.caption("Nenhum resultado ranqueado disponível para exibir.")
 

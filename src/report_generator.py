@@ -201,6 +201,10 @@ class ReportGenerator:
         # Integração crítica: usa o Comparator para gerar tabela rica se a query for comparativa
         comparison_section = self.comparator.generate_comparison_section(query, results)
 
+        # FASE 5 — Perspectivas por tom (GDELT): monta o espectro de como
+        # diferentes fontes cobriram o mesmo evento com base no tone.
+        perspectives_section = self._build_perspectives_section(query, results)
+
         report_raw = self._assemble_report(
             query=query,
             metadata=metadata,
@@ -211,6 +215,7 @@ class ReportGenerator:
             timeline_section=timeline_section,
             sentiment_section=sentiment_section,
             comparison_section=comparison_section,
+            perspectives_section=perspectives_section,
         )
         return await self._validate_and_enrich_sections(report_raw, query, results)
 
@@ -765,6 +770,7 @@ class ReportGenerator:
         timeline_section: str = "",
         sentiment_section: str = "",
         comparison_section: str = "",
+        perspectives_section: str = "",
     ) -> str:
         """Monta o relatorio final unindo todas as secoes geradas."""
         is_english = self._is_query_english(query)
@@ -801,11 +807,113 @@ class ReportGenerator:
                 is_english=is_english,
             )
         )
+        # FASE 5 — Perspectivas por tom (GDELT): espectro de cobertura favorável
+        # vs. crítica quando há contraste de tone entre as fontes.
+        if perspectives_section:
+            lines.extend(self._translate_perspectives(perspectives_section, is_english))
         # Fase 6.5: seção de referências formatada por DomainPersona
         # (APA / IEEE / Bluebook conforme o domínio da pesquisa).
         lines.extend(self._build_references(results, metadata, is_english=is_english))
         cleaned_lines = [str(line) for line in lines if line is not None]
         return "\n".join(cleaned_lines)
+
+    def _build_perspectives_section(
+        self, query: str, results: list[SynthesizedResult]
+    ) -> str:
+        """Monta a seção de múltiplas perspectivas por tom (GDELT).
+
+        Agrupa os resultados sintetizados que trazem ``metrics.tone`` (tom de
+        sentimento do GDELT, escala aproximada -10 a +10) e, quando há
+        contraste relevante entre as coberturas (tons favoráveis vs. críticos),
+        renderiza uma tabela/lista em Markdown mostrando o espectro de como
+        diferentes fontes cobriram o mesmo evento.
+
+        Se nenhum resultado tiver dado de tom, ou se não houver contraste
+        suficiente (menos de 2 fontes com tom ou amplitude < 2.0), retorna
+        string vazia — a seção é silenciosamente omitida (não quebra o relatório).
+
+        Args:
+            query: Query original do usuário (usada para o cabeçalho PT-BR).
+            results: Resultados sintetizados (clusters) da pesquisa.
+
+        Returns:
+            str: Bloco Markdown da seção de perspectivas, ou "" se não aplicável.
+        """
+        # Coleta (título, tom, fonte) de resultados com tom numérico válido.
+        tone_entries: list[tuple[str, float, str]] = []
+        for r in results:
+            tone = (r.metrics or {}).get("tone")
+            if isinstance(tone, (int, float)):
+                label = (r.title or "(sem título)").strip()
+                source = r.sources[0] if r.sources else "desconhecida"
+                tone_entries.append((label, float(tone), source))
+
+        # Sem dados de tom ou sem contraste mínimo → omitir seção.
+        if len(tone_entries) < 2:
+            return ""
+        tones = [t for _, t, _ in tone_entries]
+        if max(tones) - min(tones) < 2.0:
+            return ""
+
+        # Ordena do tom mais favorável (maior) para o mais crítico (menor).
+        tone_entries.sort(key=lambda x: x[1], reverse=True)
+
+        is_english = self._is_query_english(query)
+        header = "## 🌈 Espectro de Perspectivas (Tom da Cobertura)"
+        if is_english:
+            header = "## 🌈 Perspective Spectrum (Coverage Tone)"
+
+        lines = [header, ""]
+        if is_english:
+            lines.append(
+                "How different sources covered the same event, by GDELT tone "
+                "(positive = favorable, negative = critical):"
+            )
+        else:
+            lines.append(
+                "Como diferentes fontes cobriram o mesmo evento, pelo tom do GDELT "
+                "(positivo = favorável, negativo = crítico):"
+            )
+        lines.append("")
+
+        for label, tone, source in tone_entries:
+            if tone > 2.0:
+                badge = "🟢 Favorável" if not is_english else "🟢 Favorable"
+            elif tone < -2.0:
+                badge = "🔴 Crítico" if not is_english else "🔴 Critical"
+            else:
+                badge = "⚪ Neutro" if not is_english else "⚪ Neutral"
+            lines.append(f"- {badge} **{label}** ({source}) — tom: `{tone:+.2f}`")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    def _translate_perspectives(self, section: str, is_english: bool) -> list[str]:
+        """Traduz o cabeçalho fixo da seção de perspectivas se necessário.
+
+        A seção já é gerada no idioma correto por ``_build_perspectives_section``,
+        mas esta função garante consistência caso a seção venha de cache ou de
+        outra origem, realinhando o cabeçalho ao idioma da query.
+
+        Args:
+            section: Bloco Markdown da seção de perspectivas.
+            is_english: True se a query está em inglês.
+
+        Returns:
+            list[str]: Linhas da seção (já traduzidas se aplicável).
+        """
+        if is_english:
+            section = section.replace(
+                "## 🌈 Espectro de Perspectivas (Tom da Cobertura)",
+                "## 🌈 Perspective Spectrum (Coverage Tone)",
+            )
+            section = section.replace(
+                "Como diferentes fontes cobriram o mesmo evento, pelo tom do GDELT "
+                "(positivo = favorável, negativo = crítico):",
+                "How different sources covered the same event, by GDELT tone "
+                "(positive = favorable, negative = critical):",
+            )
+        return section.split("\n")
 
     def _build_summary(
         self,

@@ -89,6 +89,53 @@ DOMAIN_KEYWORDS = {
     ],
 }
 
+# Palavras que sinalizam intenção de notícia/evento atual (Fase 5 — Parte 4).
+# Usadas para rotear queries gerais para Domain.NEWS quando não houver
+# nenhum sinal técnico explícito (evita cair em domínios de dev tooling).
+NEWS_KEYWORDS = [
+    "notícia",
+    "noticias",
+    "aconteceu",
+    "hoje",
+    "semana",
+    "eleição",
+    "eleicao",
+    "governo",
+    "economia",
+    "esporte",
+    "guerra",
+    "política",
+    "politica",
+    "atualidade",
+    "mundo",
+    "breaking",
+    "news",
+    "today",
+    "happening",
+]
+
+# Palavras que sinalizam claramente um contexto técnico/dev. Se presentes,
+# a classificação técnica tem precedência sobre a rota de notícias.
+TECH_KEYWORDS = [
+    "python",
+    "api",
+    "github",
+    "npm",
+    "docker",
+    "framework",
+    "library",
+    "package",
+    "bug",
+    "code",
+    "programming",
+    "rust",
+    "kubernetes",
+    "terraform",
+    "aws",
+    "llm",
+    "model",
+]
+
 INTENTION_KEYWORDS = {
     Intention.COMPARE: [
         "compare",
@@ -225,7 +272,23 @@ class IntentAnalyzer:
                 if kw in query_lower:
                     scores[domain] += 1
         best = max(scores, key=lambda k: scores[k])
-        return best if scores[best] > 0 else Domain.GENERAL
+        if scores[best] > 0:
+            return best
+
+        # ── Roteamento de notícias (Fase 5 — Parte 4) ──
+        # Nenhum domínio técnico detectado: verifica se a query tem sinais
+        # noticiosos. Se houver palavra de notícia E nenhuma palavra tech
+        # explícita, roteia para Domain.NEWS (fontes de notícia em tempo real).
+        # Se houver palavra tech, mantém Domain.GENERAL (não rouba dev tooling).
+        has_news = any(kw in query_lower for kw in NEWS_KEYWORDS)
+        has_tech = any(kw in query_lower for kw in TECH_KEYWORDS)
+        if has_news and not has_tech:
+            return Domain.NEWS
+        if has_news and has_tech:
+            # Ambíguo: prioriza a precisão técnica, mas deixa o universal
+            # cobrir o resto (GENERAL cai no fallback universal do SourcePlanner).
+            return Domain.GENERAL
+        return Domain.GENERAL
 
     def _heuristic_intention(self, query: str) -> Intention:
         """Detecta a intencao principal da query usando palavras-chave.
@@ -422,7 +485,7 @@ class IntentAnalyzer:
             '  "confidence": "alta|media|baixa"\n'
             "}\n\n"
             "Regras:\n"
-            "- DOMAIN: saas_b2b, dev_tools, ai_ml, automation, infrastructure, open_source, general\n"
+            "- DOMAIN: saas_b2b, dev_tools, ai_ml, automation, infrastructure, open_source, general, universal, news\n"
             "- ENTITIES: nomes de produtos, empresas, tecnologias\n"
             "- INTENCAO: discover, compare, learn, implement, evaluate\n"
             "- URGENCIA: sim (se menciona 2026, novo, trending) ou nao\n"
@@ -603,7 +666,7 @@ class IntentAnalyzer:
                 f"   Heuristica inicial: dominio={intent.domain.value}, "
                 f"intencao={intent.intention.value}, urgencia={intent.urgency}\n"
                 "   Regras: DOMAIN em [saas_b2b, dev_tools, ai_ml, automation, "
-                "infrastructure, open_source, general]; INTENCAO em [discover, "
+                "infrastructure, open_source, general, universal, news]; INTENCAO em [discover, "
                 "compare, learn, implement, evaluate]; URGENCIA sim (se menciona "
                 "2026, novo, trending) ou nao; ENTITIES = nomes de produtos, "
                 "empresas, tecnologias.\n"

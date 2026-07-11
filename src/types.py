@@ -126,6 +126,8 @@ class Domain(StrEnum):
     INFRASTRUCTURE = "infrastructure"
     OPEN_SOURCE = "open_source"
     GENERAL = "general"
+    UNIVERSAL = "universal"  # Pesquisa de propósito geral sem viés técnico
+    NEWS = "news"  # Notícias e eventos atuais / breaking news
 
 
 class Intention(StrEnum):

@@ -93,7 +93,55 @@ DOMAIN_SOURCES: dict[str, dict[str, list[str]]] = {
             "open_library",
         ],
     },
+    "news": {
+        "primary": ["gdelt", "google_news_rss", "newsapi_org"],
+        "secondary": ["bluesky", "mastodon_social", "reddit", "hackernews"],
+    },
 }
+
+# Palavras que sinalizam intenção de notícia/evento atual (Fase 5 — Parte 4).
+# Espelho defensivo das keywords do IntentAnalyzer: usado como fallback de
+# roteamento caso o domínio chegue como GENERAL mas a query seja noticiosa.
+NEWS_KEYWORDS = [
+    "notícia",
+    "noticias",
+    "aconteceu",
+    "hoje",
+    "semana",
+    "eleição",
+    "eleicao",
+    "governo",
+    "economia",
+    "esporte",
+    "guerra",
+    "política",
+    "politica",
+    "atualidade",
+    "mundo",
+    "breaking",
+    "news",
+    "today",
+    "happening",
+]
+TECH_KEYWORDS = [
+    "python",
+    "api",
+    "github",
+    "npm",
+    "docker",
+    "framework",
+    "library",
+    "package",
+    "bug",
+    "code",
+    "programming",
+    "rust",
+    "kubernetes",
+    "terraform",
+    "aws",
+    "llm",
+    "model",
+]
 
 
 class SourcePlanner:
@@ -218,6 +266,22 @@ class SourcePlanner:
         # Segundo fallback: se "universal" também não existir, use "general"
         if domain_key not in self.domain_map:
             domain_key = "general"
+
+        # FASE 5 — Roteamento defensivo de notícias (Parte 4): se o
+        # IntentAnalyzer classificou como GENERAL mas a query traz sinais
+        # noticiosos explícitos e nenhuma palavra técnica, promove para o
+        # domínio "news" (fontes de notícia em tempo real). Respeita a
+        # classificação técnica quando há sobreposição (precisão primeiro).
+        if domain_key in ("general", "universal"):
+            query_lower = (queries[0].query if queries else "").lower()
+            has_news = any(kw in query_lower for kw in NEWS_KEYWORDS)
+            has_tech = any(kw in query_lower for kw in TECH_KEYWORDS)
+            if has_news and not has_tech and "news" in self.domain_map:
+                logger.info(
+                    "SourcePlanner: query noticiosa '%s' roteada para domínio 'news'",
+                    query_lower[:60],
+                )
+                domain_key = "news"
 
         # Roteamento dinâmico (LLM-driven) para o domínio universal ou quando
         # o domínio cai no fallback universal. Domínios técnicos mantêm o

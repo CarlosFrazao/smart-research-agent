@@ -36,6 +36,18 @@ domains:
       - osm_nominatim
     fallback_enabled: true
     notes: "Usado automaticamente quando nenhum domínio técnico específico é identificado pelo intent_analyzer"
+  news:
+    description: "Notícias e cobertura jornalística — eventos atuais, breaking news, mundo, política, economia"
+    primary:
+      - gdelt
+      - google_news_rss
+      - newsapi_org
+    secondary:
+      - bluesky
+      - mastodon_social
+      - reddit
+      - hackernews
+    notes: "Fonte de notícias em tempo real (Fase 2 — Plano Parte 4). Desabilita fontes técnicas/acadêmicas."
   open_web:
     description: "Alias de 'universal' para compatibilidade com roteamento legado"
     primary:

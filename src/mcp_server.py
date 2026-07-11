@@ -1020,9 +1020,7 @@ async def _monitor_topic_impl(
 
             job = scheduler._jobs.get(monitor_id)
             if not job:
-                return json.dumps(
-                    {"error": f"Monitor '{monitor_id}' não encontrado."}
-                )
+                return json.dumps({"error": f"Monitor '{monitor_id}' não encontrado."})
 
             # Armazena o relatório anterior para podermos comparar.
             old_report_content = ""
@@ -1182,7 +1180,8 @@ def _register_mcp_tools(app: FastAPI) -> None:
             Args:
                 query: Termos de busca (ex: "self-hosted CRM python", "n8n alternative")
                 domain: Dominio para contexto — um de: saas_b2b, dev_tools, ai_ml,
-                        automation, infrastructure, open_source, general (padrao: general)
+                        automation, infrastructure, open_source, general, universal,
+                        news (padrao: general)
                 max_results: Numero maximo de resultados (padrao: 10, max: 30)
             """
             try:
@@ -1225,7 +1224,7 @@ def _register_mcp_tools(app: FastAPI) -> None:
             Args:
                 query: Termos de busca (ex: "best open source CRM reddit", "n8n vs make")
                 domain: Dominio para contexto (saas_b2b, dev_tools, ai_ml, automation,
-                        infrastructure, open_source, general). Padrao: general
+                        infrastructure, open_source, general, universal, news). Padrao: general
                 max_results: Numero maximo de resultados (padrao: 10, max: 30)
             """
             try:
