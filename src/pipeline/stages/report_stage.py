@@ -164,6 +164,13 @@ class ReportStage(PipelineStage):
                 )
             report_md += arch_section
 
+        # FASE 3: Seção de Nível de Confiança por Afirmação.
+        # Alimentada pela linhagem (LineageStage) e pela passada adversarial
+        # (AdversarialPassStage), ambas presentes em context.ranked_results.
+        confidence_section = self._build_confidence_section(context.ranked_results)
+        if confidence_section:
+            report_md += "\n" + confidence_section
+
         # 4.7: Auditoria de claims via ResearchAuditor (§14.1)
         # Chama auditor.audit() após gerar o relatório, antes de retornar ao usuário.
         # É não-fatal: se a auditoria falhar, o relatório sem auditoria é retornado.
@@ -860,6 +867,64 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
             sentiment_section=sections.get("sentiment_section", ""),
             comparison_section=sections.get("comparison_section", ""),
         )
+
+    @staticmethod
+    def _build_confidence_section(ranked_results: Any) -> str:
+        """Gera a seção '⚠️ Nível de Confiança por Afirmação' (Fase 3).
+
+        Combina dois sinais de confiabilidade derivados dos stages da Fase 3:
+
+          1. Claims sem confirmação independente de fonte primária
+             (``lineage_role == "unknown"`` e sem ``cites_within_cluster``) —
+             indicam possível eco de uma única origem.
+
+          2. Claims contestadas pela passada adversarial
+             (``is_adversarial == True``) — evidência contrária foi encontrada.
+
+        Args:
+            ranked_results: Lista de ``RankedResult`` (ou compatíveis) vindos
+                do pipeline, contendo os campos ``lineage_role``,
+                ``cites_within_cluster`` e ``is_adversarial``.
+
+        Returns:
+            str: Bloco Markdown da seção, ou string vazia se não houver
+            claims de baixa confiança a reportar.
+        """
+        if not ranked_results:
+            return ""
+
+        low_confidence_claims: list[str] = []
+        for r in ranked_results:
+            result = r  # ranked_results já contém RankedResult diretamente
+            title = (getattr(result, "title", "") or "").strip()
+            title_disp = (title[:80] if title else "(sem título)")
+
+            # (1) Sem confirmação independente de fonte primária verificável.
+            lineage_role = getattr(result, "lineage_role", "unknown")
+            cites = getattr(result, "cites_within_cluster", []) or []
+            if lineage_role == "unknown" and not cites:
+                low_confidence_claims.append(
+                    f"- ⚠️ **{title_disp}** — sem confirmação independente de "
+                    f"fonte primária verificável"
+                )
+
+            # (2) Ponto de vista alternativo detectado na busca adversarial.
+            if getattr(result, "is_adversarial", False):
+                low_confidence_claims.append(
+                    f"- 🔄 **{title_disp}** — ponto de vista alternativo "
+                    f"encontrado (evidência contrária na busca adversarial)"
+                )
+
+        if not low_confidence_claims:
+            return ""
+
+        lines = [
+            "## ⚠️ Nível de Confiança por Afirmação\n",
+            "> As afirmações abaixo requerem verificação adicional antes de "
+            "serem tomadas como fato:\n",
+        ]
+        lines.extend(low_confidence_claims)
+        return "\n".join(lines)
 
 
 # ── Factory Function ─────────────────────────────────────────────────────────

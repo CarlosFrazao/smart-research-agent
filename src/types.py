@@ -280,6 +280,26 @@ class SearchResult(SRAModel):
     SynthesizeStage/ReportStage mostrar 'confirmado por N fontes independentes'
     em vez de listar N itens redundantes."""
 
+    # ── Linhagem de citação (Fase 3) ─────────────────────────────────────── #
+    # Expõe a proveniência real de um cluster: evita o falso "confirmado por 10
+    # fontes" quando na verdade são 9 sites reproduzindo a mesma agência.
+    lineage_role: Literal["primary", "derivative", "unknown"] = "unknown"
+    """Papel de proveniência dentro do cluster (Fase 3):
+    - "primary": provável origem — o mais antigo do cluster, ou o que é
+      citado pelos demais.
+    - "derivative": reproduz/cita outro item do mesmo cluster.
+    - "unknown": fallback seguro quando não é possível determinar.
+    """
+
+    cites_within_cluster: list[str] = Field(default_factory=list)
+    """IDs (result_id) de outros `SearchResult` do mesmo cluster que este item
+    cita diretamente no texto. Alimenta a seção de confiança do relatório."""
+
+    is_adversarial: bool = False
+    """True quando o resultado veio da passada adversarial (Fase 3) — busca
+    deliberada por evidência CONTRA a conclusão emergente, para reduzir viés
+    de confirmação. Permite ao ReportStage marcar pontos de vista alternativos."""
+
     trust_tier: Literal["allow", "neutral", "deny"] = "neutral"
     """Preenchido no SearchStage a partir da allowlist/denylist pessoal do usuário (Fase 5).
     'deny' pode ser filtrado completamente ou penalizado no score.

@@ -208,6 +208,8 @@ class StageFactory:
             "search",
             "rank",
             "score",
+            "lineage",  # ← FASE 3: linhagem de citação (após clustering no rank)
+            "adversarial_pass",  # ← FASE 3: passada adversarial anti viés de confirmação
             "verification",  # ← NOVA LINHA
             "graph_explorer",
             "gap",
@@ -462,6 +464,14 @@ class StageFactory:
         self.register("score", self._create_score_stage, lazy=True)
         self.register("scoring", self._create_score_stage, lazy=True)
 
+        # Lineage Stage (Fase 3 — linhagem de citação dentro de clusters)
+        self.register("lineage", self._create_lineage_stage, lazy=True)
+        self.register("lineage_detection", self._create_lineage_stage, lazy=True)
+
+        # Adversarial Pass Stage (Fase 3 — passada adversarial anti viés de confirmação)
+        self.register("adversarial_pass", self._create_adversarial_stage, lazy=True)
+        self.register("adversarial", self._create_adversarial_stage, lazy=True)
+
         # Graph Explorer Stage (análise de densidade do Grafo de Conhecimento)
         self.register("graph_explorer", self._create_graph_explorer_stage, lazy=True)
         self.register("graph_gap", self._create_graph_explorer_stage, lazy=True)
@@ -565,6 +575,36 @@ class StageFactory:
         from src.pipeline.stages.score_stage import ScoreStage
 
         return ScoreStage(llm_client=self._deps.get("llm_client"))
+
+    def _create_lineage_stage(self) -> PipelineStage:
+        """Factory para LineageStage (Fase 3 — linhagem de citação)."""
+        from src.pipeline.stages.lineage_stage import LineageStage
+
+        return LineageStage()
+
+    def _create_adversarial_stage(self) -> PipelineStage:
+        """Factory para AdversarialPassStage (Fase 3).
+
+        Injeta o ``SearchStage`` real para reusar semáforos, circuit breaker,
+        timeouts e ranking na busca adversarial, além do LLM client para gerar
+        a query. Se o ``SearchStage`` ainda não foi criado nesta factory, delega
+        à factory correspondente para respeitar o cache/lazy init.
+        """
+        from src.pipeline.stages.adversarial_stage import AdversarialPassStage
+
+        search_stage = self._cache.get("search") if "search" in self._cache else None
+        if search_stage is None:
+            try:
+                search_stage = self._create_search_stage()
+            except Exception as exc:  # noqa: BLE001 - adversarial tolera ausência
+                logger.warning(
+                    "StageFactory: SearchStage indisponível p/ adversarial: %s", exc
+                )
+                search_stage = None
+        return AdversarialPassStage(
+            llm_client=self._deps.get("llm_client"),
+            search_stage=search_stage,
+        )
 
     def _create_graph_explorer_stage(self) -> PipelineStage:
         """Factory para GraphExplorerStage.

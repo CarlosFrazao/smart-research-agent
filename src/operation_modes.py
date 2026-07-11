@@ -34,6 +34,8 @@ class OperationConfig:
     enable_debate: bool = False
     # Bloco 3.2 — Active Personas
     active_personas: list[str] = field(default_factory=list)
+    # Bloco 3.3 — FASE 3: Passada Adversarial (anti viés de confirmação)
+    enable_adversarial_pass: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +53,7 @@ class OperationConfig:
             "cost_optimization": self.cost_optimization,
             "enable_debate": self.enable_debate,
             "active_personas": self.active_personas,
+            "enable_adversarial_pass": self.enable_adversarial_pass,
         }
 
 
@@ -103,6 +106,7 @@ class OperationModes:
             timeout_seconds=300,
             cost_optimization=False,
             active_personas=["prism_scientist"],
+            enable_adversarial_pass=True,
         ),
         "radar": OperationConfig(
             name="radar",
@@ -135,6 +139,7 @@ class OperationModes:
             timeout_seconds=120,
             cost_optimization=True,
             active_personas=["scout_explorer"],
+            enable_adversarial_pass=True,
         ),
         "concorrencia": OperationConfig(
             name="concorrencia",
@@ -193,6 +198,7 @@ class OperationModes:
             timeout_seconds=600,
             cost_optimization=False,
             active_personas=["sage_strategy", "prism_scientist", "scout_explorer"],
+            enable_adversarial_pass=True,
         ),
         # ── Bloco 3.1 ─────────────────────────────────────────────────────────
         "debate": OperationConfig(
