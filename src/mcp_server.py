@@ -18,7 +18,8 @@ import json
 import logging
 import os
 from contextvars import ContextVar
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
@@ -631,6 +632,57 @@ def _register_rest_endpoints(app: FastAPI) -> None:
             return report.__dict__
         return {"report": str(report)}
 
+    @app.get("/api/v1/briefing/latest")
+    async def get_latest_briefing(
+        container: DependencyContainer = Depends(get_container),
+    ):
+        """
+        Gera um compilado de novidades (Briefing Diário) com base em todas as
+        vigílias de tópicos registradas em 'reports/monitors'.
+
+        Roda cada monitor ativo, extrai as novidades e compila tudo em um único
+        relatório Markdown pronto para consumo por IAs e usuários.
+        """
+        try:
+            from src.scheduler import ResearchScheduler
+
+            orc = container.orchestrator
+            scheduler = ResearchScheduler(orchestrator=orc)
+
+            monitors_run: list[str] = []
+            briefing_md: list[str] = [
+                "# 📰 Briefing Diário Automatizado SRA",
+                f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+                "---",
+            ]
+
+            for job_id, job in list(scheduler._jobs.items()):
+                if job.output_dir == "reports/monitors":
+                    # Roda e pega as novidades.
+                    new_report = await scheduler.run_scheduled_research(job_id)
+                    monitors_run.append(job.query)
+
+                    briefing_md.append(f"\n## 📌 Monitoramento: {job.query}")
+                    briefing_md.append(
+                        new_report[:1200] + "\n*(relatório completo salvo no disco)*\n"
+                    )
+                    briefing_md.append("---")
+
+            if not monitors_run:
+                briefing_md.append(
+                    "\nNenhum monitoramento configurado ou ativo. Use a tool "
+                    "'monitor_topic' para cadastrar."
+                )
+
+            return {
+                "success": True,
+                "monitors_checked": monitors_run,
+                "briefing_md": "\n".join(briefing_md),
+            }
+        except Exception as e:
+            logger.exception("Falha ao gerar briefing diário")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Helpers puros da TOOL 14 (confidence_check) — não dependem de estado
@@ -876,8 +928,199 @@ async def _confidence_check_impl(
         return json.dumps({"claim": claim, "error": str(e)})
 
 
+async def _monitor_topic_impl(
+    container: DependencyContainer,
+    action: str,
+    topic: str | None = None,
+    check_interval_minutes: int = 60,
+    monitor_id: str | None = None,
+) -> str:
+    """Cria ou consulta uma vigília contínua sobre um tópico usando o ResearchScheduler.
+
+    Reaproveita o agendador existente (``src/scheduler.py``) em vez de criar
+    persistência redundante: jobs de monitoramento são salvos em
+    ``reports/monitors`` e comparados entre execuções para detectar novidades.
+
+    Args:
+        container: Container DI da instância atual do servidor.
+        action: 'create' | 'check' | 'list' | 'delete'.
+        topic: Tópico a monitorar (obrigatório para 'create').
+        check_interval_minutes: Intervalo de vigília em minutos (default 60).
+        monitor_id: ID do monitor (obrigatório para 'check' e 'delete').
+    """
+    try:
+        from src.scheduler import ResearchScheduler
+
+        orc = container.orchestrator
+        scheduler = ResearchScheduler(orchestrator=orc)
+
+        if action == "create":
+            if not topic:
+                return json.dumps(
+                    {"error": "Parâmetro 'topic' é obrigatório para action='create'"}
+                )
+
+            # Converte minutos para cron simples (horas cheias).
+            hours = max(1, check_interval_minutes // 60)
+            cron_expr = f"0 */{hours} * * *" if hours < 24 else "0 7 * * *"
+
+            job_id = scheduler.schedule_research(
+                query=topic,
+                cron_expr=cron_expr,
+                output_dir="reports/monitors",
+                alert_on_changes=True,
+            )
+            return json.dumps(
+                {
+                    "monitor_id": job_id,
+                    "status": "created",
+                    "topic": topic,
+                    "check_interval_minutes": check_interval_minutes,
+                    "cron": cron_expr,
+                },
+                ensure_ascii=False,
+            )
+
+        elif action == "list":
+            jobs = scheduler._jobs
+            monitors = [
+                {
+                    "monitor_id": j.id,
+                    "topic": j.query,
+                    "cron": j.cron,
+                    "last_run": j.last_run,
+                    "created_at": j.created_at,
+                    "last_report_path": j.last_report_path,
+                }
+                for j in jobs.values()
+                if j.output_dir == "reports/monitors"
+            ]
+            return json.dumps({"monitors": monitors}, indent=2, ensure_ascii=False)
+
+        elif action == "delete":
+            if not monitor_id:
+                return json.dumps(
+                    {
+                        "error": "Parâmetro 'monitor_id' é obrigatório para action='delete'"
+                    }
+                )
+            if monitor_id in scheduler._jobs:
+                del scheduler._jobs[monitor_id]
+                scheduler._save_jobs()
+                return json.dumps({"deleted": True, "monitor_id": monitor_id})
+            return json.dumps({"deleted": False, "error": "Monitor não encontrado"})
+
+        elif action == "check":
+            if not monitor_id:
+                return json.dumps(
+                    {
+                        "error": "Parâmetro 'monitor_id' é obrigatório para action='check'"
+                    }
+                )
+
+            job = scheduler._jobs.get(monitor_id)
+            if not job:
+                return json.dumps(
+                    {"error": f"Monitor '{monitor_id}' não encontrado."}
+                )
+
+            # Armazena o relatório anterior para podermos comparar.
+            old_report_content = ""
+            if job.last_report_path and os.path.exists(job.last_report_path):
+                with open(job.last_report_path, encoding="utf-8") as f:
+                    old_report_content = f.read()
+
+            # Executa a nova rodada.
+            new_report = await scheduler.run_scheduled_research(monitor_id)
+
+            # Calcula mudanças.
+            changes: list[str] = []
+            if old_report_content:
+                changes = scheduler.compare_with_previous(
+                    new_report, old_report_content
+                )
+
+            return json.dumps(
+                {
+                    "monitor_id": monitor_id,
+                    "topic": job.query,
+                    "last_run": job.last_run,
+                    "changes_detected": changes,
+                    "report_summary": (
+                        new_report[:1000] + "..."
+                        if len(new_report) > 1000
+                        else new_report
+                    ),
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        else:
+            return json.dumps(
+                {
+                    "error": f"Action '{action}' inválida. Use 'create', 'check', 'list' ou 'delete'."
+                }
+            )
+    except Exception as e:
+        logger.error(f"[monitor_topic] erro: {e}")
+        return json.dumps({"error": str(e)})
+
+
+async def _get_trending_impl(hours: int = 24, max_records: int = 10) -> str:
+    """Retorna tópicos em alta globalmente usando a API GDELT (sem query do usuário).
+
+    O GDELT ``artlist`` agrega o volume de cobertura de notícias em tempo real
+    e não exige chave de API nem query específica — ideal para "o que está
+    acontecendo agora".
+
+    Args:
+        hours: Janela temporal em horas (default 24).
+        max_records: Número máximo de registros (limitado a 20).
+    """
+    try:
+        import httpx
+
+        limit = min(max(max_records, 1), 20)
+        gdelt_url = (
+            "https://api.gdeltproject.org/api/v2/doc/doc"
+            f"?mode=artlist&format=json&maxrecords={limit}&sort=hybridrel"
+            f"&timespan={hours}h"
+        )
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(gdelt_url)
+            if resp.status_code != 200:
+                return json.dumps(
+                    {"error": f"GDELT API retornou status {resp.status_code}"}
+                )
+            data = resp.json()
+
+        articles = data.get("articles", [])
+        trending_topics = [
+            {
+                "title": art.get("title"),
+                "url": art.get("url"),
+                "domain": art.get("domain"),
+                "language": art.get("language"),
+                "tone": art.get("tone"),
+            }
+            for art in articles
+        ]
+        return json.dumps(
+            {
+                "timeframe_hours": hours,
+                "topics": trending_topics,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        logger.error(f"[get_trending] erro: {e}")
+        return json.dumps({"error": str(e)})
+
+
 def _register_mcp_tools(app: FastAPI) -> None:
-    """Registra as 15 tools MCP (FastMCP) e monta o sub-app SSE em `/mcp`.
+    """Registra as 18 tools MCP (FastMCP) e monta o sub-app SSE em `/mcp`.
 
     As tools fecham sobre `container` (capturado abaixo a partir de
     `app.state.container`) em vez de globais de módulo. Como esta função é
@@ -1669,9 +1912,60 @@ def _register_mcp_tools(app: FastAPI) -> None:
                 logger.error(f"[search_anything] erro: {e}")
                 return json.dumps({"error": str(e)})
 
+        # ─────────────────────────────────────────────────────────────────
+        # TOOL 17 — Monitoramento contínuo de tópicos (Vigília)
+        # ─────────────────────────────────────────────────────────────────
+        @mcp.tool()
+        async def monitor_topic(
+            action: Literal["create", "check", "list", "delete"],
+            topic: str | None = None,
+            check_interval_minutes: int = 60,
+            monitor_id: str | None = None,
+        ) -> str:
+            """
+            Cria ou consulta uma vigília contínua sobre um tópico usando o agendador do SRA.
+            Roda buscas periódicas e retorna incrementos de conteúdo novo.
+
+            Aproveita o ResearchScheduler existente (sem persistência redundante): jobs
+            vivem em reports/monitors e são comparados a cada execução para detectar
+            novas entidades, fontes e seções.
+
+            Args:
+                action: Ação a executar ('create', 'check', 'list', 'delete').
+                topic: O tópico a monitorar (obrigatório para action='create').
+                check_interval_minutes: Intervalo de vigília em minutos (default: 60).
+                monitor_id: ID do monitor (obrigatório para 'check' e 'delete').
+            """
+            return await _monitor_topic_impl(
+                container,
+                action,
+                topic,
+                check_interval_minutes,
+                monitor_id,
+            )
+
+        # ─────────────────────────────────────────────────────────────────
+        # TOOL 18 — Tópicos em Alta (Trending) via GDELT
+        # ─────────────────────────────────────────────────────────────────
+        @mcp.tool()
+        async def get_trending(
+            hours: int = 24,
+            max_records: int = 10,
+        ) -> str:
+            """
+            Retorna os tópicos e notícias com maior volume de cobertura global nas
+            últimas N horas. Usa a API do projeto GDELT para extrair dados em tempo
+            real sem exigir query específica nem chave de API do usuário.
+
+            Args:
+                hours: Janela temporal em horas (default: 24).
+                max_records: Número máximo de registros para retornar (máx: 20).
+            """
+            return await _get_trending_impl(hours, max_records)
+
         app.mount("/mcp", mcp.sse_app())
         logger.info(
-            "MCP FastMCP montado com sucesso via sse_app() em /mcp — 16 tools registradas"
+            "MCP FastMCP montado com sucesso via sse_app() em /mcp — 18 tools registradas"
         )
 
     except ImportError as err:
@@ -1746,6 +2040,27 @@ async def scrape_url(url: str, force_browser: bool = False) -> str:
 async def confidence_check(claim: str, sources: list[str]) -> str:
     """Função de compatibilidade para testes unitários legados."""
     return await _confidence_check_impl(_get_effective_container(), claim, sources)
+
+
+async def monitor_topic(
+    action: str,
+    topic: str | None = None,
+    check_interval_minutes: int = 60,
+    monitor_id: str | None = None,
+) -> str:
+    """Função de compatibilidade para testes unitários legados."""
+    return await _monitor_topic_impl(
+        _get_effective_container(),
+        action,
+        topic,
+        check_interval_minutes,
+        monitor_id,
+    )
+
+
+async def get_trending(hours: int = 24, max_records: int = 10) -> str:
+    """Função de compatibilidade para testes unitários legados."""
+    return await _get_trending_impl(hours, max_records)
 
 
 # ── Stream Monitor REST API ───────────────────────────────────────────────────
