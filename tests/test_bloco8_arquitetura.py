@@ -1,3 +1,7 @@
+import shutil
+import tempfile
+import uuid
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,8 +14,31 @@ class TestKnowledgeGraph:
     mas opera localmente sem necessidade de Neo4j.
     """
 
+    @pytest.fixture(autouse=True)
+    def _isolate_kuzu(self):
+        """Isola o diretório de dados do KuzuDB por teste.
+
+        Sem isto, ``_make_config(kuzu_path=None)`` cairia no fallback do
+        diretório compartilhado ``kuzu_data/``, disputando o arquivo
+        ``kuzu.lock`` com a memória real do SRA e com execuções paralelas —
+        causando falhas intermitentes de concorrência. Cada teste recebe um
+        diretório temporário exclusivo, removido no teardown.
+        """
+        self._kuzu_dirs: list[str] = []
+        yield
+        for path in self._kuzu_dirs:
+            shutil.rmtree(path, ignore_errors=True)
+
     def _make_config(self, kuzu_path=None):
-        """Cria um config mock com kuzu_data_path opcional."""
+        """Cria um config mock com kuzu_data_path isolado por teste.
+
+        Quando ``kuzu_path`` não é fornecido, gera um diretório temporário
+        exclusivo (UUID) em vez de reutilizar o ``kuzu_data/`` global,
+        garantindo isolamento total de concorrência entre testes.
+        """
+        if kuzu_path is None:
+            kuzu_path = tempfile.mkdtemp(prefix=f"test_kuzu_bloco8_{uuid.uuid4().hex[:8]}_")
+            self._kuzu_dirs.append(kuzu_path)
         cfg = MagicMock()
         cfg.kuzu_data_path = kuzu_path
         # Atributos Neo4j legados — não usados mais, mas mantidos para

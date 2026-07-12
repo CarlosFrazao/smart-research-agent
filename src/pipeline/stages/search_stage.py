@@ -527,7 +527,7 @@ class SearchStage(PipelineStage):
             # Fallback do searcher
             if hasattr(searcher, "fallback") and callable(searcher.fallback):
                 try:
-                    return searcher.fallback(query)
+                    return await searcher.fallback(query)
                 except Exception:
                     pass
             raise

@@ -128,6 +128,20 @@ class KnowledgeGraph(SemanticKnowledgeGraph):
                         "KnowledgeGraph (KuzuDB): conexão estabelecida em '%s'.",
                         db_dir / "kuzu.db",
                     )
+                except Exception as e:
+                    # kuzu indisponível ou falha ao abrir o banco após adquirir o
+                    # lock — degrada graciosamente em vez de propagar, mantendo a
+                    # instância em modo desabilitado (comportamento espelhado do
+                    # ramo fcntl).
+                    logger.warning(
+                        "KnowledgeGraph (KuzuDB): falha ao inicializar %s: %s. "
+                        "Operando em modo desabilitado.",
+                        db_dir / "kuzu.db",
+                        e,
+                    )
+                    self.kuzu_conn = None
+                    super().__init__(kuzu_conn=None, llm_client=None)
+                    self._enabled = False
                 finally:
                     # Liberar lock removendo o arquivo
                     try:
