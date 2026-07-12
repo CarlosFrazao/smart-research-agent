@@ -203,6 +203,7 @@ class TestSearcherLatencyPercentiles:
     """Mede p50, p95, p99 de latência por searcher."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(120)
     async def test_github_latency_percentiles(self, mock_searchers_with_latency, benchmark_queries):
         """GitHub API: tipicamente rápida (<200ms)."""
         metrics = SearcherLatencyMetrics("github")
@@ -217,6 +218,7 @@ class TestSearcherLatencyPercentiles:
         assert metrics.error_rate == 0.0
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(120)
     async def test_reddit_latency_percentiles(self, mock_searchers_with_latency, benchmark_queries):
         """Reddit API: moderada (200-400ms)."""
         metrics = SearcherLatencyMetrics("reddit")
@@ -231,6 +233,7 @@ class TestSearcherLatencyPercentiles:
         assert metrics.error_rate < 0.20
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(120)
     async def test_arxiv_latency_percentiles(self, mock_searchers_with_latency, benchmark_queries):
         """arXiv API: lenta (>300ms) devido a XML parsing."""
         metrics = SearcherLatencyMetrics("arxiv")
@@ -245,6 +248,7 @@ class TestSearcherLatencyPercentiles:
         assert metrics.p99 < 800, f"arXiv p99={metrics.p99}ms, esperado <800ms"
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(120)
     async def test_firecrawl_latency_percentiles(self, mock_searchers_with_latency, benchmark_queries):
         """Firecrawl: mais lento devido a scraping real (500-1000ms)."""
         metrics = SearcherLatencyMetrics("firecrawl")
@@ -260,6 +264,7 @@ class TestSearcherLatencyPercentiles:
         assert metrics.error_rate < 0.35
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(120)
     async def test_all_searchers_latency_comparison(self, mock_searchers_with_latency, benchmark_queries):
         """Compara latência percentil entre todos os searchers."""
         all_metrics = {}
