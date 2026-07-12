@@ -75,7 +75,7 @@ if "types" not in sys.modules or not hasattr(sys.modules["types"], "MappingProxy
     sys.modules["types"] = _std_types
     sys.path = saved_path
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Literal
 import hashlib
@@ -94,6 +94,33 @@ def generate_result_id(source_name: str, url: str) -> str:
     """
     raw = f"{source_name}:{url}".lower().strip()
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
+
+
+def utcnow() -> datetime:
+    """Retorna o instante atual como ``datetime`` aware em UTC.
+
+    Usado como default de ``fetched_at`` para garantir que todo timestamp
+    nascido no SRA seja timezone-aware (UTC). Isto evita a mistura de
+    datetimes naive (hora local) e aware que causava desvio no cálculo de
+    freshness do ``HybridRanker`` e ``TypeError`` em comparações/``min``/``max``
+    (ex: ``synthesizer.py``).
+    """
+    return datetime.now(timezone.utc)
+
+
+def ensure_utc(value: datetime | None) -> datetime | None:
+    """Normaliza um ``datetime`` para aware-UTC (convenção do SRA).
+
+    - ``None`` é repassado inalterado.
+    - Um datetime *naive* é interpretado como UTC (não como hora local),
+      recebendo ``tzinfo=timezone.utc``.
+    - Um datetime *aware* é convertido para UTC.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class SRAModel(BaseModel):
@@ -261,7 +288,7 @@ class SearchResult(SRAModel):
     description: str = ""
     metrics: dict[str, Any] = Field(default_factory=dict)
     raw: dict[str, Any] = Field(default_factory=dict)
-    fetched_at: datetime = Field(default_factory=datetime.now)
+    fetched_at: datetime = Field(default_factory=utcnow)
     published_at: datetime | None = None
     """Data/hora de publicação original do conteúdo, conforme reportada pela
     fonte. None = fonte não expõe timestamp de publicação (fallback: fetched_at
@@ -306,6 +333,26 @@ class SearchResult(SRAModel):
     """Preenchido no SearchStage a partir da allowlist/denylist pessoal do usuário (Fase 5).
     'deny' pode ser filtrado completamente ou penalizado no score.
     Default 'neutral' garante backward compatibility total."""
+
+    @field_validator("fetched_at", "published_at")
+    @classmethod
+    def _normalize_timezone(cls, v: datetime | None) -> datetime | None:
+        """Normaliza timestamps para aware-UTC (conformidade de timezone).
+
+        Garante que ``fetched_at`` e ``published_at`` sejam sempre
+        timezone-aware em UTC, independentemente de como chegaram (naive de
+        JSON/legacy, aware de outra timezone, ou já em UTC). Datetimes naive
+        são interpretados como UTC — convenção do SRA — e não como hora local.
+
+        Isto elimina, na raiz, dois problemas de timezone:
+        - Desvio pelo offset local no cálculo de freshness do ``HybridRanker``.
+        - ``TypeError: can't subtract offset-naive and offset-aware datetimes``
+          e comparações inconsistentes em ``min``/``max`` (ex: ``synthesizer.py``).
+
+        Como ``validate_assignment=True``, a normalização também vale para
+        mutações pós-criação (ex: reidratação de cache).
+        """
+        return ensure_utc(v)
 
 
 class RankedResult(SearchResult):

@@ -606,13 +606,16 @@ class HybridRanker:
                     reference_time.replace("Z", "+00:00")
                 )
 
-            # Normalizar comparação para evitar erro de naive vs aware datetime.
-            # Se a referência tem tzinfo, compara com `now` (que é aware UTC).
-            # Caso contrário, usa um now naive para manter a subtração válida.
-            if reference_time.tzinfo is not None:
-                now_cmp = now
-            else:
-                now_cmp = datetime.now()
+            # Conformidade matemática de timezone: normalizar SEMPRE para
+            # aware-UTC antes de subtrair. Um datetime naive é interpretado
+            # como UTC (convenção do SRA — `fetched_at`/`published_at` são
+            # gravados em UTC), e não como hora local do servidor. Isto elimina
+            # o desvio pelo offset local que ocorria ao comparar uma referência
+            # naive contra `datetime.now()` (hora local) enquanto referências
+            # aware eram comparadas contra `now` (UTC).
+            if reference_time.tzinfo is None:
+                reference_time = reference_time.replace(tzinfo=timezone.utc)
+            now_cmp = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
 
             age_days = (now_cmp - reference_time).total_seconds() / 86400.0
         except Exception:
