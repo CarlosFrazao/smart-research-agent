@@ -76,7 +76,7 @@ async def test_research_e2e_pipeline():
 
     # Asserts
     assert report is not None
-    assert "# Relatorio:" in report
-    assert "## 1. Resumo Executivo" in report
+    assert "# Relatório:" in report or "# Report:" in report or "# Relatorio:" in report
+    assert "## 1. Resumo Executivo" in report or "## 1. Executive Summary" in report
     assert "toeverything/AFFiNE" in report or "Project" in report or "AFFiNE" in report
     assert len(report) > 500

@@ -98,8 +98,16 @@ class ChatSession:
         evidence_graph = self.context.get("evidence_graph", {})
         ranked_results = self.context.get("ranked_results", [])
 
-        # Formata as fontes
-        sources = [r.get("url", "") for r in ranked_results[:5] if r.get("url")]
+        # Formata as fontes (ranked_results contém RankedResult/SearchResult —
+        # usa getattr para tolerar objeto ou dict sem disparar AttributeError).
+        sources = [
+            (getattr(r, "url", "") or (r.get("url", "") if isinstance(r, dict) else ""))
+            for r in ranked_results[:5]
+            if (
+                getattr(r, "url", "")
+                or (r.get("url", "") if isinstance(r, dict) else "")
+            )
+        ]
         source_list = (
             "\n".join(f"- {s}" for s in sources)
             if sources

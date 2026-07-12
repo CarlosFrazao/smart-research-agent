@@ -465,7 +465,10 @@ class SearchStage(PipelineStage):
             return results
 
         for result in results:
-            desc = result.get("description", "")
+            # `result` é sempre um `SearchResult` (modelo pydantic) — acesso por
+            # atributo, nunca por `.get()` (que só existe em dict e dispara
+            # AttributeError em SearchResult).
+            desc = getattr(result, "description", "") or ""
             if desc and len(desc) > 100:
                 try:
                     sanitized = await self.sanitizer.sanitize(desc)
@@ -473,13 +476,10 @@ class SearchStage(PipelineStage):
                         logger.warning(
                             "[SEGURANÇA] Prompt injection detectado em '%s' URL=%s",
                             source_name,
-                            result.get("url", ""),
+                            getattr(result, "url", "") or "",
                         )
-                    # Atualiza a descrição com o conteúdo sanitizado
-                    if hasattr(result, "description"):
-                        result.description = sanitized.cleaned
-                    elif isinstance(result, dict):
-                        result["description"] = sanitized.cleaned
+                    # Atualiza a descrição com o conteúdo sanitizado.
+                    result.description = sanitized.cleaned
                 except Exception as e:
                     logger.warning(
                         f"Falha ao sanitizar resultado de '{source_name}': {e}"
