@@ -1,7 +1,11 @@
 import pytest
 import numpy as np
 from unittest.mock import MagicMock, patch
-from src.utils.semantic_cache import SemanticCache, get_semantic_cache
+from src.utils.semantic_cache import (
+    SemanticCache,
+    _InMemoryEmbeddingStore,
+    get_semantic_cache,
+)
 
 @pytest.mark.asyncio
 async def test_semantic_cache_in_memory_fallback():
@@ -13,7 +17,13 @@ async def test_semantic_cache_in_memory_fallback():
     with patch("sentence_transformers.SentenceTransformer", return_value=mock_transformer):
         cache = SemanticCache(similarity_threshold=0.90)
 
-    assert cache.backend_name == "in_memory" or cache.backend_name == "chromadb"
+    # Força o backend em memória: este teste valida a lógica de fallback e deve
+    # ser determinístico, sem depender do ChromaDB do ambiente (cuja coleção
+    # compartilhada 'semantic_cache' colide dimensões entre testes do suite).
+    cache._backend = _InMemoryEmbeddingStore()
+    cache._is_chromadb = False
+
+    assert cache.backend_name == "in_memory"
 
     # Adiciona algo
     # Para cosseno funcionar, vamos mockar duas respostas diferentes:
@@ -51,8 +61,11 @@ async def test_semantic_cache_in_memory_fallback():
     miss = await cache.get("rust frameworks")
     assert miss is None
 
-    # Testando interface síncrona exigida pelo Cache legado (find/index)
-    cache.index("prefix:frameworks python", {"data": "python_frameworks_list"}, prefix="prefix", ttl=3600)
+    # Testando interface síncrona exigida pelo Cache legado (find/index).
+    # Convenção real (ver src/cache/cache.py::_index_semantic):
+    #   index(query_text, cache_key, prefix) — a query livre é vetorizada e a
+    #   cache_key é o id estável que find() retorna e remove() apaga.
+    cache.index("frameworks python", "prefix:frameworks python", prefix="prefix", ttl=3600)
 
     # Busca com find
     match = cache.find("bibliotecas python", prefix="prefix")

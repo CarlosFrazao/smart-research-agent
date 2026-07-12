@@ -22,7 +22,7 @@ async def test_orchestrator_hitl_dialog_initialization():
     with patch("src.pipeline.stage_factory.StageFactory.initialize_components"), \
          patch("src.pipeline.stage_factory.StageFactory.build_pipeline"), \
          patch("src.orchestrator.FallbackManager"):
-        
+
         orchestrator = Orchestrator(config=config)
         assert orchestrator.hitl_dialog is not None
         assert isinstance(orchestrator.hitl_dialog, HITLDialogAgent)
@@ -34,10 +34,10 @@ async def test_apply_hitl_decision():
     with patch("src.pipeline.stage_factory.StageFactory.initialize_components"), \
          patch("src.pipeline.stage_factory.StageFactory.build_pipeline"), \
          patch("src.orchestrator.FallbackManager"):
-        
+
         orchestrator = Orchestrator(config=config)
         context = PipelineContext(query="original query")
-        
+
         # Teste 1: Ação "pivot_to_contradiction" com additional_query
         decision_pivot = {
             "action": "pivot_to_contradiction",
@@ -64,23 +64,26 @@ async def test_synthesize_stage_finding_generation():
     context = PipelineContext(query="minha query")
     context.intent = MagicMock()
     context.session_id = "session_test"
-    
-    # Ranked results contendo domínios não confiáveis da lista yaml
+
+    # Ranked results com domínios REALMENTE presentes no denylist do
+    # MisinformationDetector (src/misinformation_detector.py). URLs fictícias
+    # não são sinalizadas — usamos domínios reais para que os 2 findings de
+    # 'suspicious_source' de fato sejam gerados.
     results = [
         RankedResult(
             title="Claim divergente 1",
-            url="http://fake-tech-news.com/1",
+            url="http://infowars.com/1",
             snippet="O valor cresceu 15%",
-            source="fake-tech-news",
+            source="infowars",
             score=0.9,
             relevance_score=0.9,
             confidence_score=0.8,
         ),
         RankedResult(
             title="Claim divergente 2",
-            url="http://unreliable-blog.org/2",
+            url="http://naturalnews.com/2",
             snippet="O valor cresceu 90%",
-            source="unreliable-blog",
+            source="naturalnews",
             score=0.8,
             relevance_score=0.8,
             confidence_score=0.8,
@@ -109,7 +112,7 @@ async def test_synthesize_stage_finding_generation():
     claim2.source_name = "fonte 2"
     mock_conflict.claims = [claim1, claim2]
     mock_conflict_report.conflicts = [mock_conflict]
-    
+
     orchestrator_mock.conflict_detector = MagicMock()
     orchestrator_mock.conflict_detector.detect.return_value = mock_conflict_report
 
@@ -120,7 +123,7 @@ async def test_synthesize_stage_finding_generation():
     mock_gap.aspect = "historico"
     mock_gap.severity = "high"
     mock_gap_analysis.gaps = [mock_gap]
-    
+
     orchestrator_mock.gap_detector = AsyncMock()
     orchestrator_mock.gap_detector.detect.return_value = mock_gap_analysis
 
@@ -138,7 +141,7 @@ async def test_synthesize_stage_finding_generation():
     # Esperamos 4 findings: 1 de contradição, 1 de gap, e 2 de suspicious_source
     calls = mock_hitl_dialog.evaluate_finding.call_args_list
     assert len(calls) == 4
-    
+
     finding_types = [call[0][1]["type"] for call in calls]
     assert "contradiction" in finding_types
     assert "gap" in finding_types
@@ -162,7 +165,7 @@ def test_api_dialog_report_endpoint():
         options=["Sim", "Não"],
         urgency_score=0.9,
     )
-    
+
     # Mock do get_report
     mock_report = MagicMock()
     mock_report.model_dump.return_value = {

@@ -39,16 +39,17 @@ async def test_orchestrator_hitl_integration(monkeypatch):
     orc: Orchestrator = container.resolve("orchestrator")
     hitl: HITLManager = container.resolve("hitl_manager")
 
-    # Disable actual search stage logic for testing to avoid network requests
-    search_stage = orc._pipeline.stages[2]  # "search" stage
-
-    async def mock_search_run(context):
-        return context
-
-    search_stage.run = mock_search_run
-
-    # Short-circuit all subsequent stages to avoid LLM / network calls
-    for stage in orc._pipeline.stages[3:]:
+    # Short-circuit todas as stages EXCETO 'intent' e 'expand'. Substituir por
+    # índice é frágil — o pipeline ganhou a stage 'storm' e outras, deslocando
+    # as posições. Fazemos por NOME.
+    #   - 'intent' precisa rodar (com IntentAnalyzer.analyze mockado) porque a
+    #     pausa HITL de 'source_plan' no ExpandStage só ocorre quando
+    #     context.intent está preenchido.
+    #   - 'expand' é onde a pausa HITL de fato acontece.
+    live_stages = {"intent", "expand"}
+    for stage in orc._pipeline.stages:
+        if stage.name in live_stages:
+            continue
 
         async def mock_stage_run(context, s=stage):
             return context
@@ -57,8 +58,13 @@ async def test_orchestrator_hitl_integration(monkeypatch):
 
     session_id = "test_integration_session"
 
+    # Query específica o bastante para NÃO acionar a detecção de "query vaga"
+    # (FASE 5) no ExpandStage — do contrário a pausa HITL seria 'clarify_query'
+    # em vez da 'source_plan' que este teste valida.
+    query = "melhores ferramentas de observabilidade para microserviços"
+
     # Start research in background
-    task = asyncio.create_task(orc.research("test query", session_id=session_id))
+    task = asyncio.create_task(orc.research(query, session_id=session_id))
 
     # Allow it to run up to the pause in ExpandStage
     await asyncio.sleep(0.5)

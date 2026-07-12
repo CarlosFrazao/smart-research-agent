@@ -86,10 +86,17 @@ class _InMemoryEmbeddingStore:
         embedding: list[float],
         data: dict[str, Any],
         metadata: dict[str, Any],
+        entry_id: str | None = None,
     ) -> None:
-        """Adiciona embedding ao store."""
-        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
-        self._store[query_hash] = {
+        """Adiciona embedding ao store.
+
+        Args:
+            entry_id: ID estável sob o qual armazenar (ex.: hash da key do
+                cache). Se ``None``, usa o hash do próprio ``query`` (mantém o
+                comportamento legado do ``set()`` assíncrono).
+        """
+        store_id = entry_id or hashlib.sha256(query.encode()).hexdigest()[:16]
+        self._store[store_id] = {
             "query": query,
             "embedding": embedding,
             "data": data,
@@ -750,23 +757,32 @@ class SemanticCache:
         prefix: str | None = None,
         ttl: int | None = None,
     ) -> None:
-        """Indexa um valor no cache semântico de forma síncrona."""
+        """Indexa uma entrada no cache semântico de forma síncrona.
+
+        Args:
+            query: Texto livre a ser vetorizado (ex.: a query do usuário).
+            value: Chave estável do cache associada a esta query (ex.:
+                ``"github:melhores frameworks"``). É este valor que ``find``
+                retorna como ``matched_key`` e que ``remove`` usa para apagar —
+                a camada ``Cache`` o usa para localizar ``_key_meta``.
+            prefix: Namespace lógico (ex.: fonte) para isolamento entre buscas.
+            ttl: TTL em segundos (default por fonte se ``None``).
+        """
         if self._embedding_model_instance is None:
             return
 
         try:
-            # Extrai o texto real da query a ser vetorizado
-            # O query recebido aqui é o 'key' do cache.py (ex: "search:melhores frameworks python")
-            if ":" in query:
-                query_text = query.split(":", 1)[1]
-            else:
-                query_text = query
+            query_text = query
+            cache_key = str(value)
 
             query_embedding = self._get_embedding(query_text)
             effective_ttl = ttl or TTL_BY_SOURCE["default"]
 
             full_metadata = {
-                "key": query,
+                # `key` deve ser a CHAVE do cache (value), não o texto da query,
+                # senão `find` devolve algo que `Cache._key_meta` não conhece e
+                # o HIT semântico nunca resolve (bug histórico).
+                "key": cache_key,
                 "query": query_text,
                 "prefix": prefix or "default",
                 "cached_at": time.time(),
@@ -774,18 +790,22 @@ class SemanticCache:
                 "expires_at": time.time() + effective_ttl,
             }
 
-            query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+            # Hash sob a CHAVE estável para que `remove(cache_key)` apague a
+            # entrada correta (antes o in-memory guardava sob sha256(query_text)
+            # e removia sob sha256(key) — nunca apagava).
+            entry_id = hashlib.sha256(cache_key.encode()).hexdigest()[:16]
 
             if self._is_chromadb:
                 document = json.dumps(value, default=str)
                 self._collection.upsert(
-                    ids=[query_hash],
+                    ids=[entry_id],
                     embeddings=[query_embedding],
                     documents=[document],
                     metadatas=[full_metadata],
                 )
             else:
                 self._backend.add(
+                    entry_id=entry_id,
                     query=query_text,
                     embedding=query_embedding,
                     data=value,

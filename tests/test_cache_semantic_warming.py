@@ -6,24 +6,35 @@ import tempfile
 import pytest
 
 from src.cache.cache import Cache
-from src.utils import semantic_cache as sc
+from src.utils.semantic_cache import SemanticCache
 
 
 @pytest.fixture
 def fake_embedder(monkeypatch):
     """Substitui o embedder real por um mapeamento determinístico de texto -> vetor,
-    permitindo testar a integração semântica sem baixar nenhum modelo."""
+    permitindo testar a integração semântica sem baixar nenhum modelo.
+
+    Patcha o seam real do ``SemanticCache`` (``_get_embedding`` +
+    ``_embedding_model_instance``) em vez de helpers de módulo inexistentes.
+    """
     vectors = {
         "melhores frameworks Rust": [1.0, 0.0],
         "top Rust frameworks": [0.98, 0.02],  # quase idêntico -> deve bater
         "receita de bolo": [0.0, 1.0],  # nada a ver -> não deve bater
     }
 
-    def fake_embed(text: str):
+    def fake_get_embedding(self, text: str):
         return vectors.get(text, [0.0, 0.0])
 
-    monkeypatch.setattr(sc, "_get_embedder", lambda: object())
-    monkeypatch.setattr(sc, "embed", fake_embed)
+    def fake_init_model(self):
+        # `enabled` depende de `_embedding_model_instance is not None`; um
+        # sentinel basta porque `_get_embedding` está patchado e não o usa.
+        self._embedding_model_instance = object()
+
+    monkeypatch.setattr(SemanticCache, "_init_embedding_model", fake_init_model)
+    monkeypatch.setattr(
+        SemanticCache, "_get_embedding", fake_get_embedding, raising=True
+    )
 
 
 @pytest.mark.asyncio

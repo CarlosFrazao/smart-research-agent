@@ -1,54 +1,103 @@
-"""Testes para src/utils/semantic_cache.py."""
+"""Testes para src/utils/semantic_cache.py.
 
+Exercitam a API real do ``SemanticCache`` (síncrona: ``index``/``find``/
+``remove``), forçando o backend em memória e injetando um encoder fake
+determinístico via ``_embedding_model_instance`` — o mesmo seam que o código
+de produção usa (``_get_embedding``), sem depender de sentence-transformers
+nem de ChromaDB.
+"""
+
+import numpy as np
 import pytest
 
 from src.utils import semantic_cache as sc
+from src.utils.semantic_cache import SemanticCache, _InMemoryEmbeddingStore
 
 
-def test_cosine_similarity_identical_vectors():
-    v = [1.0, 0.0, 0.0]
-    assert sc.cosine_similarity(v, v) == pytest.approx(1.0)
+class _FakeEncoder:
+    """Encoder determinístico: mapeia texto -> vetor via tabela fornecida."""
+
+    def __init__(self, vectors: dict[str, list[float]]):
+        self._vectors = vectors
+
+    def encode(self, text, **kwargs):
+        vec = self._vectors.get(text)
+        if vec is None:
+            raise KeyError(f"vetor não definido para: {text!r}")
+        return np.array(vec, dtype=float)
 
 
-def test_cosine_similarity_orthogonal_vectors():
-    a = [1.0, 0.0]
-    b = [0.0, 1.0]
-    assert sc.cosine_similarity(a, b) == pytest.approx(0.0)
+def _make_cache(vectors: dict[str, list[float]], threshold: float = 0.90) -> SemanticCache:
+    """Cria um SemanticCache com backend em memória e encoder fake.
+
+    Evita a inicialização real de sentence-transformers/ChromaDB substituindo
+    o modelo de embeddings e o backend após a construção.
+    """
+    cache = SemanticCache(threshold=threshold)
+    cache._embedding_model_instance = _FakeEncoder(vectors)
+    cache._backend = _InMemoryEmbeddingStore()
+    cache._is_chromadb = False
+    return cache
 
 
-def test_cosine_similarity_zero_vector_is_safe():
-    a = [0.0, 0.0]
-    b = [1.0, 1.0]
-    assert sc.cosine_similarity(a, b) == 0.0
+# ── Similaridade cosseno (via _InMemoryEmbeddingStore.search) ────────────────
 
 
-def test_semantic_cache_disabled_without_embedder(monkeypatch):
-    """Sem sentence-transformers instalado, o índice deve ficar desabilitado
-    e toda consulta deve retornar None sem lançar exceção."""
-    monkeypatch.setattr(sc, "_get_embedder", lambda: None)
-    cache = sc.SemanticCache()
+def test_cosine_identical_vectors_scores_one():
+    store = _InMemoryEmbeddingStore()
+    store.add(query="q", embedding=[1.0, 0.0, 0.0], data={}, metadata={})
+    hits = store.search([1.0, 0.0, 0.0], threshold=0.99, limit=1)
+    assert hits and hits[0]["similarity"] == pytest.approx(1.0)
+
+
+def test_cosine_orthogonal_vectors_scores_zero():
+    store = _InMemoryEmbeddingStore()
+    store.add(query="q", embedding=[1.0, 0.0], data={}, metadata={})
+    # ortogonal -> similaridade 0, abaixo de qualquer threshold > 0
+    hits = store.search([0.0, 1.0], threshold=0.01, limit=1)
+    assert hits == []
+
+
+def test_cosine_zero_vector_is_safe():
+    store = _InMemoryEmbeddingStore()
+    store.add(query="q", embedding=[0.0, 0.0], data={}, metadata={})
+    # não deve levantar ZeroDivisionError; similaridade tratada como 0.0
+    hits = store.search([1.0, 1.0], threshold=0.0, limit=1)
+    assert hits and hits[0]["similarity"] == 0.0
+
+
+# ── enabled / desabilitado sem embedder ──────────────────────────────────────
+
+
+def test_disabled_without_embedder():
+    """Sem modelo de embeddings, o cache fica desabilitado e find() retorna None."""
+    cache = SemanticCache(threshold=0.90)
+    cache._embedding_model_instance = None
+    cache._backend = _InMemoryEmbeddingStore()
+    cache._is_chromadb = False
+
     assert cache.enabled is False
-    cache.index("query qualquer", key="k1")
-    assert cache.find("query qualquer") is None
+    cache.index("query qualquer", "github:query qualquer", prefix="github")
+    assert cache.find("query qualquer", prefix="github") is None
 
 
-def test_semantic_cache_find_above_threshold(monkeypatch):
-    """Injeta embeddings fake determinísticos para validar a lógica de
-    indexação/busca sem depender do modelo real."""
-    fake_vectors = {
+# ── find acima do threshold ──────────────────────────────────────────────────
+
+
+def test_find_above_threshold():
+    vectors = {
         "melhores frameworks Rust 2025": [1.0, 0.0, 0.0],
         "top Rust frameworks this year": [0.95, 0.05, 0.0],  # bem similar
         "receita de bolo de cenoura": [0.0, 0.0, 1.0],  # nada a ver
     }
-
-    def fake_embed(text: str):
-        return fake_vectors.get(text)
-
-    monkeypatch.setattr(sc, "_get_embedder", lambda: object())
-    monkeypatch.setattr(sc, "embed", fake_embed)
-
-    cache = sc.SemanticCache(threshold=0.90)
-    cache.index("melhores frameworks Rust 2025", key="github:melhores frameworks Rust 2025", prefix="github")
+    cache = _make_cache(vectors, threshold=0.90)
+    # index(query_text, cache_key, prefix): a query é vetorizada; a key é o id
+    # estável retornado por find/removido por remove.
+    cache.index(
+        "melhores frameworks Rust 2025",
+        "github:melhores frameworks Rust 2025",
+        prefix="github",
+    )
 
     match = cache.find("top Rust frameworks this year", prefix="github")
     assert match is not None
@@ -60,15 +109,13 @@ def test_semantic_cache_find_above_threshold(monkeypatch):
     assert miss is None
 
 
-def test_semantic_cache_respects_prefix_isolation(monkeypatch):
-    """Duas queries idênticas em prefixes diferentes não devem se misturar —
-    evita falso positivo entre fontes distintas (ex: github vs reddit)."""
-    vec = [1.0, 0.0]
-    monkeypatch.setattr(sc, "_get_embedder", lambda: object())
-    monkeypatch.setattr(sc, "embed", lambda text: vec)
+# ── isolamento por prefix ────────────────────────────────────────────────────
 
-    cache = sc.SemanticCache(threshold=0.90)
-    cache.index("consulta identica", key="github:consulta identica", prefix="github")
+
+def test_respects_prefix_isolation():
+    vectors = {"consulta identica": [1.0, 0.0]}
+    cache = _make_cache(vectors, threshold=0.90)
+    cache.index("consulta identica", "github:consulta identica", prefix="github")
 
     assert cache.find("consulta identica", prefix="reddit") is None
     match = cache.find("consulta identica", prefix="github")
@@ -76,30 +123,33 @@ def test_semantic_cache_respects_prefix_isolation(monkeypatch):
     assert match[0] == "github:consulta identica"
 
 
-def test_semantic_cache_index_overwrites_same_key(monkeypatch):
-    monkeypatch.setattr(sc, "_get_embedder", lambda: object())
-    monkeypatch.setattr(sc, "embed", lambda text: [1.0, 0.0])
-
-    cache = sc.SemanticCache(threshold=0.90)
-    cache.index("query v1", key="k1", prefix="github")
-    cache.index("query v2", key="k1", prefix="github")
-
-    assert len(cache._entries) == 1
-    assert cache._entries[0].query == "query v2"
+# ── overwrite da mesma key ───────────────────────────────────────────────────
 
 
-def test_semantic_cache_remove_and_clear(monkeypatch):
+def test_index_overwrites_same_key():
+    # mesma cache_key ("github:k1") indexada duas vezes -> uma única entrada
+    # (o id é o hash da key estável).
+    vectors = {"query um": [1.0, 0.0], "query dois": [1.0, 0.0]}
+    cache = _make_cache(vectors, threshold=0.90)
+    cache.index("query um", "github:k1", prefix="github")
+    cache.index("query dois", "github:k1", prefix="github")
+
+    assert cache._backend.count() == 1
+
+
+# ── remove e clear ───────────────────────────────────────────────────────────
+
+
+def test_remove_and_clear():
     vectors = {"q1": [1.0, 0.0], "q2": [0.0, 1.0]}
-    monkeypatch.setattr(sc, "_get_embedder", lambda: object())
-    monkeypatch.setattr(sc, "embed", lambda text: vectors[text])
+    cache = _make_cache(vectors, threshold=0.90)
+    cache.index("q1", "github:q1", prefix="github")
+    cache.index("q2", "github:q2", prefix="github")
 
-    cache = sc.SemanticCache(threshold=0.90)
-    cache.index("q1", key="k1", prefix="github")
-    cache.index("q2", key="k2", prefix="github")
-
-    cache.remove("k1")
+    # remove pela cache_key completa (como faz a camada Cache)
+    cache.remove("github:q1")
     assert cache.find("q1", prefix="github") is None
     assert cache.find("q2", prefix="github") is not None
 
-    cache.clear()
+    cache._backend.clear()
     assert cache.find("q2", prefix="github") is None
