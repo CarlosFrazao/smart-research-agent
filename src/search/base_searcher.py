@@ -194,14 +194,17 @@ class BaseSearcher(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def normalize(self, raw_result: Any) -> SearchResult:
+    def normalize(self, raw_result: Any) -> SearchResult | None:
         """Normaliza um resultado bruto da API para o formato `SearchResult`.
 
         Args:
             raw_result: Resultado bruto retornado pela API de origem.
 
         Returns:
-            SearchResult: Resultado normalizado no formato padrao do SRA.
+            SearchResult | None: Resultado normalizado no formato padrao do SRA,
+            ou ``None`` quando o item bruto é inválido/incompleto e deve ser
+            descartado (subclasses como NPM/crates.io filtram itens sem os
+            campos mínimos). Chamadores devem descartar ``None``.
         """
         raise NotImplementedError
 

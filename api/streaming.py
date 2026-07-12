@@ -68,9 +68,19 @@ logger = logging.getLogger(__name__)
 
 # ─── Modelos ──────────────────────────────────────────────────────────────
 
-EventType = Literal["progress", "result", "error", "heartbeat", "stage_update",
-                    "partial_result", "partial_report", "metrics", "warning",
-                    "complete", "disconnect"]
+EventType = Literal[
+    "progress",
+    "result",
+    "error",
+    "heartbeat",
+    "stage_update",
+    "partial_result",
+    "partial_report",
+    "metrics",
+    "warning",
+    "complete",
+    "disconnect",
+]
 
 # Eventos que encerram o stream para os assinantes (nenhum evento futuro é esperado).
 TERMINAL_EVENTS: frozenset[str] = frozenset({"result", "error"})
@@ -126,7 +136,11 @@ class ProgressEvent(BaseModel):
     def failure(cls, task_id: str, error: str) -> "ProgressEvent":
         """Cria o evento terminal de erro."""
         return cls(
-            task_id=task_id, event="error", message="Falha na tarefa", error=error
+            task_id=task_id,
+            event="error",
+            message="Falha na tarefa",
+            percent=0.0,
+            error=error,
         )
 
 
@@ -233,7 +247,7 @@ class ProgressBroker:
                         queue.get(), timeout=heartbeat_interval
                     )
                 except asyncio.TimeoutError:
-                    yield ProgressEvent(task_id=task_id, event="heartbeat")
+                    yield ProgressEvent(task_id=task_id, event="heartbeat", percent=0.0)
                     continue
 
                 yield event

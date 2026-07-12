@@ -375,7 +375,7 @@ class ResearchPipeline:
 
     async def run(
         self,
-        query: Union[str, PipelineContext],
+        query: str | PipelineContext,
         *,
         formats: list[Any] | None = None,
         enriched_query: str | None = None,

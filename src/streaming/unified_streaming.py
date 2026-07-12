@@ -34,7 +34,10 @@ logger = logging.getLogger(__name__)
 
 # ── Event Types and Data Models ─────────────────────────────────────────────────
 
-EventType = Literal["progress", "result", "error", "heartbeat", "stage_update", "partial_result"]
+EventType = Literal[
+    "progress", "result", "error", "heartbeat", "stage_update", "partial_result"
+]
+
 
 # Core progress event supporting all streaming protocols
 @dataclass
@@ -50,7 +53,9 @@ class ProgressEvent:
     error: Optional[str] = None
 
     @classmethod
-    def progress(cls, task_id: str, step: int, total_steps: int, message: str) -> "ProgressEvent":
+    def progress(
+        cls, task_id: str, step: int, total_steps: int, message: str
+    ) -> "ProgressEvent":
         """Create a progress event with automatic percentage calculation."""
         percent = round((step / total_steps) * 100, 1) if total_steps > 0 else 0.0
         percent = max(0.0, min(100.0, percent))
@@ -64,7 +69,9 @@ class ProgressEvent:
         )
 
     @classmethod
-    def result(cls, task_id: str, data: Dict[str, Any], total_steps: int = 0) -> "ProgressEvent":
+    def result(
+        cls, task_id: str, data: Dict[str, Any], total_steps: int = 0
+    ) -> "ProgressEvent":
         """Create terminal success event with final payload."""
         return cls(
             task_id=task_id,
@@ -98,6 +105,7 @@ class ProgressEvent:
         payload = asdict(self)
         return json.dumps(payload, ensure_ascii=False)
 
+
 # Streaming event types with enhanced metadata for rich UI responses
 @dataclass
 class StreamEventType(str, Enum):
@@ -112,6 +120,7 @@ class StreamEventType(str, Enum):
     COMPLETE = "complete"
     HEARTBEAT = "heartbeat"
     DISCONNECT = "disconnect"
+
 
 @dataclass
 class StreamEvent:
@@ -132,15 +141,20 @@ class StreamEvent:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     def to_ws(self) -> str:
-        return json.dumps({
-            "type": self.type.value,
-            "correlation_id": self.correlation_id,
-            "timestamp": self.timestamp,
-            "data": self.data,
-            "message": self.message,
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "type": self.type.value,
+                "correlation_id": self.correlation_id,
+                "timestamp": self.timestamp,
+                "data": self.data,
+                "message": self.message,
+            },
+            ensure_ascii=False,
+        )
+
 
 # ── Core Unified Streaming Manager ─────────────────────────────────────────────────────────────
+
 
 class UnifiedStreamingManager:
     """Centralized streaming manager unifying all SSE, WebSocket, and callback capabilities.
@@ -171,9 +185,16 @@ class UnifiedStreamingManager:
             "heartbeat_interval": 15.0,
             "max_duration": 600.0,
             "stages": [
-                "intent_analysis", "query_expansion", "source_planning",
-                "search", "ranking", "confidence_scoring", "gap_detection",
-                "synthesis", "report_generation", "audit",
+                "intent_analysis",
+                "query_expansion",
+                "source_planning",
+                "search",
+                "ranking",
+                "confidence_scoring",
+                "gap_detection",
+                "synthesis",
+                "report_generation",
+                "audit",
             ],
             "enable_partial_results": True,
             "enable_partial_report": True,
@@ -185,9 +206,11 @@ class UnifiedStreamingManager:
     # Legacy ProgressBroker Integration
     def make_progress_callback(self, task_id: str) -> Callable[[int, int, str], None]:
         """Create a legacy progress callback compatible with existing orchestrators."""
+
         def callback(step: int, total_steps: int, message: str) -> None:
             event = ProgressEvent.progress(task_id, step, total_steps, message)
             self.publish_event(task_id, event)
+
         return callback
 
     def publish_event(self, task_id: str, event: ProgressEvent) -> None:
@@ -198,7 +221,9 @@ class UnifiedStreamingManager:
         queue = self._active_streams[task_id]
         asyncio.create_task(self._publish_to_queue(queue, event))
 
-    async def _publish_to_queue(self, queue: asyncio.Queue, event: ProgressEvent) -> None:
+    async def _publish_to_queue(
+        self, queue: asyncio.Queue, event: ProgressEvent
+    ) -> None:
         """Internal method to publish event to a specific queue."""
         try:
             await queue.put(event)
@@ -228,7 +253,9 @@ class UnifiedStreamingManager:
             self._active_streams[task_id] = asyncio.Queue()
         return self._active_streams[task_id]
 
-    async def _stream_history(self, task_id: str) -> AsyncGenerator[ProgressEvent, None]:
+    async def _stream_history(
+        self, task_id: str
+    ) -> AsyncGenerator[ProgressEvent, None]:
         """Stream historical events for new subscribers."""
         # For now, this yields nothing since we don't store history in this implementation
         return
@@ -268,7 +295,7 @@ class UnifiedStreamingManager:
         task_id = correlation_id  # Use correlation_id as task_id for unified handling
 
         # Initialize stream and start background processing
-        self._ensure_stream_queue(task_id)
+        await self._ensure_stream_queue(task_id)
         research_task = asyncio.create_task(
             self._execute_research_pipeline(
                 correlation_id=correlation_id,
@@ -295,6 +322,8 @@ class UnifiedStreamingManager:
         ).to_sse()
 
         # Start heartbeat monitoring
+        # capture heartbeat_interval from config so it's visible in _stream_heartbeat
+        heartbeat_interval = self.config["heartbeat_interval"]
         heartbeat_task = asyncio.create_task(self._stream_heartbeat(correlation_id))
         start_time = time.monotonic()
 
@@ -305,7 +334,9 @@ class UnifiedStreamingManager:
                     break
 
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=heartbeat_interval)
+                    event = await asyncio.wait_for(
+                        queue.get(), timeout=heartbeat_interval
+                    )
                     yield event.to_sse()
 
                     if event.event in ("complete", "error"):
@@ -413,33 +444,37 @@ class UnifiedStreamingManager:
             return
 
         # Stage update event
-        await queue.put(ProgressEvent(
-            task_id=task_id,
-            event="stage_update",
-            step=stage_index,
-            total_steps=total_stages,
-            message=f"Stage: {stage_name}",
-            data={
-                "stage": stage_name,
-                "stage_index": stage_index,
-                "total_stages": total_stages,
-                **(extra_data or {}),
-            },
-        ))
+        await queue.put(
+            ProgressEvent(
+                task_id=task_id,
+                event="stage_update",
+                step=stage_index,
+                total_steps=total_stages,
+                message=f"Stage: {stage_name}",
+                data={
+                    "stage": stage_name,
+                    "stage_index": stage_index,
+                    "total_stages": total_stages,
+                    **(extra_data or {}),
+                },
+            )
+        )
 
         # Progress event
-        await queue.put(ProgressEvent(
-            task_id=task_id,
-            event="progress",
-            step=stage_index + 1,
-            total_steps=total_stages,
-            message=f"Progresso: {percent}%",
-            data={
-                "percent": percent,
-                "stage": stage_name,
-                "stage_index": stage_index,
-            },
-        ))
+        await queue.put(
+            ProgressEvent(
+                task_id=task_id,
+                event="progress",
+                step=stage_index + 1,
+                total_steps=total_stages,
+                message=f"Progresso: {percent}%",
+                data={
+                    "percent": percent,
+                    "stage": stage_name,
+                    "stage_index": stage_index,
+                },
+            )
+        )
 
     async def _emit_event(
         self,
@@ -453,7 +488,7 @@ class UnifiedStreamingManager:
             return
 
         # Build event from kwargs
-        event_data = {k: v for k, v in kwargs.items() if k not in ('task_id', 'event')}
+        event_data = {k: v for k, v in kwargs.items() if k not in ("task_id", "event")}
 
         event = ProgressEvent(
             task_id=task_id,
@@ -469,8 +504,13 @@ class UnifiedStreamingManager:
                 await asyncio.sleep(self.config["heartbeat_interval"])
                 # Send heartbeat to all active streams
                 for task_id in list(self._active_streams.keys()):
-                    if task_id.startswith(correlation_id[:8]) or task_id == correlation_id:
-                        await self._emit_event(task_id, "heartbeat", message="keep-alive")
+                    if (
+                        task_id.startswith(correlation_id[:8])
+                        or task_id == correlation_id
+                    ):
+                        await self._emit_event(
+                            task_id, "heartbeat", message="keep-alive"
+                        )
         except asyncio.CancelledError:
             pass
 
@@ -514,9 +554,12 @@ class UnifiedStreamingManager:
                 self._stream_tasks.pop(corr_id, None)
                 logger.debug(f"Stream {corr_id[:8]} removido do cleanup")
 
-    def register_progress_callback(self, task_id: str) -> Callable[[int, int, str], None]:
+    def register_progress_callback(
+        self, task_id: str
+    ) -> Callable[[int, int, str], None]:
         """Register a progress callback for orchestrator integration."""
         return self.make_progress_callback(task_id)
+
 
 # Backwards Compatibility Layers
 
@@ -530,10 +573,15 @@ class LegacySSEEndpoint:
     def __init__(self, streaming_manager: UnifiedStreamingManager):
         self.streaming = streaming_manager
 
-    async def handle(self, request: Any, query: str, orchestrator: Any, **kwargs) -> Any:
+    async def handle(
+        self, request: Any, query: str, orchestrator: Any, **kwargs
+    ) -> Any:
         """Legacy endpoint handler for backward compatibility."""
+
         async def event_generator():
-            async for sse_line in self.streaming.sse_research_stream(query, orchestrator, **kwargs):
+            async for sse_line in self.streaming.sse_research_stream(
+                query, orchestrator, **kwargs
+            ):
                 yield sse_line
 
         return {

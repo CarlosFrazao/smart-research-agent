@@ -190,10 +190,10 @@ rest_router = APIRouter()
 # ─── Schemas Pydantic ─────────────────────────────────────────
 class ResearchRequest(BaseModel):
     query: str = Field(
-        ..., min_length=3, max_length=500, example="Best databases in 2026"
+        ..., min_length=3, max_length=500, examples=["Best databases in 2026"]
     )
-    mode: str = Field("cirurgia", example="guerrilha")
-    languages: List[str] = Field(["en"], example=["en", "pt"])
+    mode: str = Field("cirurgia", examples=["guerrilha"])
+    languages: List[str] = Field(["en"], examples=[["en", "pt"]])
     max_results: int = Field(10, ge=1, le=50)
 
 
@@ -223,10 +223,10 @@ class TaskAcceptedResponse(BaseModel):
 class ScheduleRequest(BaseModel):
     """Payload para agendar uma pesquisa recorrente (FASE 6)."""
 
-    query: str = Field(..., min_length=3, max_length=500, example="Novidades em RAG")
-    cron: str = Field("0 8 * * *", example="0 8 * * *")
-    webhook_url: Optional[str] = Field(None, example="https://hooks.slack.com/...")
-    output_dir: str = Field("reports/scheduled", example="reports/scheduled")
+    query: str = Field(..., min_length=3, max_length=500, examples=["Novidades em RAG"])
+    cron: str = Field("0 8 * * *", examples=["0 8 * * *"])
+    webhook_url: Optional[str] = Field(None, examples=["https://hooks.slack.com/..."])
+    output_dir: str = Field("reports/scheduled", examples=["reports/scheduled"])
     alert_on_changes: bool = Field(True)
 
 

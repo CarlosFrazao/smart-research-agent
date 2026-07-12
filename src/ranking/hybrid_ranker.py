@@ -62,10 +62,10 @@ FRESHNESS_HALFLIFE: Dict[str, float] = {
     "rss": 3.0,
     # Fontes de notícia (Plano Parte 4 — Fase 2): meia-vida curta,
     # conteúdo de minuto a minuto decai rápido.
-    "gdelt": 0.5,             # 12 horas
-    "google_news_rss": 0.5,   # 12 horas
-    "newsapi_org": 0.5,       # 12 horas
-    "bluesky": 0.25,          # 6 horas — rede social decai super rápido
+    "gdelt": 0.5,  # 12 horas
+    "google_news_rss": 0.5,  # 12 horas
+    "newsapi_org": 0.5,  # 12 horas
+    "bluesky": 0.25,  # 6 horas — rede social decai super rápido
     "mastodon_social": 0.25,  # 6 horas
     "default": 30.0,
 }
@@ -347,9 +347,12 @@ class HybridRanker:
 
         output = []
         for c in candidates:
-            h_s = c["normalized_heuristic"]
-            b_s = c["normalized_bm25"]
-            e_s = c["embedding_score"]
+            h_s = float(c["normalized_heuristic"])
+            b_s = float(c["normalized_bm25"])
+            # embedding_score pode ser None (sem reranking semântico) — preservamos
+            # o valor original (Optional[float]) para o HybridRankResultCompat e
+            # usamos uma cópia numérica só para a aritmética do score.
+            e_s: float | None = c["embedding_score"]
 
             if e_s is None:
                 denom = w_heuristic + w_bm25
@@ -358,6 +361,7 @@ class HybridRanker:
                 else:
                     final_score = 0.0
             else:
+                e_s = float(e_s)
                 final_score = w_heuristic * h_s + w_bm25 * b_s + w_embedding * e_s
 
             # final_score é ponderado em escala 0-1, convertemos para range 0-100 para condizer com heuristic_scores
@@ -615,7 +619,9 @@ class HybridRanker:
             # aware eram comparadas contra `now` (UTC).
             if reference_time.tzinfo is None:
                 reference_time = reference_time.replace(tzinfo=timezone.utc)
-            now_cmp = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+            now_cmp = (
+                now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+            )
 
             age_days = (now_cmp - reference_time).total_seconds() / 86400.0
         except Exception:

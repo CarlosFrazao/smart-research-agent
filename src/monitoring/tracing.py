@@ -250,19 +250,19 @@ class TracingManager:
         try:
             if self._config.backend == ExportBackend.OTLP_GRPC:
                 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-                    OTLPSpanExporter,
+                    OTLPSpanExporter as GRPCSpanExporter,
                 )
 
-                exporter = OTLPSpanExporter(
+                exporter = GRPCSpanExporter(
                     endpoint=self._config.jaeger_endpoint, insecure=True
                 )
 
             elif self._config.backend == ExportBackend.OTLP_HTTP:
                 from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-                    OTLPSpanExporter,
+                    OTLPSpanExporter as HTTPSpanExporter,
                 )
 
-                exporter = OTLPSpanExporter(endpoint=self._config.jaeger_endpoint)
+                exporter = HTTPSpanExporter(endpoint=self._config.jaeger_endpoint)
 
             elif self._config.backend == ExportBackend.ZIPKIN:
                 from opentelemetry.exporter.zipkin.json import ZipkinExporter

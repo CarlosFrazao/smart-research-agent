@@ -511,8 +511,13 @@ class APISearcher(BaseSearcher):
         ...
 
     @abstractmethod
-    def normalize(self, raw_result: Any) -> SearchResult:
-        """Normaliza um resultado bruto da API para SearchResult."""
+    def normalize(self, raw_result: Any) -> SearchResult | None:
+        """Normaliza um resultado bruto da API para SearchResult.
+
+        Retorna ``None`` quando o item bruto é inválido/incompleto e deve ser
+        descartado (ex.: NPM/crates.io sem campos mínimos). Alinhado ao
+        contrato de ``BaseSearcher.normalize``.
+        """
         ...
 
     # ── Fallback ────────────────────────────────────────────────────────────

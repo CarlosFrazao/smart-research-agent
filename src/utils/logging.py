@@ -254,7 +254,7 @@ def setup_logging(
     except ImportError:
         # Fallback se structlog não estiver no virtualenv
         log_format = "%(asctime)s [%(levelname)s] %(name)s [corr=%(correlation_id)s]: %(message)s"
-        handler = (
+        handler: logging.Handler = (
             logging.FileHandler(log_file, encoding="utf-8")
             if log_file
             else logging.StreamHandler(sys.stdout)

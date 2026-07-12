@@ -147,9 +147,15 @@ def calculate_backoff(attempt: int, config: RetryConfig) -> float:
     if attempt <= 1:
         return 0.0
 
+    # __post_init__ garante que estes campos não são None; normalizamos para
+    # float local para que o type-checker acompanhe (e como rede de segurança).
+    min_wait = config.min_wait if config.min_wait is not None else 1.0
+    backoff_factor = config.backoff_factor if config.backoff_factor is not None else 2.0
+    max_wait = config.max_wait if config.max_wait is not None else 60.0
+
     # Exponencial: min_wait * backoff_factor^(attempt-2)
-    wait = config.min_wait * (config.backoff_factor ** (attempt - 2))
-    wait = min(wait, config.max_wait)
+    wait = min_wait * (backoff_factor ** (attempt - 2))
+    wait = min(wait, max_wait)
 
     # Aplica Jitter
     if config.jitter_ratio > 0.0:
@@ -250,7 +256,8 @@ async def retry_call_async(
     total_wait = 0.0
     last_exc = None
 
-    for attempt in range(1, config.max_attempts + 1):
+    max_attempts = config.max_attempts if config.max_attempts is not None else 3
+    for attempt in range(1, max_attempts + 1):
         if config.circuit_breaker is not None:
             cb = config.circuit_breaker
             cb_state = getattr(cb, "state", None)
@@ -323,7 +330,8 @@ def retry_call_sync(
     total_wait = 0.0
     last_exc = None
 
-    for attempt in range(1, config.max_attempts + 1):
+    max_attempts = config.max_attempts if config.max_attempts is not None else 3
+    for attempt in range(1, max_attempts + 1):
         if config.circuit_breaker is not None:
             cb = config.circuit_breaker
             cb_state = getattr(cb, "state", None)

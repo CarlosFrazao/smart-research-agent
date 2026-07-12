@@ -27,7 +27,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -543,23 +542,56 @@ class ScrapingSearcher(BaseSearcher):
         """Limpa métricas acumuladas."""
         self._attempts.clear()
 
-    # ── Abstract methods (BaseSearcher) ─────────────────────────────────────
+    # ── BaseSearcher API (implementação concreta de cascata) ────────────────
 
-    @abstractmethod
     async def search(self, query: str, **kwargs) -> List[SearchResult]:
-        """Método abstrato — deve ser implementado pela subclass.
+        """Executa scraping via cascata quando a query é uma URL.
 
-        Tipicamente:
-          1. Constrói URL(s) a partir da query
-          2. Chama self._scrape_url(url) ou self._cascade_scrape(url)
-          3. Normaliza e retorna List[SearchResult]
+        Implementação concreta padrão: se ``query`` for uma URL http(s),
+        scrapeia-a pela cascata resiliente (Firecrawl→Spider→Steel→Jina) e
+        retorna um único ``SearchResult`` normalizado. Subclasses podem
+        sobrescrever para construir URLs a partir de termos de busca.
+
+        Retorna lista vazia (nunca levanta) quando a query não é uma URL ou
+        quando toda a cascata falha — o SearchStage trata ausência de
+        resultados sem abortar o pipeline.
         """
-        pass
+        candidate = (query or "").strip()
+        if not candidate.lower().startswith(("http://", "https://")):
+            logger.debug(
+                "ScrapingSearcher.search: query '%s' não é URL; nada a scrapear.",
+                candidate[:60],
+            )
+            return []
+        try:
+            raw = await self._scrape_url(candidate)
+        except ScrapingError as exc:
+            logger.warning(
+                "ScrapingSearcher: cascata falhou para %s: %s", candidate, exc
+            )
+            return []
+        normalized = self.normalize(raw)
+        return [normalized] if normalized else []
 
-    @abstractmethod
-    def normalize(self, raw_result: Any) -> SearchResult:
-        """Normaliza resultado bruto em SearchResult."""
-        pass
+    def normalize(self, raw_result: Any) -> SearchResult | None:
+        """Normaliza um dict de scraping (ou raw) em ``SearchResult``.
+
+        Reaproveita ``_normalize_scrape_result`` para tolerar dict, string,
+        ``SearchResult`` ou lista. Retorna ``None`` quando não há conteúdo
+        aproveitável (sem markdown/título), para que o chamador o descarte.
+        """
+        data = self._normalize_scrape_result(raw_result, url="")
+        markdown = (data.get("markdown") or "").strip()
+        title = (data.get("title") or "").strip()
+        if not markdown and not title:
+            return None
+        return SearchResult(
+            source="scraping",
+            title=title,
+            url=data.get("url", "") or "",
+            description=markdown,
+            metrics=data.get("metadata", {}) or {},
+        )
 
 
 # ── Exceções ────────────────────────────────────────────────────────────────

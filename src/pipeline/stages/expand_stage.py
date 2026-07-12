@@ -674,7 +674,12 @@ class ExpandStage:
                 "Injete uma instância via ExpandStage(query_expander=...)."
             ) from exc
 
-        self._query_expander = QueryExpander()
+        # Fallback de último recurso: nenhuma instância foi injetada e não há
+        # LLM disponível neste escopo. QueryExpander exige `llm_client`, mas
+        # tolera `None` — seu `expand()` cai graciosamente em `fallback_expand`
+        # (determinístico) quando o LLM está ausente/falha. O caminho normal
+        # sempre injeta um expander via StageFactory._create_expand_stage.
+        self._query_expander = QueryExpander(llm_client=None)
         return self._query_expander
 
     @staticmethod

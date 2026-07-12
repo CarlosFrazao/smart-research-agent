@@ -30,30 +30,31 @@ SynthesisStage = SynthesizeStage
 class HealthCheckStage(PipelineStage):
     name = "health_check"
 
-    async def run(self, context: PipelineContext) -> None:
+    async def run(self, context: PipelineContext) -> PipelineContext:
         if hasattr(self.orchestrator, "_health_check"):
             await self.orchestrator._health_check()
+        return context
 
 
 class PlanningStage(PipelineStage):
     name = "planning"
 
-    async def run(self, context: PipelineContext) -> None:
-        pass
+    async def run(self, context: PipelineContext) -> PipelineContext:
+        return context
 
 
 class ConflictResolutionStage(PipelineStage):
     name = "conflict_resolution"
 
-    async def run(self, context: PipelineContext) -> None:
-        pass
+    async def run(self, context: PipelineContext) -> PipelineContext:
+        return context
 
 
 class GapFillStage(PipelineStage):
     name = "gap"
 
-    async def run(self, context: PipelineContext) -> None:
-        pass
+    async def run(self, context: PipelineContext) -> PipelineContext:
+        return context
 
 
 class SanitizationStage(PipelineStage):
@@ -63,7 +64,7 @@ class SanitizationStage(PipelineStage):
     def __init__(self, sanitizer=None):
         self.sanitizer = sanitizer
 
-    async def run(self, context: PipelineContext) -> None:
+    async def run(self, context: PipelineContext) -> PipelineContext:
         """Sanitiza os resultados de busca usando LLMSanitizer.
 
         Aplica sanitização de prompt injection nas descrições dos resultados
@@ -77,7 +78,7 @@ class SanitizationStage(PipelineStage):
         )
         if not results:
             logger.info("SanitizationStage: sem resultados para sanitizar")
-            return
+            return context
 
         # Obtém o sanitizer do contexto ou cria um novo
         sanitizer = self.sanitizer
@@ -90,7 +91,7 @@ class SanitizationStage(PipelineStage):
 
         if sanitizer is None:
             logger.debug("SanitizationStage: LLMSanitizer não disponível")
-            return
+            return context
 
         sanitized_count = 0
         for result in results:
@@ -115,6 +116,7 @@ class SanitizationStage(PipelineStage):
             logger.info(
                 f"SanitizationStage: {sanitized_count} resultado(s) sanitizado(s)"
             )
+        return context
 
 
 from src.pipeline.stages.report_stage import ReportStage

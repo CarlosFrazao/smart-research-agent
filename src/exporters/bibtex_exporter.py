@@ -137,11 +137,14 @@ class BibTeXExporter:
     def _format_authors(authors: list[str] | str) -> str:
         """Formata lista de autores para estilo BibTeX (sobrenome, nome)."""
         if isinstance(authors, str):
-            # Tenta extrair autores de uma string JSON
+            # Tenta extrair autores de uma string JSON; se não for JSON válido,
+            # trata a string inteira como um único autor.
+            raw = authors
             try:
-                authors = json.loads(authors) if isinstance(authors, str) else [authors]
+                parsed = json.loads(raw)
+                authors = parsed if isinstance(parsed, list) else [str(parsed)]
             except Exception:
-                authors = [authors]
+                authors = [raw]
 
         if not authors:
             return "Anonymous"

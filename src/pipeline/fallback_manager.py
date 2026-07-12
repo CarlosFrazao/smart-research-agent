@@ -145,7 +145,7 @@ class FallbackManager:
       4. Integrar com HealthMonitor via callbacks de status.
     """
 
-    def __init__(self, orchestrator: Optional[Any] = None):
+    def __init__(self, orchestrator: Any | None = None):
         self._registrations: dict[str, FallbackRegistration] = {}
         self._metrics: dict[str, FallbackMetrics] = {}
         self._round_robin_indices: dict[str, int] = {}

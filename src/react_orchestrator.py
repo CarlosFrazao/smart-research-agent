@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from src.decision_engine import Decision, DynamicDecisionEngine
 from src.orchestrator import Orchestrator
@@ -41,6 +41,16 @@ class ReActOrchestrator(Orchestrator):
         """Inicializa com possível configuração para loop ReAct."""
         super().__init__(config)
         self._react_enabled = getattr(self.config, "enable_dynamic_loop", False)
+        # Instância de StageFactory para criar estágios sob demanda no loop
+        # ReAct. `create_stage` é um método de instância (não estático), então
+        # precisamos de uma factory viva, com as mesmas dependências injetadas
+        # que o pipeline clássico usa.
+        self._stage_factory = StageFactory(
+            orchestrator=self,
+            llm_client=self.llm,
+            cache=self.cache,
+            config=self.config,
+        )
         self._decision_engine = DynamicDecisionEngine(
             config=self.config,
             confidence_threshold=getattr(
@@ -54,8 +64,9 @@ class ReActOrchestrator(Orchestrator):
         self,
         query: str,
         formats: list[Any] | None = None,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
         session_id: str = "default_session",
+        context_extra: dict | None = None,
     ) -> str:
         """Executa a pesquisa via loop ReAct se habilitado, senão usa pipeline clássico.
 
@@ -64,13 +75,17 @@ class ReActOrchestrator(Orchestrator):
             formats: Formatos de exportação adicionais.
             progress_callback: Callback de progresso (para SSE/streaming).
             session_id: ID da sessão para rastreamento.
+            context_extra: Extras opcionais injetados no PipelineContext
+                (mantém compatibilidade com a assinatura do Orchestrator pai).
 
         Returns:
             str: Relatório Markdown completo.
         """
         # Delega ao pai se loop ReAct desabilitado (comportamento clássico)
         if not self._react_enabled:
-            return await super().research(query, formats, progress_callback, session_id)
+            return await super().research(
+                query, formats, progress_callback, session_id, context_extra
+            )
 
         logger.info(
             "ReActOrchestrator: iniciando loop ReAct para query='%s' (modo=%s).",
@@ -97,7 +112,7 @@ class ReActOrchestrator(Orchestrator):
 
             try:
                 # Executar estágio via StageFactory (mesmo mecanismo clássico)
-                stage = StageFactory.create_stage(stage_name)
+                stage = self._stage_factory.create_stage(stage_name)
                 context = await self._execute_stage_with_progress(
                     stage, context, progress_callback, session_id
                 )
@@ -118,7 +133,7 @@ class ReActOrchestrator(Orchestrator):
 
         # Finalização: garantir relatório gerado
         if not context.report:
-            report_stage = StageFactory.create_stage("report")
+            report_stage = self._stage_factory.create_stage("report")
             context = await self._execute_stage_with_progress(
                 report_stage, context, progress_callback, session_id
             )
@@ -133,7 +148,7 @@ class ReActOrchestrator(Orchestrator):
         self,
         stage: Any,
         context: PipelineContext,
-        progress_callback: Optional[callable],
+        progress_callback: Optional[Callable[..., Any]],
         session_id: str,
     ) -> PipelineContext:
         """Executa um estágio com notificação de progresso.

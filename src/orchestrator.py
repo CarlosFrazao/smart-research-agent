@@ -385,7 +385,7 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"Erro ao fechar OrvixMemoryV2: {e}")
 
-    async def _apply_hitl_decision(self, decision: dict, context: any) -> None:
+    async def _apply_hitl_decision(self, decision: dict, context: Any) -> None:
         """Aplica a decisão do usuário (HITL) no contexto do pipeline."""
         if not decision:
             return

@@ -188,6 +188,8 @@ class VerificationStage(PipelineStage):
         # nunca abortam o pipeline nem mascaram o relatório.
         await self._run_qa_instrumentation(context)
 
+        return context
+
     # ── Instrumentação de QA (Fase 6.2) ────────────────────────────────
 
     def _auditor_enabled(self, context: PipelineContext) -> bool:
