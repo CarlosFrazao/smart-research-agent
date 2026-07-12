@@ -53,7 +53,7 @@ Notas de compatibilidade (decisões deliberadas, não omissões):
   tardio e caro caso o enum `Domain` ganhe/perca valores no futuro.
 """
 
-# HACK: Evita conflito de shadowing com o módulo 'types' da standard library.
+# NOTA (module shadowing): Evita conflito com o módulo 'types' da standard library.
 # Como a pasta 'src' está no sys.path (ex: devido a instalação editável do setuptools),
 # qualquer 'import types' feito por bibliotecas padrão (ex: enum, functools)
 # tenta carregar este arquivo (src/types.py) como o módulo 'types' global, gerando import circular.

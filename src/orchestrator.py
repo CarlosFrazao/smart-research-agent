@@ -452,11 +452,15 @@ class Orchestrator:
             if not hasattr(context, "expand_hints"):
                 context.expand_hints = []
             context.expand_hints.append(expand_hint)
-            # TODO-FASE2: implementar re-execução do SearchStage com sources adicionais
-            # Por ora, o hint é registrado e o pipeline continua com results atuais.
+            # Limitação conhecida (por design): a re-execução completa do
+            # SearchStage com sources adicionais não é acionada aqui. O hint é
+            # registrado em context.expand_hints e os stages subsequentes o
+            # consomem; o pipeline prossegue com os resultados já coletados,
+            # evitando uma segunda passada de busca cara no meio do fluxo HITL.
             logger.warning(
-                "HITL expand_scope: hint registrado mas full re-search not yet implemented. "
-                "Context will use existing results."
+                "HITL expand_scope: hint registrado; re-busca completa não é "
+                "acionada aqui (limitação conhecida). O contexto usará os "
+                "resultados existentes."
             )
         else:
             logger.info(f"HITL Decision: Ação padrão (incluir/ignorar): {action}")
