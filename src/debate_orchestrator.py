@@ -155,7 +155,7 @@ class DebateOrchestrator:
             "]\n"
         )
         try:
-            raw = await self.llm.generate(prompt, temperature=0.7, max_tokens=800)
+            raw = await self.llm.generate(prompt, temperature=0.7, max_tokens=4000)
             hypotheses = self._parse_hypotheses(raw)
             logger.info(f"Hipóteses geradas: {[h.id for h in hypotheses]}")
             return hypotheses
@@ -300,7 +300,7 @@ class DebateOrchestrator:
 
         try:
             raw = await self.llm.generate(
-                prompt, temperature=self.JUDGE_TEMP, max_tokens=600
+                prompt, temperature=self.JUDGE_TEMP, max_tokens=2500
             )
             judgment = self._parse_judgment(raw)
             logger.info(
@@ -393,24 +393,115 @@ class DebateOrchestrator:
 
     # ── Parsers internos ───────────────────────────────────────────────────────
 
+    @staticmethod
+    def _is_valid_json(text: str) -> bool:
+        """Verifica rapidamente se ``text`` é um JSON válido."""
+        import json
+
+        try:
+            json.loads(text)
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    @staticmethod
+    def _extract_json(raw: str) -> str:
+        """Extrai o trecho JSON de uma resposta de LLM, tolerando code fences.
+
+        Os modelos frequentemente envolvem o JSON em um bloco
+        ```` ```json ... ``` ```` ou adicionam texto antes/depois. Esta função
+        remove as fences e recorta do primeiro `{`/`[` até o último `}`/`]`,
+        suportando tanto objetos quanto arrays JSON.
+
+        Args:
+            raw (str): Texto bruto retornado pelo LLM.
+
+        Returns:
+            str: Substring contendo exclusivamente o JSON.
+
+        Raises:
+            ValueError: Se nenhum delimitador JSON for encontrado.
+        """
+        import re
+
+        text = raw.strip()
+        # Remove code fences tipo ```json ou ``` (com ou sem linguagem).
+        fence = re.match(r"^```[a-zA-Z]*\s*(.*?)\s*```$", text, re.DOTALL)
+        if fence:
+            text = fence.group(1).strip()
+
+        # Localiza o primeiro delimitador de abertura de um valor JSON.
+        opener_pos = min(
+            (i for i, c in enumerate(text) if c in "{["),
+            default=-1,
+        )
+        if opener_pos == -1:
+            raise ValueError(f"JSON não encontrado em: {raw[:200]}")
+
+        opener = text[opener_pos]
+        closer = "}" if opener == "{" else "]"
+
+        # Se há delimitador de fechamento correspondente, recorta até ele.
+        closer_pos = text.find(closer, opener_pos + 1)
+        if closer_pos != -1:
+            blob = text[opener_pos : closer_pos + 1]
+        else:
+            # Resposta truncada (cortada por max_tokens) sem fechamento:
+            # recupera fechando o delimitador aberto e limpando separadores
+            # pendentes (vírgula/dois-pontos no final de uma string incompleta).
+            blob = re.sub(r'[,:"\s]+$', "", text[opener_pos:].rstrip())
+            # Fecha aspas abertas antes de fechar o objeto/array.
+            if blob.count('"') % 2 != 0:
+                blob += '"'
+            blob += closer
+
+        if DebateOrchestrator._is_valid_json(blob):
+            return blob
+
+        # Repara desbalanceamentos restantes (múltiplos delimitadores abertos),
+        # inclusive o delimitador de nível superior (ex.: o ']' de um array
+        # truncado que continha objetos já fechados).
+        blob = re.sub(r"[,:]\s*$", "", blob.rstrip())
+        openers = {c: 0 for c in "{}[]"}
+        for ch in blob:
+            if ch in "{[":
+                openers[ch] += 1
+            elif ch in "}]":
+                peer = "{" if ch == "}" else "["
+                if openers[peer] > 0:
+                    openers[peer] -= 1
+        # Fecha na ordem inversa: primeiro o nível superior, depois internos.
+        suffix = ""
+        if openers["{"] > 0:
+            suffix += "}" * openers["{"]
+        if openers["["] > 0:
+            suffix += "]" * openers["["]
+        repaired = blob + suffix
+        if DebateOrchestrator._is_valid_json(repaired):
+            return repaired
+        raise ValueError(f"JSON não pôde ser recuperado em: {raw[:200]}")
+
     def _parse_hypotheses(self, raw: str) -> list[Hypothesis]:
         """
         Extrai lista de Hypothesis do JSON retornado pelo LLM.
-        Tolerante a texto extra antes/depois do JSON.
+        Tolerante a code fences e a respostas truncadas: se o JSON não puder
+        ser recuperado, extrai cada hipótese via regex dos campos essenciais.
         """
         import json
         import re
 
-        # Extrai o array JSON mesmo que o LLM adicione texto extra
-        match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if not match:
-            raise ValueError(f"JSON de hipóteses não encontrado em: {raw[:200]}")
-        data = json.loads(match.group())
+        try:
+            blob = self._extract_json(raw)
+            data = json.loads(blob)
+        except (ValueError, TypeError):
+            # Fallback tolerante: recupera hipóteses de um JSON incompleto.
+            return self._extract_hypotheses_regex(raw)
+
         hypotheses = []
         for i, item in enumerate(data[: self.MAX_HYPOTHESES]):
             hypotheses.append(
                 Hypothesis(
-                    id=item.get("id", f"H{i+1}"),
+                    id=item.get("id", f"H{i + 1}"),
                     claim=item.get("claim", ""),
                     rationale=item.get("rationale", ""),
                     stance=item.get("stance", "pro"),
@@ -418,15 +509,69 @@ class DebateOrchestrator:
             )
         return hypotheses
 
+    @staticmethod
+    def _extract_hypotheses_regex(raw: str) -> list[Hypothesis]:
+        """Recupera hipóteses de um JSON truncado via regex de campos."""
+        import re
+
+        hyps: list[Hypothesis] = []
+        # Captura blocos "id": "...", "claim": "...", "rationale": "...", "stance": "..."
+        pattern = re.compile(
+            r'"id"\s*:\s*"([^"]*)"\s*,\s*'
+            r'"claim"\s*:\s*"([^"]*)"\s*,\s*'
+            r'"rationale"\s*:\s*"([^"]*)"\s*,\s*'
+            r'"stance"\s*:\s*"([^"]*)"',
+            re.DOTALL,
+        )
+        for i, m in enumerate(pattern.finditer(raw)):
+            hyps.append(
+                Hypothesis(
+                    id=m.group(1) or f"H{i + 1}",
+                    claim=m.group(2),
+                    rationale=m.group(3),
+                    stance=m.group(4),
+                )
+            )
+            if len(hyps) >= DebateOrchestrator.MAX_HYPOTHESES:
+                break
+        return hyps
+
     def _parse_judgment(self, raw: str) -> dict[str, Any]:
         """
         Extrai o veredito do JSON retornado pelo LLM juiz.
-        Tolerante a texto extra antes/depois do JSON.
+        Tolerante a code fences e a respostas truncadas: se o JSON não puder
+        ser recuperado, extrai os campos essenciais (winner/confidence)
+        via regex para still produzir um veredito.
         """
         import json
+
+        try:
+            blob = self._extract_json(raw)
+            return json.loads(blob)
+        except (ValueError, TypeError):
+            return self._extract_judgment_regex(raw)
+
+    @staticmethod
+    def _extract_judgment_regex(raw: str) -> dict[str, Any]:
+        """Recupera winner/confidence de um JSON truncado via regex."""
         import re
 
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not match:
-            raise ValueError(f"JSON de julgamento não encontrado em: {raw[:200]}")
-        return json.loads(match.group())
+        result: dict[str, Any] = {}
+        m_win = re.search(r'"winner"\s*:\s*"([^"]*)"', raw)
+        if m_win:
+            result["winner"] = m_win.group(1)
+        m_conf = re.search(r'"confidence"\s*:\s*([0-9]*\.?[0-9]+)', raw)
+        if m_conf:
+            try:
+                result["confidence"] = float(m_conf.group(1))
+            except ValueError:
+                result["confidence"] = 0.5
+        m_verdict = re.search(r'"verdict"\s*:\s*"([^"]*)"', raw)
+        if m_verdict:
+            result["verdict"] = m_verdict.group(1)
+        m_reason = re.search(r'"reasoning"\s*:\s*"([^"]*)"', raw)
+        if m_reason:
+            result["reasoning"] = m_reason.group(1)
+        if not result:
+            raise ValueError(f"JSON não recuperável em: {raw[:200]}")
+        return result
