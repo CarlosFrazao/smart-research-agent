@@ -95,7 +95,9 @@ def list_generic_feed_ids() -> list[str]:
 
 def list_enabled_generic_feed_ids() -> list[str]:
     """Lista apenas os ``id`` de feeds com ``enabled: true`` no catálogo."""
-    return [fid for fid, defn in _load_feed_catalog().items() if defn.get("enabled", True)]
+    return [
+        fid for fid, defn in _load_feed_catalog().items() if defn.get("enabled", True)
+    ]
 
 
 def _parse_feed_date(raw: str | None) -> datetime | None:
@@ -155,9 +157,7 @@ class GenericFeedSearcher(BaseSearcher):
         """
         feed_def = _load_feed_catalog().get(feed_id)
         if not feed_def:
-            raise ValueError(
-                f"Feed '{feed_id}' não encontrado em generic_feeds.yaml"
-            )
+            raise ValueError(f"Feed '{feed_id}' não encontrado em generic_feeds.yaml")
 
         cfg = dict(config or {})
         timeout = int(feed_def.get("timeout", cfg.get("timeout", 10)))
