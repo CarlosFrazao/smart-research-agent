@@ -24,8 +24,8 @@ Transformar o SRA de uma ferramenta de pesquisa técnica/dev em um **canivete su
 | Fase | Arquivo da Missão | Prioridade | Pré-req | Status |
 |---|---|---|---|---|
 | **Fase 1** | `MISSAO_PARTE4_FASE1_FRESHNESS.md` | 🔴 CRÍTICA (bloqueante) | Plano Parte 3 completo | ✅ Concluída (commit `2842542`) |
-| **Fase 2** | `MISSAO_PARTE4_FASE2_FONTES_NOTICIAS.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída |
-| **Fase 3** | `MISSAO_PARTE4_FASE3_LINEAGEM_ADVERSARIAL.md` | 🟠 Alta | Fases 1 e 2 | ✅ Concluída (commit pendente push) |
+| **Fase 2** | `MISSAO_PARTE4_FASE2_FONTES_NOTICIAS.md` | 🔴 CRÍTICA | Fase 1 | ✅ Concluída (commit `ce5420d` + formatação `73ad931`) |
+| **Fase 3** | `MISSAO_PARTE4_FASE3_LINEAGEM_ADVERSARIAL.md` | 🟠 Alta | Fases 1 e 2 | ✅ Concluída (commit `1a8cabd` no `origin/main`) |
 | **Fase 4** | `MISSAO_PARTE4_FASE4_MONITOR_TRENDING.md` | 🟠 Alta | Fases 1 e 2 | ✅ Concluída (commit no `origin/main` do repo SRA) |
 | **Fase 5** | `MISSAO_PARTE4_FASE5_ROTEAMENTO_POLIMENTO.md` | 🟡 Média (polimento final) | Fases 1-4 | ✅ Concluída (commit no `origin/main` do repo SRA) |
 
