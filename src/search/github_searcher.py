@@ -249,12 +249,147 @@ class GitHubSearcher(BaseSearcher):
 
         return results
 
+    def _normalize_code_query(self, query: str) -> str:
+        """Normaliza uma query livre (ex.: pergunta em português) para a API de
+        Code Search do GitHub.
+
+        A API de code search é sensível a caracteres não-ASCII, parênteses,
+        aspas e a queries muito longas — retornando 422 (Unprocessable Entity)
+        quando recebe a pergunta bruta do usuário. Esta função:
+          1. Remove acentos (NFKD) e caracteres não-ASCII.
+          2. Remove pontuação/parênteses.
+          3. Descarta stop words e limita a ~8 termos técnicos.
+          4. Trunca o resultado em ~100 caracteres (limite prático da API).
+
+        Returns:
+            str: Query ASCII, minúscula e válida para ``api.github.com/search/code``.
+        """
+        import re
+        import unicodedata
+
+        # 1. Remover acentos e normalizar para ASCII
+        ascii_query = (
+            unicodedata.normalize("NFKD", query)
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+
+        # 2. Remover pontuação, parênteses e múltiplos espaços
+        ascii_query = re.sub(r"[^\w\s]", " ", ascii_query)
+        ascii_query = re.sub(r"\s+", " ", ascii_query).strip()
+
+        # 3. Filtrar stop words e manter apenas termos técnicos relevantes
+        stop_words = {
+            "de",
+            "do",
+            "da",
+            "dos",
+            "das",
+            "o",
+            "a",
+            "os",
+            "as",
+            "em",
+            "no",
+            "na",
+            "nos",
+            "nas",
+            "para",
+            "por",
+            "com",
+            "sem",
+            "que",
+            "e",
+            "ou",
+            "um",
+            "uma",
+            "uns",
+            "umas",
+            "to",
+            "the",
+            "for",
+            "with",
+            "and",
+            "or",
+            "in",
+            "on",
+            "using",
+            "by",
+            "from",
+            "how",
+            "which",
+            "of",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "analise",
+            "analyse",
+            "analisar",
+            "mapeie",
+            "mapear",
+            "identifique",
+            "identify",
+            "compare",
+            "comparing",
+            "resolve",
+            "resolver",
+            "design",
+            "occurrences",
+            "ocorridas",
+            "ocorridas",
+            "entre",
+            "between",
+            "final",
+            "sobre",
+            "about",
+            "como",
+            "comportamento",
+            "behavior",
+            "apply",
+            "aplicar",
+            "own",
+            "proprio",
+            "proprio",
+            "discussions",
+            "discusses",
+            "discuss",
+            "issues",
+            "changes",
+            "alteracoes",
+            "alteracoes",
+            "learn",
+            "lessons",
+            "licoes",
+            "learned",
+            "aprendidas",
+        }
+        words = [w for w in ascii_query.lower().split() if w not in stop_words]
+
+        # 4. Limitar a 8 termos mais significativos (evita 422 por query longa)
+        if len(words) > 8:
+            words = words[:8]
+
+        cleaned = " ".join(words)
+        if not cleaned:
+            cleaned = ascii_query[:50]
+
+        # 5. Truncar para respeitar limite prático da API de code search
+        return cleaned[:100].strip()
+
     async def search_code(
         self, query: str, language: str | None = None
     ) -> list[SearchResult]:
-        """Code Search via GitHub API — busca conteúdo dentro de arquivos."""
+        """Code Search via GitHub API — busca conteúdo dentro de arquivos.
+
+        A query é normalizada (remoção de acentos/pontuação, stop words e
+        truncagem) para evitar o erro 422 (Unprocessable Entity) que a API
+        retorna quando recebe a pergunta bruta do usuário em português.
+        """
         code_search_url = "https://api.github.com/search/code"
-        q = f"{query} language:{language}" if language else query
+        normalized = self._normalize_code_query(query)
+        q = f"{normalized} language:{language}" if language else normalized
 
         headers = {
             "Accept": "application/vnd.github.v3+json",
