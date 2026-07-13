@@ -119,7 +119,11 @@ class StageFactory:
 
         from src.memory.knowledge_graph import KnowledgeGraph
 
-        orchestrator.knowledge_graph = KnowledgeGraph(config)
+        # OPÇÃO A: reaproveitar a conexão KuzuDB já aberta pelo OrvixMemory
+        # (em vez de abrir o mesmo kuzu.db uma segunda vez no mesmo processo,
+        # o que causava o lock "está bloqueado após múltiplas tentativas").
+        kuzu_conn = getattr(orchestrator.memory, "kuzu_conn", None)
+        orchestrator.knowledge_graph = KnowledgeGraph(config, kuzu_conn=kuzu_conn)
 
         from src.intent_analyzer import IntentAnalyzer
         from src.query_expander import QueryExpander

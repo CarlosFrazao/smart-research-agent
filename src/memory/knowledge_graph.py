@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from src.knowledge_graph import SemanticKnowledgeGraph, Triple
 
@@ -28,7 +28,7 @@ class KnowledgeGraph(SemanticKnowledgeGraph):
     retrocompatibilidade com os testes existentes em test_bloco8_arquitetura.py.
     """
 
-    def __init__(self, config: Any):
+    def __init__(self, config: Any, kuzu_conn: Optional[Any] = None):
         """
         Inicializa a conexão KuzuDB.
 
@@ -40,6 +40,21 @@ class KnowledgeGraph(SemanticKnowledgeGraph):
         self._config = config
         self._enabled = True
         self._driver = None  # mantido para retrocompatibilidade com testes
+
+        # Se uma conexão KuzuDB já existente foi passada (ex.: criada pelo
+        # OrvixMemory), reaproveitá-la em vez de abrir o banco novamente.
+        # Isso evita a dupla abertura do mesmo arquivo kuzu.db no mesmo
+        # processo, que causava o lock "está bloqueado após múltiplas
+        # tentativas" no Windows.
+        if kuzu_conn is not None:
+            self.kuzu_conn = kuzu_conn
+            self.kuzu_db = getattr(kuzu_conn, "_db", None)
+            super().__init__(kuzu_conn=self.kuzu_conn, llm_client=None)
+            logger.info(
+                "KnowledgeGraph (KuzuDB): conexão reutilizada de '%s'.",
+                getattr(config, "kuzu_data_path", "kuzu_data"),
+            )
+            return
 
         # Resolver o caminho do banco de dados
         kuzu_path = getattr(config, "kuzu_data_path", None) or os.environ.get(
