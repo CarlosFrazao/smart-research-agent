@@ -666,6 +666,23 @@ def trace_pipeline_stage(stage_name: str):
 # ─── Aliases de Compatibilidade ──────────────────────────────────────────────
 trace_llm_call = trace_llm
 
+
+# Async context manager especializado para chamadas de busca (CLIENT span).
+# Usado por search_service.py como: async with trace_search_call(source, query):
+@asynccontextmanager
+async def trace_search_call(source_name: str, query: str = ""):
+    """Async context manager para instrumentar chamadas de busca (CLIENT span)."""
+    attributes = {
+        "component": "search",
+        "search.source": str(source_name),
+        "search.query": str(query),
+    }
+    with trace_block(
+        name=f"search.{source_name}", kind=SpanKind.CLIENT, attributes=attributes
+    ) as span:
+        yield span
+
+
 from contextlib import asynccontextmanager
 
 
