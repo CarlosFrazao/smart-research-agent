@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from src.config_loader import load_scoring_weights
 from src.types import RankedResult, SearchResult
 
 logger = logging.getLogger("ranking.hybrid_ranker")
@@ -111,6 +112,7 @@ class HybridRankerConfig:
     freshness_boost_days: float = 30.0
 
     def __post_init__(self) -> None:
+        self._apply_yaml_weights()
         total = (
             self.bm25_weight
             + self.embedding_weight
@@ -125,6 +127,40 @@ class HybridRankerConfig:
             self.embedding_weight /= total
             self.heuristic_weight /= total
             self.llm_weight /= total
+
+    def _apply_yaml_weights(self) -> None:
+        """Aplica pesos de ``config/scoring_weights.yaml`` sobre os defaults.
+
+        Lê a seção ``weights:`` do YAML (carregada com cache por
+        ``load_scoring_weights``). Cada peso só é sobrescrito se vier como número
+        e for diferente do valor atual — preservando os defaults hardcoded
+        quando o YAML está ausente, vazio ou com tipos inválidos. Em caso de
+        sucesso, loga os valores efetivamente aplicados (prova de vida do
+        Bloco 2: editar o YAML reflete no log do ranker sem tocar em Python).
+        """
+        weights = load_scoring_weights().get("weights")
+        if not isinstance(weights, dict):
+            return  # YAML ausente/sem seção weights -> mantém defaults
+
+        overwritten: dict[str, float] = {}
+        mapping: tuple[tuple[str, str, float], ...] = (
+            ("bm25", "bm25_weight", DEFAULT_BM25_WEIGHT),
+            ("embedding", "embedding_weight", DEFAULT_EMBEDDING_WEIGHT),
+            ("heuristic", "heuristic_weight", DEFAULT_HEURISTIC_WEIGHT),
+            ("llm", "llm_weight", DEFAULT_LLM_WEIGHT),
+        )
+        for yaml_key, attr, default_value in mapping:
+            value = weights.get(yaml_key, None)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                if value != default_value:
+                    overwritten[yaml_key] = float(value)
+                setattr(self, attr, float(value))
+
+        if overwritten:
+            logger.info(
+                "HybridRankerConfig: pesos aplicados de scoring_weights.yaml: %s",
+                {k: round(v, 4) for k, v in overwritten.items()},
+            )
 
 
 # ── Dataclasses internas ─────────────────────────────────────────────────────
@@ -198,9 +234,10 @@ class HybridRanker:
         self.semantic_scorer = semantic_scorer
         self.pre_filter_top_n = pre_filter_top_n
         self.weights = weights or {
-            "heuristic": DEFAULT_HEURISTIC_WEIGHT,
-            "bm25": DEFAULT_BM25_WEIGHT,
-            "embedding": DEFAULT_EMBEDDING_WEIGHT,
+            "heuristic": self.config.heuristic_weight,
+            "bm25": self.config.bm25_weight,
+            "embedding": self.config.embedding_weight,
+            "llm": self.config.llm_weight,
         }
 
     # ── API Pública ─────────────────────────────────────────────────────────

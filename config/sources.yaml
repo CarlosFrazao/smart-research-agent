@@ -1,13 +1,11 @@
-# AVISO: Este arquivo é documentação de referência de design, NÃO é carregado por nenhum código.
-# Os searchers e seus timeouts/max_results são instanciados pela SearcherFactory
-# (src/search/factory.py) com valores hardcoded/derivados de config.py, não a partir daqui.
-# Para alterar comportamento real de uma fonte, edite: src/search/factory.py e src/config.py.
-# Issue de rastreamento: conectar este YAML ao código é tarefa futura planejada
-# (ver MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md — Tarefa 2.1, Opção B).
+# CONFIGURAÇÃO RUNTIME DE FONTES (Bloco 2 / E2-T1 — SRA v7.0)
 #
-# Observação de design (2026-07-09):
-#   Mantido como documentação de capacidades de cada fonte. NÃO remova sem migrar os valores
-#   para a SearcherFactory, sob risco de quem editar aqui achar que muda o comportamento.
+# A flag `enabled` de cada fonte é LIDA EM RUNTIME por
+# `src/config_loader.get_source_enabled()` e aplicada na `SearcherFactory`
+# (src/search/factory.py): definir `enabled: false` desliga a fonte sem editar
+# Python. As chaves `timeout`/`max_results`/`base_url` são DOCUMENTAÇÃO de
+# capacidades (a fábrica ainda deriva esses valores de config.py); mantidas
+# para referência. Para reabilitar uma fonte, troque para `enabled: true`.
 
 sources:
   github:

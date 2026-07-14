@@ -372,6 +372,27 @@ class SearcherFactory:
         except Exception as _e:
             logger.warning("Não foi possível carregar generic_feeds.yaml: %s", _e)
 
+        # ── Bloco 2 (E2-T1): respeitar flag enabled:false em sources.yaml ──
+        # Permite desligar uma fonte em runtime sem editar o factory: basta
+        # definir `sources.<id>.enabled: false` em config/sources.yaml.
+        # Searchers cujo registro acima decorre de credenciais ausentes (ex:
+        # notion/confluence/sharepoint) não estão em sources.yaml e permanecem
+        # comportamento original (só existem se a chave estiver presente).
+        try:
+            from src.config_loader import get_source_enabled
+
+            disabled = [
+                name for name in list(searchers.keys()) if not get_source_enabled(name)
+            ]
+            for name in disabled:
+                logger.info(
+                    "Searcher '%s' desabilitado via config/sources.yaml (enabled:false)",
+                    name,
+                )
+                del searchers[name]
+        except Exception as _e:
+            logger.warning("Falha ao aplicar enabled:false de sources.yaml: %s", _e)
+
         return searchers
 
     @classmethod
