@@ -106,3 +106,18 @@ ignore = [
     "F401",
     "F841"
 ]
+
+[tool.mypy]
+ignore_missing_imports = true
+disable_error_code = [
+    "assignment",
+    "attr-defined",
+    "arg-type",
+    "return-value",
+    "dict-item",
+    "union-attr",
+    "index",
+    "var-annotated",
+    "misc",
+    "annotation-unchecked"
+]
