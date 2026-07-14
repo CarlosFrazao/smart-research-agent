@@ -9,7 +9,7 @@ domains:
     github_qualifiers: "stars:>100 sort:updated"
   ai_ml:
     primary: [arxiv, github, notion, rss, searxng]
-    secondary: [reddit, confluence, sharepoint, firecrawl, producthunt, open_library, core_ac_uk, doaj, openalex]
+    secondary: [reddit, confluence, sharepoint, firecrawl, producthunt, open_library, core_ac_uk, doaj, openalex, pubmed]
   automation:
     primary: [github, confluence, notion, sharepoint]
     secondary: [hackernews, awesome, firecrawl, rss, searxng]
@@ -21,7 +21,7 @@ domains:
     secondary: [notion, confluence, sharepoint, reddit, producthunt]
   general:
     primary: [github, notion, confluence, searxng]
-    secondary: [sharepoint, producthunt, arxiv, awesome, stackoverflow, wayback, open_library]
+    secondary: [sharepoint, producthunt, arxiv, awesome, stackoverflow, wayback, open_library, pubmed]
   universal:
     description: "Busca de propósito geral — internet ampla, fatos, notícias, cultura"
     primary:

@@ -131,7 +131,11 @@ class SearcherFactory:
             }
             searchers["firecrawl"] = JinaSearcher(jina_cfg)
         else:
-            searchers["firecrawl"] = FirecrawlSearcher(cfg)
+            firecrawl = FirecrawlSearcher(cfg)
+            # GAP 1: cascata resiliente — token 401 (auth_failed) delega ao
+            # WebSearcher em vez de retornar lista vazia silenciosamente.
+            firecrawl.web_fallback = searchers.get("web")
+            searchers["firecrawl"] = firecrawl
 
         # Spider
         if orchestrator.config.spider_enabled:

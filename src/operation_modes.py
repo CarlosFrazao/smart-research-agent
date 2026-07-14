@@ -227,6 +227,31 @@ class OperationModes:
             enable_debate=True,
             active_personas=["prism_scientist"],
         ),
+        # ── GAP 2: modo acadêmico/biomédico ───────────────────────────────────
+        "academico": OperationConfig(
+            name="academico",
+            description="Pesquisa acadêmica e biomédica — PubMed, arXiv, Semantic Scholar e web. "
+            "Ideal para literatura científica, ensaios clínicos, revisões sistemáticas e "
+            "fundamentação teórica. Torna o PubMed alcançável via CLI (ver PLANO_FECHAR_GAPS.md).",
+            searchers=[
+                "pubmed",
+                "arxiv",
+                "semantic_scholar",
+                "web",
+                "searxng",
+            ],
+            scrapers=["firecrawl", "jina"],
+            confidence_threshold=0.80,
+            max_depth=3,
+            enable_auditor=True,
+            enable_race=True,
+            proxy_strategy="rotate_careful",
+            cache_strategy="minimal",
+            timeout_seconds=300,
+            cost_optimization=False,
+            active_personas=["prism_scientist"],
+            enable_adversarial_pass=True,
+        ),
     }
 
     # Modo padrão quando nenhum modo é especificado
@@ -344,6 +369,33 @@ class OperationModes:
         ):
             selected = "black_ops"
 
+        elif any(
+            kw in q
+            for kw in [
+                "pubmed",
+                "médico",
+                "medico",
+                "clínico",
+                "clinico",
+                "clinical",
+                "trial",
+                "ensaios",
+                "ensayo",
+                "biomed",
+                "biomédico",
+                "biomedico",
+                "doi",
+                "health",
+                "saúde",
+                "saude",
+                "literatura",
+                "systematic review",
+                "revisão sistemática",
+                "revisao sistematica",
+            ]
+        ):
+            selected = "academico"
+
         if selected not in cls.MODES:
             logger.warning(
                 f"OperationModes.auto_select selecionou preset inválido '{selected}'. Fallback para '{cls.DEFAULT_MODE}'."
@@ -382,15 +434,27 @@ class OperationModes:
                 )
             if cfg.proxy_strategy not in (
                 "rotate",
+                "rotate_fast",
+                "rotate_careful",
+                "all_proxies",
                 "fixed",
                 "direct",
                 "vps_first",
+                "static",
                 "none",
             ):
                 errors.append(
                     f"Modo '{mode_name}': proxy_strategy='{cfg.proxy_strategy}' não é um valor reconhecido."
                 )
-            if cfg.cache_strategy not in ("always", "smart", "never"):
+            if cfg.cache_strategy not in (
+                "always",
+                "smart",
+                "never",
+                "minimal",
+                "aggressive",
+                "moderate",
+                "permanent",
+            ):
                 errors.append(
                     f"Modo '{mode_name}': cache_strategy='{cfg.cache_strategy}' deve ser 'always', 'smart' ou 'never'."
                 )

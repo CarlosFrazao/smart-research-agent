@@ -46,6 +46,34 @@ class FirecrawlClient:
         # Inicializa o ScrapingRaceClient de forma preguiçosa
         self._race_client = None
 
+        # Flag de auth: quando True, o token é inválido/expirado (ex.: 401).
+        # Evita retries infinitos e sinaliza ao searcher pai que deve cascatear
+        # para o web_fallback (ver GAP 1 do PLANO_FECHAR_GAPS.md).
+        self.auth_failed: bool = False
+
+    @staticmethod
+    def _is_auth_error(exc: Exception) -> bool:
+        """Detecta erro de autenticação (token inválido/expirado) em uma exceção.
+
+        Reconhece 401, mensagens de unauthorized, api key inválida e
+        autenticação genérica — cobrindo o caso real do stress test
+        (``401 Unauthorized`` com FIRECRAWL_API_KEY configurado).
+        """
+        msg = str(exc).lower()
+        return any(
+            k in msg
+            for k in (
+                "401",
+                "unauthorized",
+                "unauthenticated",
+                "invalid api key",
+                "api key",
+                "authentication",
+                "forbidden",
+                "403",
+            )
+        )
+
     @property
     def race_client(self):
         if self._race_client is None:
@@ -139,6 +167,13 @@ class FirecrawlClient:
             )
             return self._normalize_search_results(results)
         except Exception as e:
+            if self._is_auth_error(e):
+                self.auth_failed = True
+                logger.error(
+                    f"Firecrawl: token inválido/expirado (401/unauthorized). "
+                    f"Desativando e sinalizando fallback. Erro: {e}"
+                )
+                return []
             logger.warning(
                 f"Busca Firecrawl com parâmetros estendidos falhou ({e}). Tentando busca simples..."
             )
@@ -151,6 +186,12 @@ class FirecrawlClient:
                 )
                 return self._normalize_search_results(results)
             except Exception as e2:
+                if self._is_auth_error(e2):
+                    self.auth_failed = True
+                    logger.error(
+                        f"Firecrawl: token inválido/expirado (401/unauthorized). "
+                        f"Desativando e sinalizando fallback. Erro: {e2}"
+                    )
                 logger.error(
                     f"Firecrawl search erro (todos os retries esgotados): {e2}"
                 )

@@ -18,6 +18,7 @@ Retry com backoff exponencial:
 import asyncio
 import json
 import logging
+import re
 from enum import StrEnum
 from typing import Any, TypeVar
 
@@ -679,26 +680,106 @@ class LLMClient:
 
     # ── Geração estruturada (JSON) ────────────────────────────────────────────
 
+    @staticmethod
+    def _extract_json_blob(text: str) -> str | None:
+        """Extrai um fragmento JSON (objeto ou array) de um texto possivelmente sujo.
+
+        Remove cercas ```json/```, e se ainda não for JSON puro, tenta
+        capturar o primeiro bloco delimitado por ``[...]`` ou ``{...}`` via
+        regex (com suporte a aninhamento superficial). Retorna ``None`` se
+        nenhum JSON viável for encontrado.
+        """
+        if not text:
+            return None
+        candidate = text.strip()
+        for fence in ("```json", "```"):
+            if candidate.startswith(fence):
+                candidate = candidate[len(fence) :]
+        if candidate.endswith("```"):
+            candidate = candidate[: -len("```")]
+        candidate = candidate.strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+        # Tenta extrair array/objeto do meio de texto solto
+        for pattern in (r"\[.*\]", r"\{.*\}"):
+            match = re.search(pattern, candidate, re.DOTALL)
+            if match:
+                blob = match.group(0).strip()
+                try:
+                    json.loads(blob)
+                    return blob
+                except json.JSONDecodeError:
+                    continue
+        return None
+
     async def generate_structured(
         self, prompt: str, schema: dict[str, Any], temperature: float = 0.1
-    ) -> dict[str, Any]:
+    ) -> Any:
+        """Gera saída estruturada em JSON, resiliente a respostas não-JSON.
+
+        Estratégia (ver GAP 3 do PLANO_FECHAR_GAPS.md):
+        1. Solicita JSON puro ao modelo.
+        2. Extrai o blob JSON mesmo se houver markdown/ruído (``_extract_json_blob``).
+        3. Em falha de parse, faz 1 retry com prompt de reparo.
+        4. Em falha definitiva, retorna um fallback seguro
+           (``[]`` para schema ``array``, ``{}`` para schema ``object``)
+           em vez de estourar ``JSONDecodeError`` para o caller.
+
+        Args:
+            prompt: Instrução para o modelo.
+            schema: Esquema JSON esperado (``{"type": "array" | "object", ...}``).
+            temperature: Temperatura de amostragem.
+
+        Returns:
+            Objeto Python decodificado do JSON (list/dict), ou fallback seguro.
+        """
+        is_array = schema.get("type") == "array"
+        safe_fallback: Any = [] if is_array else {}
+
         json_prompt = (
             prompt
             + "\n\nResponda APENAS em JSON valido seguindo este schema: "
             + json.dumps(schema, ensure_ascii=False)
             + "\nNao inclua markdown, apenas JSON puro."
         )
-        response = await self.generate(json_prompt, temperature=temperature)
 
-        response = response.strip()
-        for fence in ("```json", "```"):
-            if response.startswith(fence):
-                response = response[len(fence) :]
-        if response.endswith("```"):
-            response = response[:-3]
-        response = response.strip()
+        last_response: str = ""
+        for attempt in range(self.max_repair_attempts + 1):
+            if attempt == 0:
+                instruction = json_prompt
+            else:
+                instruction = (
+                    f"{json_prompt}\n\nSua resposta anterior NAO foi um JSON valido. "
+                    f"Responda APENAS o JSON puro, sem texto adicional nem markdown."
+                )
+            try:
+                response = await self.generate(instruction, temperature=temperature)
+            except Exception as exc:
+                logger.warning(f"generate_structured: falha de rede/LLM: {exc}")
+                return safe_fallback
+            last_response = response or ""
+            blob = self._extract_json_blob(last_response)
+            if blob is not None:
+                try:
+                    return json.loads(blob)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"generate_structured: JSON extraído inválido (tentativa {attempt + 1})"
+                    )
+            else:
+                logger.warning(
+                    f"generate_structured: nenhum JSON encontrado na resposta "
+                    f"(tentativa {attempt + 1}): {last_response[:80]!r}"
+                )
 
-        return json.loads(response)
+        logger.error(
+            "generate_structured: falha definitiva ao obter JSON válido. "
+            "Retornando fallback seguro."
+        )
+        return safe_fallback
 
     # ── Geração estruturada nativa Pydantic (com Tenacity e Reparo) ──────────
 
