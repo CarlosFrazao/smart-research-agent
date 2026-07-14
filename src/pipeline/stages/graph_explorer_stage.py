@@ -110,9 +110,7 @@ class GraphExplorerStage(PipelineStage):
             return context
 
         new_queries = report.to_expanded_queries()
-        existing_texts = {
-            getattr(q, "query", str(q)) for q in context.expanded_queries
-        }
+        existing_texts = {getattr(q, "query", str(q)) for q in context.expanded_queries}
         appended = 0
         for eq in new_queries:
             if eq.query not in existing_texts:

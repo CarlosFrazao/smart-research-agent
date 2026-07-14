@@ -278,7 +278,7 @@ class ConfidenceScorer:
         words = text.lower().split()
         if len(words) < 20:
             return False
-        bigrams = [f"{words[i]} {words[i+1]}" for i in range(len(words) - 1)]
+        bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
         if not bigrams:
             return False
         unique_ratio = len(set(bigrams)) / len(bigrams)

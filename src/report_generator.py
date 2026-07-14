@@ -442,7 +442,7 @@ class ReportGenerator:
                 )
 
             top_lines_list.append(
-                f"{i+1}. {confidence_tag} {r.title or '(sem título)'} "
+                f"{i + 1}. {confidence_tag} {r.title or '(sem título)'} "
                 f"({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n"
                 f"   {desc_label}: {(r.description or '')[:200]}\n"
                 f"   {highlights_label}: {', '.join(h for h in r.highlights if h)}\n"
@@ -574,7 +574,7 @@ class ReportGenerator:
                 else tags["default"]
             )
             top_lines_list.append(
-                f"{i+1}. {confidence_tag} {r.title or '(sem título)'} ({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n   {(r.description or '')[:200]}..."
+                f"{i + 1}. {confidence_tag} {r.title or '(sem título)'} ({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n   {(r.description or '')[:200]}..."
             )
         top_lines = "\n".join(top_lines_list)
 
@@ -673,7 +673,7 @@ class ReportGenerator:
                 strong_label, metrics_label = "Pontos fortes", "Métricas"
 
             top_lines_list.append(
-                f"{i+1}. {confidence_tag} {r.title or '(sem título)'}\n   {strong_label}: {', '.join(h for h in r.highlights if h)}\n   {metrics_label}: {r.metrics}"
+                f"{i + 1}. {confidence_tag} {r.title or '(sem título)'}\n   {strong_label}: {', '.join(h for h in r.highlights if h)}\n   {metrics_label}: {r.metrics}"
             )
         top_lines = "\n".join(top_lines_list)
 
@@ -1115,7 +1115,7 @@ class ReportGenerator:
                     )
 
             entry_lines = [
-                f"### 2.{i+1} {r.title or '(sem título)'}",
+                f"### 2.{i + 1} {r.title or '(sem título)'}",
             ]
 
             if verdict_display:

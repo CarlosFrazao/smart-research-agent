@@ -339,8 +339,7 @@ class FallbackManager:
                     metrics.fallback_failure += 1
 
                 logger.warning(
-                    f"FallbackManager: '{action.name}' falhou: {e} "
-                    f"({latency:.1f}ms)"
+                    f"FallbackManager: '{action.name}' falhou: {e} ({latency:.1f}ms)"
                 )
 
         # Todas as alternativas falharam

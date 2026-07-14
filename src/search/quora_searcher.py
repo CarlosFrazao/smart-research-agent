@@ -58,7 +58,12 @@ class QuoraSearcher(ScrapingSearcher):
             busca degrada graciosamente para lista vazia.
     """
 
-    def __init__(self, config: dict[str, Any], scrapers: dict[str, Any] | None = None, **kwargs: Any):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        scrapers: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ):
         # Timeout mais curto: scraping do Quora é lento e sujeito a bloqueio
         config = dict(config)
         config.setdefault("timeout", 15.0)
@@ -86,7 +91,9 @@ class QuoraSearcher(ScrapingSearcher):
         try:
             scraped = await self._scrape_url(url)
         except ScrapingError as e:
-            logger.warning(f"QuoraSearcher: cascata de scraping falhou para '{query}': {e}")
+            logger.warning(
+                f"QuoraSearcher: cascata de scraping falhou para '{query}': {e}"
+            )
             return []
         except Exception as e:
             logger.warning(f"QuoraSearcher: erro de scraping para '{query}': {e}")
@@ -126,7 +133,11 @@ class QuoraSearcher(ScrapingSearcher):
         for href, inner in _ANCHOR_RE.findall(html_content):
             if not _QUORA_QUESTION_RE.search(href or ""):
                 continue
-            abs_url = href if href.startswith("http") else urllib.parse.urljoin(base_url, href)
+            abs_url = (
+                href
+                if href.startswith("http")
+                else urllib.parse.urljoin(base_url, href)
+            )
             if abs_url in seen_urls:
                 continue
             title = _WS_RE.sub(" ", _strip_tags(inner)).strip()
@@ -202,6 +213,6 @@ def _extract_snippet(html_content: str, href: str, inner: str) -> str:
     close_idx = html_content.find("</a>", idx)
     if close_idx == -1:
         close_idx = idx + len(inner)
-    after = html_content[close_idx + len("</a>"): close_idx + len("</a>") + 400]
+    after = html_content[close_idx + len("</a>") : close_idx + len("</a>") + 400]
     snippet = _WS_RE.sub(" ", _strip_tags(after)).strip()
     return html.unescape(snippet)[:300]

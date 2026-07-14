@@ -15,7 +15,9 @@ from src.types import SearchResult
 
 logger = logging.getLogger("search.google_patents")
 
-GOOGLE_PATENTS_SEARCH_URL = "https://patents.google.com/xhr/query?url=q%3D{query_encoded}&exp=&download=false"
+GOOGLE_PATENTS_SEARCH_URL = (
+    "https://patents.google.com/xhr/query?url=q%3D{query_encoded}&exp=&download=false"
+)
 
 
 @register_searcher("google_patents", enabled_env="SRA_PATENTS_ENABLED", trusted=False)
@@ -62,7 +64,9 @@ class GooglePatentsSearcher(ScrapingSearcher):
         try:
             raw = await self._scrape_url(url)
             results = self._parse_patents(raw, query)
-            logger.debug(f"GooglePatentsSearcher: {len(results)} patentes para '{query}'")
+            logger.debug(
+                f"GooglePatentsSearcher: {len(results)} patentes para '{query}'"
+            )
             return results[: self.max_results]
         except Exception as e:
             logger.warning(f"GooglePatentsSearcher falhou para '{query}': {e}")
@@ -92,7 +96,11 @@ class GooglePatentsSearcher(ScrapingSearcher):
     def _extract_from_metadata(self, meta: Dict[str, Any]) -> Dict[str, Any] | None:
         """Tenta extrair dados de patente de metadata estruturada."""
         # Procura por campos comuns de patentes
-        patent_id = meta.get("patent_id") or meta.get("patentId") or meta.get("publicationNumber")
+        patent_id = (
+            meta.get("patent_id")
+            or meta.get("patentId")
+            or meta.get("publicationNumber")
+        )
         title = meta.get("title") or meta.get("patentTitle")
         abstract = meta.get("abstract") or meta.get("patentAbstract")
         url = meta.get("url") or meta.get("patentUrl")
@@ -125,14 +133,16 @@ class GooglePatentsSearcher(ScrapingSearcher):
         for patent_id, title in matches[:10]:
             if not title.strip():
                 continue
-            result = self.normalize({
-                "patent_id": patent_id,
-                "title": title.strip(),
-                "abstract": "",
-                "url": f"https://patents.google.com/patent/{patent_id}/en",
-                "assignee": "",
-                "filing_date": "",
-            })
+            result = self.normalize(
+                {
+                    "patent_id": patent_id,
+                    "title": title.strip(),
+                    "abstract": "",
+                    "url": f"https://patents.google.com/patent/{patent_id}/en",
+                    "assignee": "",
+                    "filing_date": "",
+                }
+            )
             results.append(result)
 
         return results

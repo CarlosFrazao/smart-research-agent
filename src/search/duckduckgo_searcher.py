@@ -61,7 +61,9 @@ class DuckDuckGoSearcher(APISearcher):
         try:
             data = await self._make_request("GET", "/", params=params)
             results = self._parse_response(data)
-            logger.debug(f"DuckDuckGoSearcher: {len(results)} resultados para '{query}'")
+            logger.debug(
+                f"DuckDuckGoSearcher: {len(results)} resultados para '{query}'"
+            )
             return results
         except Exception as e:
             logger.warning(f"DuckDuckGoSearcher falhou para '{query}': {e}")
@@ -87,7 +89,7 @@ class DuckDuckGoSearcher(APISearcher):
             return results
 
         # Processa RelatedTopics (pode ser lista ou dict com sub-results)
-        for topic in related_topics[:self.max_results]:
+        for topic in related_topics[: self.max_results]:
             if isinstance(topic, dict):
                 if "Topics" in topic:
                     # Subcategorias aninhadas

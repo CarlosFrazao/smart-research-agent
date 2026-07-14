@@ -22,7 +22,9 @@ MERCADOLIVRE_BASE_URL = "https://api.mercadolibre.com"
 MERCADOLIVRE_SITE = "MLB"
 
 
-@register_searcher("mercadolivre", enabled_env="SRA_MERCADOLIVRE_ENABLED", trusted=False)
+@register_searcher(
+    "mercadolivre", enabled_env="SRA_MERCADOLIVRE_ENABLED", trusted=False
+)
 class MercadoLivreSearcher(APISearcher):
     """Searcher de produtos do MercadoLivre via API pública.
 
@@ -71,9 +73,7 @@ class MercadoLivreSearcher(APISearcher):
             data = await self._make_request("GET", self._search_path, params=params)
             results = data.get("results", []) if isinstance(data, dict) else []
             parsed = [self.normalize(r) for r in results if isinstance(r, dict)]
-            logger.debug(
-                f"MercadoLivreSearcher: {len(parsed)} produtos para '{query}'"
-            )
+            logger.debug(f"MercadoLivreSearcher: {len(parsed)} produtos para '{query}'")
             return parsed[: self.max_results]
         except Exception as e:
             logger.warning(f"MercadoLivreSearcher falhou para '{query}': {e}")

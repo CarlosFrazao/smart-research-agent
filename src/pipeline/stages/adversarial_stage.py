@@ -118,13 +118,13 @@ class AdversarialPassStage(PipelineStage):
         try:
             adversarial_results = await self._run_search(adversarial_query, context)
         except Exception as exc:  # noqa: BLE001 - busca nunca deve quebrar o pipeline
-            logger.warning(
-                "AdversarialPassStage: falha na busca adversarial: %s", exc
-            )
+            logger.warning("AdversarialPassStage: falha na busca adversarial: %s", exc)
             return context
 
         if not adversarial_results:
-            logger.info("AdversarialPassStage: nenhum resultado adversarial encontrado.")
+            logger.info(
+                "AdversarialPassStage: nenhum resultado adversarial encontrado."
+            )
             return context
 
         # 4. Marca e injeta como evidência de primeira classe.
@@ -145,10 +145,10 @@ class AdversarialPassStage(PipelineStage):
     @staticmethod
     def _adversarial_enabled(context: PipelineContext) -> bool:
         """Lê ``enable_adversarial_pass`` do modo de operação via orchestrator."""
-        orchestrator = (
-            context.extras.get("orchestrator") if context.extras else None
+        orchestrator = context.extras.get("orchestrator") if context.extras else None
+        op_mode = (
+            getattr(orchestrator, "operation_mode", None) if orchestrator else None
         )
-        op_mode = getattr(orchestrator, "operation_mode", None) if orchestrator else None
         return bool(getattr(op_mode, "enable_adversarial_pass", False))
 
     def _summarize_top_results(
@@ -200,9 +200,7 @@ class AdversarialPassStage(PipelineStage):
         estiver disponível, tenta busca direta pelos searchers do orchestrator.
         """
         search_stage = self._search_stage
-        orchestrator = (
-            context.extras.get("orchestrator") if context.extras else None
-        )
+        orchestrator = context.extras.get("orchestrator") if context.extras else None
 
         if search_stage is not None:
             searchers = getattr(search_stage, "searchers", None) or (
@@ -218,7 +216,9 @@ class AdversarialPassStage(PipelineStage):
 
                 plan = SourcePlan(
                     sources={
-                        name: [ExpandedQuery(query=adversarial_query, type="adversarial")]
+                        name: [
+                            ExpandedQuery(query=adversarial_query, type="adversarial")
+                        ]
                         for name in searchers
                     }
                 )
@@ -237,9 +237,7 @@ class AdversarialPassStage(PipelineStage):
                 await search_stage.run(adv_ctx)
                 return list(adv_ctx.ranked_results or [])
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "AdversarialPassStage: SearchStage falhou: %s", exc
-                )
+                logger.warning("AdversarialPassStage: SearchStage falhou: %s", exc)
                 return []
 
         # Fallback: busca direta pelos searchers se não houver SearchStage.
@@ -256,6 +254,7 @@ class AdversarialPassStage(PipelineStage):
         import asyncio
 
         domain = ""
+
         async def _one(source_name: str, searcher: Any) -> None:
             try:
                 found = await asyncio.wait_for(

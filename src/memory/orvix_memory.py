@@ -35,6 +35,7 @@ os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 
 try:
     import chromadb
+
     _CHROMADB_AVAILABLE = True
 except Exception:  # noqa: BLE001
     chromadb = None  # type: ignore[assignment]
@@ -42,6 +43,7 @@ except Exception:  # noqa: BLE001
 
 try:
     import kuzu
+
     _KUZU_AVAILABLE = True
 except Exception:  # noqa: BLE001
     kuzu = None  # type: ignore[assignment]
@@ -514,7 +516,7 @@ class OrvixMemory:
         if not result.entries:
             return ""
         parts = [
-            f"[Pesquisa anterior {i+1}] {e.content}"
+            f"[Pesquisa anterior {i + 1}] {e.content}"
             for i, e in enumerate(result.entries)
         ]
         header = f"## Contexto de pesquisas anteriores (modos: {', '.join(result.modes_used)})\n\n"

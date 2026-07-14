@@ -78,8 +78,7 @@ class VerificationStage(PipelineStage):
 
             for res in top_results:
                 source_text = (
-                    f"Title: {res.title or ''}\n"
-                    f"Description: {res.description or ''}"
+                    f"Title: {res.title or ''}\nDescription: {res.description or ''}"
                 )
 
                 # Extração de código: LLM primeiro, regex como fallback

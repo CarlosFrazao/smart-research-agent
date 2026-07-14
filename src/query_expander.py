@@ -159,8 +159,8 @@ class QueryExpander:
             f"Query original: {query}\n"
             f"Dominio: {intent.domain.value}\n"
             f"Entidades: {', '.join(intent.entities)}\n\n"
-            'Responda em JSON válido:\n'
-            '{\n'
+            "Responda em JSON válido:\n"
+            "{\n"
             '  "queries": [\n'
             "    {\n"
             '      "query": "string",\n'

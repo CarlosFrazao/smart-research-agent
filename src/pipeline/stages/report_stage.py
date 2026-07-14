@@ -447,7 +447,7 @@ REGRAS GERAIS:
 CONTEXTO DA PESQUISA:
 - Query: {query}
 - Domínio: {metadata.domain}
-- Fontes pesquisadas: {', '.join(s for s in metadata.sources if s)}
+- Fontes pesquisadas: {", ".join(s for s in metadata.sources if s)}
 - Resultados encontrados: {metadata.total_results}
 - Iterações: {metadata.iterations}
 {confidence_note}
@@ -692,7 +692,7 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
             if corroborated_by:
                 corroboration_note = f" ✅ Confirmado por: {', '.join(corroborated_by)}"
             lines.append(
-                f"{i+1}. {confidence_tag} {r.title or '(sem título)'} "
+                f"{i + 1}. {confidence_tag} {r.title or '(sem título)'} "
                 f"({', '.join(s for s in r.sources if s)}){corroboration_note} - score: {r.combined_score}\n"
                 f"   {(r.description or '')[:200]}..."
             )
@@ -720,7 +720,7 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
                 else "[BAIXA — VERIFICAR]"
             )
             lines.append(
-                f"{i+1}. {confidence_tag} {r.title or '(sem título)'}\n"
+                f"{i + 1}. {confidence_tag} {r.title or '(sem título)'}\n"
                 f"   Pontos fortes: {', '.join(h for h in r.highlights if h)}\n"
                 f"   Métricas: {r.metrics}"
             )
@@ -897,7 +897,7 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
         for r in ranked_results:
             result = r  # ranked_results já contém RankedResult diretamente
             title = (getattr(result, "title", "") or "").strip()
-            title_disp = (title[:80] if title else "(sem título)")
+            title_disp = title[:80] if title else "(sem título)"
 
             # (1) Sem confirmação independente de fonte primária verificável.
             lineage_role = getattr(result, "lineage_role", "unknown")

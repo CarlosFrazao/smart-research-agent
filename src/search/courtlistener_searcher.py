@@ -76,7 +76,9 @@ class CourtListenerSearcher(APISearcher):
     def normalize(self, raw_result: Any) -> SearchResult:
         """Normaliza um resultado do CourtListener para SearchResult."""
         if not isinstance(raw_result, dict):
-            return SearchResult(source="courtlistener", title="", url="", description="")
+            return SearchResult(
+                source="courtlistener", title="", url="", description=""
+            )
 
         case_name = raw_result.get("caseName", "")
         absolute_url = raw_result.get("absoluteUrl", "")

@@ -91,7 +91,9 @@ class CratesIOSearcher(APISearcher):
         description = raw_result.get("description", "") or ""
         homepage = raw_result.get("homepage") or ""
         repository = raw_result.get("repository") or ""
-        version = raw_result.get("newest_version", "") or raw_result.get("max_version", "")
+        version = raw_result.get("newest_version", "") or raw_result.get(
+            "max_version", ""
+        )
         url = homepage or repository or f"https://crates.io/crates/{name}"
 
         metrics: dict[str, Any] = {

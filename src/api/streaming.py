@@ -724,9 +724,9 @@ class StreamlitStreamingClient:
                         st.markdown(
                             f"""
                             <div style="padding: 10px; border-left: 3px solid #4CAF50; margin: 5px 0;">
-                            <strong>{result.get('title', 'Sem título')}</strong><br/>
-                            <small>{result.get('url', '')}</small><br/>
-                            {result.get('description', '')[:200]}...
+                            <strong>{result.get("title", "Sem título")}</strong><br/>
+                            <small>{result.get("url", "")}</small><br/>
+                            {result.get("description", "")[:200]}...
                             </div>
                             """,
                             unsafe_allow_html=True,

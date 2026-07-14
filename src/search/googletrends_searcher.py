@@ -34,7 +34,9 @@ except ImportError:  # pragma: no cover - depende do ambiente
     _PYTRENDS_AVAILABLE = False
 
 
-@register_searcher("google_trends", enabled_env="SRA_GOOGLE_TRENDS_ENABLED", trusted=False)
+@register_searcher(
+    "google_trends", enabled_env="SRA_GOOGLE_TRENDS_ENABLED", trusted=False
+)
 class GoogleTrendsSearcher(APISearcher):
     """Searcher para interesse relativo no Google Trends (via pytrends).
 
@@ -84,7 +86,9 @@ class GoogleTrendsSearcher(APISearcher):
             ou em caso de erro (degradação graciosa).
         """
         if not self.available or self.pytrends is None:
-            logger.debug("GoogleTrendsSearcher: pytrends indisponível — retornando vazio")
+            logger.debug(
+                "GoogleTrendsSearcher: pytrends indisponível — retornando vazio"
+            )
             return []
 
         try:

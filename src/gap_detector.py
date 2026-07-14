@@ -192,7 +192,7 @@ class GapDetector:
             "Top 10 resultados:\n"
         )
         for i, r in enumerate(results[:10]):
-            prompt_text += f"{i+1}. [{r.source}] {r.title} (score: {r.score})\n"
+            prompt_text += f"{i + 1}. [{r.source}] {r.title} (score: {r.score})\n"
 
         prompt_text += (
             "\nResponda em JSON:\n"
@@ -209,16 +209,19 @@ class GapDetector:
         # Calcular overall_confidence a partir dos resultados (heurística simples)
         overall_confidence = min(1.0, len(results) * 0.1) if results else 0.5
         # Tentar obter operation_mode do orchestrator se disponível
-        operation_mode = getattr(self, '_last_operation_mode', 'cirurgia')  # fallback
-        should_use_prism = (
-            overall_confidence < 0.75
-            or operation_mode in ("cirurgia", "black_ops")
+        operation_mode = getattr(self, "_last_operation_mode", "cirurgia")  # fallback
+        should_use_prism = overall_confidence < 0.75 or operation_mode in (
+            "cirurgia",
+            "black_ops",
         )
         if should_use_prism:
-            prompt_text = self.persona_loader.build_enhanced_prompt(prompt_text, "prism_scientist")
+            prompt_text = self.persona_loader.build_enhanced_prompt(
+                prompt_text, "prism_scientist"
+            )
             logger.info(
                 "GapDetector: persona Prism injetada (confidence=%.2f, mode=%s).",
-                overall_confidence, operation_mode,
+                overall_confidence,
+                operation_mode,
             )
 
         schema = {

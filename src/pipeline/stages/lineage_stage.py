@@ -131,7 +131,7 @@ class LineageStage(PipelineStage):
         # 1. Ordenar por published_at (mais antigo primeiro; None -> "mais novo").
         sorted_members = sorted(
             members,
-            key=lambda r: (getattr(r, "published_at", None) or datetime.max),
+            key=lambda r: getattr(r, "published_at", None) or datetime.max,
         )
 
         primary = sorted_members[0]

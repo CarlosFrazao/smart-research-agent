@@ -376,9 +376,7 @@ class RSSSearcher(BaseSearcher):
         published_at = None
         if published and isinstance(published, str):
             try:
-                published_at = datetime.fromisoformat(
-                    published.replace("Z", "+00:00")
-                )
+                published_at = datetime.fromisoformat(published.replace("Z", "+00:00"))
             except Exception:
                 published_at = None
 
