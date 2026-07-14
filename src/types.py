@@ -467,6 +467,64 @@ class SynthesizedResult(SRAModel):
     hallucination_flags: list[str] = Field(default_factory=list)
 
 
+class SynthesizedClaim(SRAModel):
+    """Afirmação sintetizada com rastreabilidade de fonte (claim-level traceability).
+
+    Cada `SynthesizedClaim` representa uma afirmação factual derivada de um ou
+    mais resultados de busca, carregando explicitamente a proveniência
+    (``source_ids``, ``urls`` e opcionalmente ``quotes``) para que o relatório
+    final possa citar a origem de cada afirmação — em vez de apresentar prosa
+    sem rastreabilidade (Bloco 5 / E1-T1).
+
+    O modelo é puramente aditivo: nenhum consumidor existente de
+    ``Synthesizer.synthesize()`` (que devolve ``list[SynthesizedResult]``) é
+    afetado. A geração de claims é exposta por um método novo e opcional
+    (``Synthesizer.synthesize_with_claims``), preservando total compatibilidade
+    retroativa.
+
+    Attributes:
+        text: Texto da afirmação sintetizada (uma frase/sentença factual).
+        source_ids: IDs canônicos (``result_id``) das fontes que sustentam a
+            afirmação. Vazio = afirmação sem fonte rastreável (deve ser tratada
+            como não-verificada por consumidores/peer review).
+        quotes: Trechos textuais de suporte extraídos das fontes (opcional).
+        urls: URLs das fontes que sustentam a afirmação, na mesma ordem de
+            prioridade dos ``source_ids`` quando disponível.
+        confidence: Confiança de 0.0 a 1.0 na afirmação (default 1.0).
+    """
+
+    text: str = Field(min_length=1)
+    source_ids: list[str] = Field(default_factory=list)
+    quotes: list[str] = Field(default_factory=list)
+    urls: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    def as_markdown(self) -> str:
+        """Retorna o texto sem anotações de fonte (compatibilidade retroativa).
+
+        Returns:
+            str: O texto puro da afirmação, sem referências inline.
+        """
+        return self.text
+
+    def as_cited_markdown(self) -> str:
+        """Retorna o texto com numeração de fontes inline em Markdown.
+
+        Cada URL vira uma referência ``[[N]](url)`` anexada ao final do texto.
+        Se não houver URLs rastreáveis, devolve o texto puro (idêntico a
+        ``as_markdown``), evitando poluir a saída com referências vazias.
+
+        Returns:
+            str: Texto com referências inline ``[[1]](url) [[2]](url)`` ou o
+                texto puro quando não há URLs.
+        """
+        cited_urls = [u for u in self.urls if u]
+        if not cited_urls:
+            return self.text
+        refs = " ".join(f"[[{i + 1}]]({url})" for i, url in enumerate(cited_urls))
+        return f"{self.text} {refs}"
+
+
 class ResearchMetadata(SRAModel):
     """Metadados de uma sessão de pesquisa completa.
 

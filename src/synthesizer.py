@@ -21,7 +21,13 @@ from collections import defaultdict
 from typing import Any
 
 from src.clients.llm_client import LLMClient
-from src.types import RankedResult, SynthesizedResult, Verdict
+from src.types import (
+    RankedResult,
+    SynthesizedClaim,
+    SynthesizedResult,
+    Verdict,
+    generate_result_id,
+)
 from src.utils.deduplicator import Deduplicator
 
 logger = logging.getLogger(__name__)
@@ -81,6 +87,80 @@ class Synthesizer:
         synthesized = [self._merge_cluster(c) for c in clusters]
         synthesized.sort(key=lambda x: x.combined_score, reverse=True)
         return self._apply_source_cap(synthesized)
+
+    async def synthesize_with_claims(
+        self, results: list[RankedResult]
+    ) -> tuple[list[SynthesizedResult], list[SynthesizedClaim]]:
+        """Sintetiza resultados e deriva afirmações rastreáveis (claim-level).
+
+        Método aditivo (Bloco 5 / E1-T1): reaproveita integralmente o pipeline
+        de ``synthesize`` e, a partir dos ``SynthesizedResult`` resultantes,
+        deriva uma ``SynthesizedClaim`` por entidade consolidada, carregando a
+        proveniência (``source_ids`` + ``urls``) para rastreabilidade no
+        relatório. Não altera o contrato de ``synthesize`` — consumidores que
+        esperam ``list[SynthesizedResult]`` continuam usando aquele método.
+
+        Args:
+            results: Lista de `RankedResult` ranqueados pelo `QualityRanker`.
+
+        Returns:
+            tuple[list[SynthesizedResult], list[SynthesizedClaim]]: A síntese
+                consolidada (idêntica à de ``synthesize``) e as afirmações
+                rastreáveis derivadas dela, na mesma ordem.
+        """
+        synthesized = await self.synthesize(results)
+        claims = [self._build_claim(r) for r in synthesized]
+        return synthesized, claims
+
+    @staticmethod
+    def _build_claim(result: SynthesizedResult) -> SynthesizedClaim:
+        """Deriva uma `SynthesizedClaim` rastreável de um `SynthesizedResult`.
+
+        O texto da afirmação prioriza o ``tldr`` (resumo de uma frase já gerado
+        pelo veredito); se ausente, cai para a descrição truncada e, em último
+        caso, para o título. Os ``source_ids`` são canônicos: usa o
+        ``result_id`` do resultado quando presente, senão deriva de (source,url)
+        via ``generate_result_id`` — garantindo correspondência determinística
+        com o FeedbackStore/peer review.
+
+        Args:
+            result: Resultado sintetizado (cluster de entidade).
+
+        Returns:
+            SynthesizedClaim: Afirmação com texto, ``source_ids``, ``urls`` e
+                confiança derivada do ``combined_score`` (0-100 → 0.0-1.0).
+        """
+        text = (result.tldr or "").strip()
+        if not text:
+            desc = (result.description or "").strip()
+            text = desc[:200] if desc else (result.title or "").strip()
+        if not text:
+            text = result.entity
+
+        urls = [u for u in result.urls if u]
+        sources = [s for s in result.sources if s]
+        source_ids: list[str] = []
+        if result.result_id:
+            source_ids.append(result.result_id)
+        # Deriva IDs canônicos por (fonte, url) para cada par disponível,
+        # preservando a rastreabilidade quando o cluster tem múltiplas fontes.
+        for i, url in enumerate(urls):
+            source = sources[i] if i < len(sources) else (sources[0] if sources else "")
+            if source and url:
+                derived = generate_result_id(source, url)
+                if derived not in source_ids:
+                    source_ids.append(derived)
+
+        # combined_score é nominalmente 0-100 (sem teto rígido); normaliza e
+        # clampa defensivamente para o intervalo de confiança 0.0-1.0.
+        confidence = max(0.0, min(1.0, result.combined_score / 100.0))
+
+        return SynthesizedClaim(
+            text=text,
+            source_ids=source_ids,
+            urls=urls,
+            confidence=confidence,
+        )
 
     # ── Deduplicacao ─────────────────────────────────────────────────────────
 
