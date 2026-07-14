@@ -218,6 +218,7 @@ class StageFactory:
             "graph_explorer",
             "gap",
             "synthesize",
+            "quality_gate",
             "media_ingestion",
             "quant_analysis",
             "report",
@@ -488,6 +489,9 @@ class StageFactory:
         self.register("synthesize", self._create_synthesize_stage, lazy=True)
         self.register("synthesis", self._create_synthesize_stage, lazy=True)
 
+        # Quality Gate Stage (Bloco 6 / E1-T2 — RAGAS guardiã pós-síntese)
+        self.register("quality_gate", self._create_quality_gate_stage, lazy=True)
+
         # Report Stage
         self.register("report", self._create_report_stage, lazy=True)
         self.register("report_generation", self._create_report_stage, lazy=True)
@@ -650,6 +654,19 @@ class StageFactory:
         synthesizer = Synthesizer(llm_client=self._deps.get("llm_client"))
         feedback_ranker = FeedbackRanker(store=FeedbackStore())
         return SynthesizeStage(synthesizer=synthesizer, feedback_ranker=feedback_ranker)
+
+    def _create_quality_gate_stage(self) -> PipelineStage:
+        """Factory para QualityGateStage (Bloco 6 / E1-T2).
+
+        Lê ``quality_gate_enabled`` da config (injetada via ``_deps``) para
+        decidir se o gate roda; usa os thresholds de faithfulness/relevancy
+        configurados. Quando ``enabled=False``, o estágio é no-op.
+        """
+        from src.pipeline.stages.quality_gate_stage import QualityGateStage
+
+        config = self._deps.get("config")
+        enabled = getattr(config, "quality_gate_enabled", True)
+        return QualityGateStage(enabled=bool(enabled), config=config)
 
     def _create_report_stage(self) -> PipelineStage:
         """Factory para ReportStage."""

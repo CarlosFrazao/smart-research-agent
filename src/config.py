@@ -249,6 +249,31 @@ class Config(BaseSettings):
         gt=0,
         description="Número máximo de iterações do loop ReAct antes de forçar a finalização.",
     )
+
+    # ── Quality Gate RAGAS (Bloco 6 / E1-T2) ─────────────────────────────
+    # Guardiã automática de qualidade pós-síntese. Quando ativa, avalia
+    # faithfulness/relevancy da resposta e registra `quality_gate_failed`
+    # no contexto se os limiares não forem atingidos (não bloqueia o
+    # pipeline — apenas sinaliza para observabilidade e gap-fill).
+    # O proxy determinístico (baseado em SynthesizedClaim) funciona sem
+    # RAGAS instalado; quando langchain+ragas estiverem presentes, o gate
+    # usa as métricas reais automaticamente.
+    quality_gate_enabled: bool = Field(
+        default=True,
+        description="Ativa o Quality Gate RAGAS automático pós-síntese.",
+    )
+    quality_gate_faithfulness_threshold: float = Field(
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        description="Limiar mínimo de faithfulness (0-1) para aprovar a resposta.",
+    )
+    quality_gate_relevancy_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="Limiar mínimo de relevancy (0-1) para aprovar a resposta.",
+    )
     # Limiar de confiança (0-100) abaixo do qual o loop ReAct força gap-fill.
     react_confidence_threshold: float = Field(
         default=50.0,

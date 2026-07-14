@@ -44,6 +44,27 @@ def get_metrics() -> dict[str, Any]:
                     "Total de acertos na camada de cache",
                     ["source_type"],
                 ),
+                # ── Quality Gate RAGAS (Bloco 6 / E1-T2) ───────────────────
+                # Gauges contínuos (0-1) por modo de avaliação efetivo
+                # ("ragas" quando RAGAS real disponível, "proxy" no proxy
+                # determinístico baseado em SynthesizedClaim, "timeout"/"error"
+                # em falhas graciosas). Labels por modo permitem comparar
+                # qualidade entre modos de operação no Grafana (Bloco 13).
+                "ragas_faithfulness": Gauge(
+                    "sra_ragas_faithfulness_score",
+                    "Score de faithfulness do Quality Gate RAGAS (0-1)",
+                    ["mode"],
+                ),
+                "ragas_relevancy": Gauge(
+                    "sra_ragas_relevancy_score",
+                    "Score de relevancy do Quality Gate RAGAS (0-1)",
+                    ["mode"],
+                ),
+                "ragas_traceability": Gauge(
+                    "sra_ragas_traceability_score",
+                    "Cobertura de rastreabilidade das claims (0-1)",
+                    ["mode"],
+                ),
             }
             logger.info("Prometheus metrics registradas com sucesso.")
         except ImportError:
