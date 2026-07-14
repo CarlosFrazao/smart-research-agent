@@ -105,11 +105,12 @@ services:
     container_name: sra-searxng
     profiles: ["dev", "full"]
     ports:
-      - "8080:8080"
+      - "${SEARXNG_PORT:-8080}:8080"
     volumes:
       - ./docker/searxng:/etc/searxng:rw
     environment:
-      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_BASE_URL=http://localhost:${SEARXNG_PORT:-8080}/
+      - SEARXNG_PORT=${SEARXNG_PORT:-8080}
       - UWSGI_WORKERS=2
       - UWSGI_THREADS=2
     healthcheck:

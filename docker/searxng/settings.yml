@@ -19,3 +19,18 @@ search:
   formats:
     - html
     - json
+
+# Engines habilitados explicitamente para o SRA (Bloco 4 / E3-T1).
+# use_default_settings mantém a lista oficial completa; aqui apenas garantimos
+# que os engines consumidos por padrão pelo SEARXNG_ENGINES do SRA
+# (google,bing,duckduckgo) estejam ativos e adicionamos o Brave (desabilitado
+# por padrão no SearXNG oficial). O merge por 'name' preserva os demais defaults.
+engines:
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
