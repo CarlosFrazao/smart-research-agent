@@ -237,6 +237,7 @@ class OperationModes:
                 "pubmed",
                 "arxiv",
                 "semantic_scholar",
+                "crossref",
                 "web",
                 "searxng",
             ],
