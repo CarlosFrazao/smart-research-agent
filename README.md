@@ -56,6 +56,8 @@ Configure chaves de API, endereços de bancos de dados (Redis, ChromaDB, KuzuDB)
 
 > **Configuração de pesos e fontes (`config/`):** Os arquivos `config/scoring_weights.yaml` e `config/sources.yaml` são **documentação de referência de design** e **NÃO são lidos por nenhum código**. Os pesos reais do ranker híbrido vivem em constantes hardcoded em `src/ranking/hybrid_ranker.py` (`DEFAULT_BM25_WEIGHT`, etc., em `HybridRankerConfig`), e os searchers são instanciados pela `SearcherFactory` (`src/search/factory.py`). Para alterar pesos/fontes reais, edite esses módulos — não estes YAMLs. (Ver `MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md`, Tarefa 2.1 — Opção B.)
 
+> **Orquestrador padrão (v7.0+):** A partir da SRA v7.0, o **`ReActOrchestrator`** (loop dinâmico ReAct) é o orquestrador **padrão** — a flag `ENABLE_DYNAMIC_LOOP` tem `default=True`. Ele decide dinamicamente quais etapas do pipeline executar com base no contexto (confiança, lacunas, claims pendentes). Para reverter ao pipeline sequencial clássico (DAG fixo), defina `ENABLE_DYNAMIC_LOOP=false` no `.env`.
+
 ---
 
 ## 🚀 Como Executar

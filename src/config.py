@@ -234,13 +234,14 @@ class Config(BaseSettings):
     operation_mode: str = "cirurgia"
 
     # ── Orquestração dinâmica (Fase 3A — ReAct Loop) ──────────────────────────
-    # Chave de alternância: quando False (default), o Orchestrator usa o
-    # pipeline sequencial clássico (DAG fixo) para máxima estabilidade.
-    # Quando True, o ReActOrchestrator decide dinamicamente quais etapas
-    # executar com base no contexto (confiança, lacunas, claims pendentes).
+    # Chave de alternância: a partir da SRA v7.0 (Bloco E2-T2), o padrão é True,
+    # tornando o ReActOrchestrator o orquestrador padrão. Ele decide
+    # dinamicamente quais etapas executar com base no contexto (confiança,
+    # lacunas, claims pendentes). Defina ENABLE_DYNAMIC_LOOP=false no .env para
+    # reverter ao pipeline sequencial clássico (DAG fixo) por estabilidade.
     enable_dynamic_loop: bool = Field(
-        default=False,
-        description="Ativa a orquestração dinâmica via loop ReAct em vez do pipeline sequencial clássico.",
+        default=True,
+        description="Ativa a orquestração dinâmica via loop ReAct em vez do pipeline sequencial clássico (padrão desde v7.0).",
     )
     # Orçamento máximo de iterações do loop ReAct (evita exploração infinita).
     react_max_iterations: int = Field(

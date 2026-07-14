@@ -10,8 +10,8 @@ a flag `enable_dynamic_loop=true` em Config. A implementação:
 4. Fornece trace de decisões para o EvidenceGraph e auditoria posterior
 
 Modo de uso no Orchestrator (injeção de dependência):
-    - Quando enable_dynamic_loop=False (default): usa ResearchPipeline clássico
-    - Quando enable_dynamic_loop=True: usa ReActOrchestrator.loop_run()
+    - Quando enable_dynamic_loop=True (padrão desde v7.0): usa ReActOrchestrator.loop_run()
+    - Quando enable_dynamic_loop=False: usa ResearchPipeline clássico (fallback)
 """
 
 from __future__ import annotations
