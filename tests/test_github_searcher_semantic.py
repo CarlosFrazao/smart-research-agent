@@ -67,3 +67,39 @@ def test_dado_query_generica_quando_extrair_filtros_entao_retorna_dicionario_vaz
     filters = github_searcher._extract_semantic_filters("best tools and libraries")
     # Assert
     assert filters == {}
+
+def test_dado_query_citando_repo_github_quando_build_code_query_entao_usa_repo_qualifier(github_searcher):
+    # Arrange
+    query = (
+        "Analise o design de concorrência multithread do banco de grafos KuzuDB "
+        "no repositório oficial (github.com/kuzudb/kuzu) sobre starvation de escrita"
+    )
+    # Act
+    code_q = github_searcher._build_code_query(query)
+    # Assert
+    assert code_q.startswith("repo:kuzudb/kuzu ")
+    # Deve conter termos técnicos relevantes extraídos, em ASCII
+    assert "concorrencia" in code_q or "starvation" in code_q or "kuzudb" in code_q
+    # Não deve conter a URL completa nem parênteses
+    assert "github.com" not in code_q
+    assert "(" not in code_q
+
+def test_dado_query_citando_repo_curto_quando_build_code_query_entao_extrai_owner_repo(github_searcher):
+    # Arrange
+    query = "discussoes no repo kuzudb/kuzu sobre locks nativos msvcrt fcntl"
+    # Act
+    code_q = github_searcher._build_code_query(query)
+    # Assert
+    assert code_q.startswith("repo:kuzudb/kuzu ")
+    assert "msvcrt" in code_q or "fcntl" in code_q or "lock" in code_q
+
+def test_dado_query_sem_repo_quando_build_code_query_entao_normaliza_texto(github_searcher):
+    # Arrange
+    query = "Analise o design de concorrência multithread do banco de grafos KuzuDB em Python"
+    # Act
+    code_q = github_searcher._build_code_query(query)
+    # Assert
+    assert not code_q.startswith("repo:")
+    # Texto normalizado em ASCII, sem acentos
+    assert "concorrencia" in code_q
+    assert "github.com" not in code_q
