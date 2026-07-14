@@ -9,7 +9,6 @@ usa o User-Agent obrigatório: "smart-research-agent info@example.com".
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from src.search.api_searcher import APISearcher, APISearcherConfig
@@ -31,9 +30,7 @@ class SECEdgarSearcher(APISearcher):
     """
 
     def __init__(self, config: dict[str, Any]):
-        user_agent = config.get(
-            "sec_edgar_user_agent", SEC_EDGAR_USER_AGENT
-        )
+        user_agent = config.get("sec_edgar_user_agent", SEC_EDGAR_USER_AGENT)
         api_config = APISearcherConfig(
             source_name="sec_edgar",
             base_url=SEC_EDGAR_BASE_URL,
@@ -63,7 +60,9 @@ class SECEdgarSearcher(APISearcher):
         }
 
         try:
-            data = await self._make_request("GET", "/LATEST/search-index", params=params)
+            data = await self._make_request(
+                "GET", "/LATEST/search-index", params=params
+            )
             hits = data.get("hits", {}) if isinstance(data, dict) else {}
             hits_list = hits.get("hits", []) if isinstance(hits, dict) else []
             parsed = [self.normalize(r) for r in hits_list if isinstance(r, dict)]

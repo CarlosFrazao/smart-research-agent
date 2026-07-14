@@ -488,7 +488,6 @@ class DebateOrchestrator:
         ser recuperado, extrai cada hipótese via regex dos campos essenciais.
         """
         import json
-        import re
 
         try:
             blob = self._extract_json(raw)

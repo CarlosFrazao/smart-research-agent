@@ -26,9 +26,8 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Union, Literal
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Literal
 
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -563,8 +562,8 @@ class UnifiedStreamingManager:
 
 # Backwards Compatibility Layers
 
-from api.streaming import ProgressBroker
-from src.api.streaming import StreamingManager
+from api.streaming import ProgressBroker  # noqa: E402
+from src.api.streaming import StreamingManager  # noqa: E402
 
 
 class LegacySSEEndpoint:

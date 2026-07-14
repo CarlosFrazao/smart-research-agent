@@ -6,8 +6,7 @@ delegando a um serviço/analyzer já existente no codebase.
 
 import logging
 
-logger = logging.getLogger(__name__)
-
+from src.pipeline.pipeline import PipelineStage, PipelineContext
 from src.pipeline.stages.intent_stage import IntentStage
 from src.pipeline.stages.storm_stage import StormStage
 from src.pipeline.stages.expand_stage import ExpandStage
@@ -19,7 +18,10 @@ from src.pipeline.stages.media_ingestion_stage import MediaIngestionStage
 from src.pipeline.stages.quant_analysis_stage import QuantAnalysisStage
 from src.pipeline.stages.graph_explorer_stage import GraphExplorerStage
 from src.pipeline.stages.synthesize_stage import SynthesizeStage
-from src.pipeline.pipeline import PipelineStage, PipelineContext
+from src.pipeline.stages.report_stage import ReportStage
+
+logger = logging.getLogger(__name__)
+
 
 # Mapeamentos e Aliases de compatibilidade para stage_factory.py
 RankingStage = RankStage
@@ -71,8 +73,6 @@ class SanitizationStage(PipelineStage):
         de busca brutos. Falhas são não-críticas: o pipeline continua mesmo
         se a sanitização falhar.
         """
-        from src.security.llm_sanitizer import LLMSanitizer
-
         results = getattr(context, "search_results", None) or getattr(
             context, "raw_results", None
         )
@@ -119,8 +119,6 @@ class SanitizationStage(PipelineStage):
         return context
 
 
-from src.pipeline.stages.report_stage import ReportStage
-
 __all__ = [
     "IntentStage",
     "StormStage",
@@ -129,6 +127,7 @@ __all__ = [
     "RankingStage",
     "RankStage",
     "ScoreStage",
+    "VerificationStage",
     "GraphExplorerStage",
     "SynthesisStage",
     "SynthesizeStage",

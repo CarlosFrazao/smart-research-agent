@@ -24,7 +24,6 @@ Uso:
 
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any, Dict, List, Optional
 
@@ -110,7 +109,6 @@ class SharePointClient(BaseConnectorImplementation):
 
         try:
             import httpx
-            import aiohttp
 
             token_url = (
                 f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"

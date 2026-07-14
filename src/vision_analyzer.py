@@ -24,9 +24,7 @@ import base64
 import logging
 import mimetypes
 import os
-import tempfile
-from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 logger = logging.getLogger("vision_analyzer")
 

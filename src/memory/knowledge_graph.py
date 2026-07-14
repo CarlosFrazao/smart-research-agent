@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -111,7 +110,6 @@ class KnowledgeGraph(SemanticKnowledgeGraph):
         except ImportError:
             # Windows fallback - usar um arquivo de lock simples com polling
             import time
-            import msvcrt
 
             max_attempts = 10
             attempt = 0

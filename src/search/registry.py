@@ -5,7 +5,7 @@ Permite que novos searchers se registrem automaticamente sem modificar factory.p
 
 from __future__ import annotations
 import logging
-from typing import Any, Callable, Type
+from typing import Callable, Type
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ def register_searcher(
         class WikipediaSearcher(APISearcher):
             ...
     """
+
     def decorator(cls: Type) -> Type:
         _REGISTRY[name] = {
             "cls": cls,
@@ -41,6 +42,7 @@ def register_searcher(
         }
         logger.debug("Searcher '%s' registrado via @register_searcher", name)
         return cls
+
     return decorator
 
 

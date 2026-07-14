@@ -18,8 +18,7 @@ from src.pipeline.pipeline import PipelineContext, PipelineStage
 from src.synthesizer import Synthesizer
 from src.evidence_graph import EvidenceGraph
 from src.feedback_ranker import FeedbackRanker
-from src.feedback_store import FeedbackStore
-from src.types import RankedResult, SynthesizedResult
+from src.types import RankedResult
 
 logger = logging.getLogger("pipeline.synthesize_stage")
 

@@ -11,9 +11,7 @@ Todos os mocks implementam a mesma interface dos clientes reais:
 
 from __future__ import annotations
 
-import logging
-import time
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 from src.types import SearchResult
 from src.utils.logging import setup_logger

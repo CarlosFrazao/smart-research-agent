@@ -16,13 +16,12 @@ Modo de uso no Orchestrator (injeção de dependência):
 
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any, Callable, Optional
 
-from src.decision_engine import Decision, DynamicDecisionEngine
+from src.decision_engine import DynamicDecisionEngine
 from src.orchestrator import Orchestrator
-from src.pipeline.pipeline import PipelineContext, PipelineError
+from src.pipeline.pipeline import PipelineContext
 from src.pipeline.stage_factory import StageFactory
 from src.utils.logging import setup_logger
 

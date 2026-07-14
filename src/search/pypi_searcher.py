@@ -10,7 +10,6 @@ Quando a busca direta por termo é incerta, tenta usar a query como nome de paco
 
 from __future__ import annotations
 
-import urllib.parse
 import logging
 from typing import Any
 
@@ -63,14 +62,16 @@ class PyPISearcher(APISearcher):
             elif isinstance(data, list):
                 items = data
 
-            for item in items[:self.max_results]:
+            for item in items[: self.max_results]:
                 result = self._create_from_pypi_item(item)
                 if result:
                     results.append(result)
 
             # Se a busca por termo retornou resultados vazios, tentar como nome de pacote direto
             if not results:
-                logger.debug(f"PyPI: {len(results)} resultados para '{query}' via busca por termo")
+                logger.debug(
+                    f"PyPI: {len(results)} resultados para '{query}' via busca por termo"
+                )
                 try:
                     result = await self._fetch_pypi_data(query)
                     if result:

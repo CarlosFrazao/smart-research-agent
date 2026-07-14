@@ -39,7 +39,6 @@ import asyncio
 import json
 import logging
 import time
-import uuid
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -74,6 +73,7 @@ DEFAULT_PROGRESS_STAGES: List[str] = [
 
 
 # ── Enums e Dataclasses ──────────────────────────────────────────────────────
+
 
 class StreamEventType(str, Enum):
     """Tipos de eventos do stream."""
@@ -142,6 +142,7 @@ class StreamingConfig:
 
 
 # ── StreamingManager ────────────────────────────────────────────────────────────
+
 
 class StreamingManager:
     """Gerencia streams SSE e WebSocket para o SRA.
@@ -760,6 +761,7 @@ class StreamlitStreamingClient:
 
 
 # ── Async Client ────────────────────────────────────────────────────────────────
+
 
 class AsyncStreamingClient:
     """Cliente async para consumir stream SSE programaticamente."""

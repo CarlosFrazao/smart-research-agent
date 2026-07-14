@@ -19,7 +19,6 @@ Exemplo de uso:
 
 from __future__ import annotations
 
-import logging
 from typing import Any, List, Optional, Protocol
 
 from src.types import SearchResult
