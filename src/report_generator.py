@@ -17,6 +17,7 @@ from src.cache import Cache
 from src.clients.llm_client import LLMClient
 from src.comparator import Comparator
 from src.sentiment_analyzer import SentimentAnalyzer
+from src.security.prompt_sanitizer import get_prompt_sanitizer
 from src.temporal_analyzer import TemporalAnalyzer
 from src.types import (
     Domain,
@@ -33,6 +34,19 @@ logger = logging.getLogger(__name__)
 # Cobre reexecucoes/reexportacoes (md+pdf+docx) do mesmo conjunto de resultados
 # dentro de uma mesma sessao de pesquisa, sem gastar chamadas de LLM extras.
 _SECTIONS_CACHE_TTL_SECONDS = 1800  # 30 minutos
+
+
+def _sanitize_source_text(text: str | None) -> str:
+    """Pré-filtra prompt injection de um campo de fonte antes de interpolá-lo.
+
+    Aplica o :class:`PromptSanitizer` determinístico (defense-in-depth,
+    complementar ao ``LLMSanitizer``). Em caso de conteúdo ausente retorna
+    string vazia. O logging de detecção (apenas fingerprint) ocorre dentro do
+    sanitizador — aqui apenas retornamos o texto limpo.
+    """
+    if not text:
+        return ""
+    return get_prompt_sanitizer().sanitize(text).cleaned
 
 
 class ReportGenerator:
@@ -242,7 +256,9 @@ class ReportGenerator:
                     f"ReportGenerator: Seção '{header}' curta demais ({len(clean_content)} chars). Enriquecendo via LLM..."
                 )
                 project_summaries = "\n".join(
-                    f"- {r.title}: {(r.description or '')[:200]}" for r in results[:8]
+                    f"- {_sanitize_source_text(r.title)}: "
+                    f"{_sanitize_source_text((r.description or '')[:200])}"
+                    for r in results[:8]
                 )
 
                 if is_english:
@@ -442,9 +458,9 @@ class ReportGenerator:
                 )
 
             top_lines_list.append(
-                f"{i + 1}. {confidence_tag} {r.title or '(sem título)'} "
+                f"{i + 1}. {confidence_tag} {_sanitize_source_text(r.title) or '(sem título)'} "
                 f"({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n"
-                f"   {desc_label}: {(r.description or '')[:200]}\n"
+                f"   {desc_label}: {_sanitize_source_text((r.description or '')[:200])}\n"
                 f"   {highlights_label}: {', '.join(h for h in r.highlights if h)}\n"
                 f"   {metrics_label}: {r.metrics}"
             )
@@ -574,7 +590,7 @@ class ReportGenerator:
                 else tags["default"]
             )
             top_lines_list.append(
-                f"{i + 1}. {confidence_tag} {r.title or '(sem título)'} ({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n   {(r.description or '')[:200]}..."
+                f"{i + 1}. {confidence_tag} {_sanitize_source_text(r.title) or '(sem título)'} ({', '.join(s for s in r.sources if s)}) - score: {r.combined_score}\n   {_sanitize_source_text((r.description or '')[:200])}..."
             )
         top_lines = "\n".join(top_lines_list)
 
