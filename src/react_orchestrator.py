@@ -141,6 +141,8 @@ class ReActOrchestrator(Orchestrator):
             "ReActOrchestrator: loop concluído após %d iterações.",
             self._decision_engine._iteration,
         )
+        # Bloco 10 (E7-T1): registra a pesquisa no Audit Log (best-effort).
+        self._audit_research(context)
         return context.report
 
     async def _execute_stage_with_progress(

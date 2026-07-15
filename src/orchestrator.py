@@ -255,6 +255,8 @@ class Orchestrator:
                 # acoplar o Orchestrador ao protocolo do PipelineContext.
                 self.last_context = context
                 await self.close_searchers()
+                # Bloco 10 (E7-T1): registra a pesquisa no Audit Log (best-effort).
+                self._audit_research(context)
             await self._report_progress(
                 progress_callback, self.TOTAL_PROGRESS_STEPS, "Pesquisa concluida"
             )
@@ -269,6 +271,47 @@ class Orchestrator:
                         await searcher.close()
                     except Exception as e:
                         logger.debug(f"Erro ao fechar searcher {name}: {e}")
+
+    def _audit_research(self, context: Any) -> None:
+        """Registra a pesquisa concluída no Audit Log (Bloco 10 / E7-T1).
+
+        Best-effort: nunca levanta. Lê modo, fontes, score RAGAS e estimativa
+        de tokens do contexto/operação quando disponíveis.
+        """
+        try:
+            from src.audit_log import get_audit_logger
+
+            mode = ""
+            operation_mode = getattr(self, "operation_mode", None)
+            if operation_mode is not None:
+                mode = getattr(operation_mode, "name", "") or ""
+            if not mode:
+                mode = (
+                    getattr(getattr(self, "config", None), "operation_mode", "") or ""
+                )
+
+            sources_used = list(getattr(self, "searchers", {}).keys())
+
+            ragas_score = None
+            qg = context.extra.get("quality_gate_result") if context else None
+            if qg is not None:
+                ragas_score = getattr(qg, "faithfulness", None)
+
+            token_estimate = None
+            try:
+                token_estimate = getattr(context, "estimated_cost_usd", None)
+            except Exception:  # pragma: no cover - defensivo
+                token_estimate = None
+
+            get_audit_logger().log_research(
+                query=context.query,
+                mode=mode,
+                sources_used=sources_used,
+                ragas_score=ragas_score,
+                token_estimate=token_estimate,
+            )
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            logger.debug("AuditLogger: falha ao registrar pesquisa: %s", exc)
 
     # ── Retrocompatibilidade / Delegados do Facade ───────────────────────
     # Mantidos para não quebrar chamadores externos (e testes) que ainda
