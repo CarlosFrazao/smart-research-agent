@@ -171,6 +171,18 @@ class ReportStage(PipelineStage):
         if confidence_section:
             report_md += "\n" + confidence_section
 
+        # Bloco 9 (E4-T1): Seção de Limitações e Caveats do Peer Review.
+        # Alimentada pelo PeerReviewStage (claims sem fonte, contradições e
+        # revisão heurística+LLM do PeerReviewAgent), exposta em
+        # context.extra["peer_review_section"] (string Markdown vazia se none).
+        peer_review_section = (
+            context.extra.get("peer_review_section", "")
+            if hasattr(context, "extra")
+            else ""
+        )
+        if peer_review_section:
+            report_md += "\n" + peer_review_section
+
         # 4.7: Auditoria de claims via ResearchAuditor (§14.1)
         # Chama auditor.audit() após gerar o relatório, antes de retornar ao usuário.
         # É não-fatal: se a auditoria falhar, o relatório sem auditoria é retornado.

@@ -274,6 +274,16 @@ class Config(BaseSettings):
         le=1.0,
         description="Limiar mínimo de relevancy (0-1) para aprovar a resposta.",
     )
+    # ── Peer Review (Bloco 9 / E4-T1) ─────────────────────────────────────
+    # Revisão de pares adversarial pós-síntese. Quando ativa, o PeerReviewStage
+    # aplica checagens determinísticas locais (claims sem fonte, contradições)
+    # e a revisão heurística+LLM do PeerReviewAgent, anexando a seção
+    # "⚠️ Limitações e Caveats (Peer Review)" ao relatório. Não-bloqueante:
+    # falhas nunca abortam o pipeline. Não faz chamadas HTTP adicionais.
+    enable_peer_review: bool = Field(
+        default=True,
+        description="Ativa a revisão de pares adversarial pós-síntese (Peer Review Stage).",
+    )
     # Limiar de confiança (0-100) abaixo do qual o loop ReAct força gap-fill.
     react_confidence_threshold: float = Field(
         default=50.0,

@@ -219,6 +219,7 @@ class StageFactory:
             "gap",
             "synthesize",
             "quality_gate",
+            "peer_review",  # ← BLOCO 9: revisão de pares adversarial pós-síntese
             "media_ingestion",
             "quant_analysis",
             "report",
@@ -492,6 +493,9 @@ class StageFactory:
         # Quality Gate Stage (Bloco 6 / E1-T2 — RAGAS guardiã pós-síntese)
         self.register("quality_gate", self._create_quality_gate_stage, lazy=True)
 
+        # Peer Review Stage (Bloco 9 / E4-T1 — revisão de pares adversarial)
+        self.register("peer_review", self._create_peer_review_stage, lazy=True)
+
         # Report Stage
         self.register("report", self._create_report_stage, lazy=True)
         self.register("report_generation", self._create_report_stage, lazy=True)
@@ -667,6 +671,23 @@ class StageFactory:
         config = self._deps.get("config")
         enabled = getattr(config, "quality_gate_enabled", True)
         return QualityGateStage(enabled=bool(enabled), config=config)
+
+    def _create_peer_review_stage(self) -> PipelineStage:
+        """Factory para PeerReviewStage (Bloco 9 / E4-T1).
+
+        Lê ``enable_peer_review`` da config (injetada via ``_deps``) para
+        decidir se a revisão roda; injeta o ``llm_client`` para o
+        ``PeerReviewAgent``. Quando ``enabled=False``, o estágio é no-op.
+        """
+        from src.pipeline.stages.peer_review_stage import PeerReviewStage
+
+        config = self._deps.get("config")
+        enabled = getattr(config, "enable_peer_review", True)
+        return PeerReviewStage(
+            enabled=bool(enabled),
+            config=config,
+            llm_client=self._deps.get("llm_client"),
+        )
 
     def _create_report_stage(self) -> PipelineStage:
         """Factory para ReportStage."""
