@@ -10,6 +10,7 @@ from typing import Any
 
 from src.search.arxiv_searcher import ArxivSearcher
 from src.search.crossref_searcher import CrossRefSearcher
+from src.search.clinicaltrials_searcher import ClinicalTrialsSearcher
 from src.search.awesome_searcher import AwesomeSearcher
 from src.search.github_searcher import GitHubSearcher
 from src.search.hn_searcher import HNSearcher
@@ -113,15 +114,17 @@ class SearcherFactory:
             "searxng": SearXNGSearcher(searxng_cfg),
             "stackoverflow": StackOverflowSearcher(cfg),
             "wayback": WaybackSearcher(cfg),
-            # CrossRef — endpoint público (sem API key), sempre ativo.
-            # Fornece citações/acadêmico fundamentais para o preset 'academico'.
             "crossref": CrossRefSearcher(cfg),
+            "clinicaltrials": ClinicalTrialsSearcher(cfg),
         }
 
-        # CrossRef recebe o WebSearcher como fallback (poucos resultados nativos),
-        # seguindo o mesmo padrão GAP1 dos searchers PubMed/Semantic Scholar.
+        # CrossRef e ClinicalTrials recebem WebSearcher como fallback (poucos
+        # resultados nativos), seguindo o mesmo padrão GAP1 dos searchers
+        # PubMed/Semantic Scholar.
         if "crossref" in searchers:
             searchers["crossref"].web_fallback = searchers.get("web")
+        if "clinicaltrials" in searchers:
+            searchers["clinicaltrials"].web_fallback = searchers.get("web")
 
         # ProductHunt se disponível
         if ProductHuntSearcher is not None:
@@ -441,6 +444,7 @@ class SearcherFactory:
             "multilingual",
             "scraping",
             "crossref",
+            "clinicaltrials",
         }
         # Searchers auto-descobertos via @register_searcher
         try:

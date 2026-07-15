@@ -9,7 +9,7 @@ domains:
     github_qualifiers: "stars:>100 sort:updated"
   ai_ml:
     primary: [arxiv, github, notion, rss, searxng]
-    secondary: [reddit, confluence, sharepoint, firecrawl, producthunt, open_library, core_ac_uk, doaj, openalex, pubmed, crossref]
+    secondary: [reddit, confluence, sharepoint, firecrawl, producthunt, open_library, core_ac_uk, doaj, openalex, pubmed, crossref, clinicaltrials]
   automation:
     primary: [github, confluence, notion, sharepoint]
     secondary: [hackernews, awesome, firecrawl, rss, searxng]

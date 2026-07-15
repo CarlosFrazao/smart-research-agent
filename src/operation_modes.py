@@ -238,6 +238,7 @@ class OperationModes:
                 "arxiv",
                 "semantic_scholar",
                 "crossref",
+                "clinicaltrials",
                 "web",
                 "searxng",
             ],
