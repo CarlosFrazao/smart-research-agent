@@ -27,6 +27,7 @@ dependencies = [
     "uvicorn>=0.29",
     "slowapi>=0.1.9",
     "mcp>=1.0",
+    "prometheus-client>=0.20",  # Métricas expostas em :8001/metrics (Bloco 13 / E8-T1)
     "chromadb>=0.5.0",
     "kuzu>=0.11.0",
     "watchdog>=4.0",

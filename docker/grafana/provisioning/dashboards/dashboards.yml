@@ -1,0 +1,18 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Smart Research Agent (SRA) — Grafana dashboard provisioning
+# Bloco 13 / E8-T1
+# Carrega todos os *.json de docker/grafana/provisioning/dashboards/.
+# ═══════════════════════════════════════════════════════════════════════════
+
+apiVersion: 1
+
+providers:
+  - name: "SRA Dashboards"
+    orgId: 1
+    folder: "Smart Research Agent"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

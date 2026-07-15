@@ -1,0 +1,19 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Smart Research Agent (SRA) — Grafana datasource provisioning
+# Bloco 13 / E8-T1
+# O Prometheus roda na mesma rede do compose (serviço "prometheus").
+# ═══════════════════════════════════════════════════════════════════════════
+
+apiVersion: 1
+
+datasources:
+  - name: "Prometheus-SRA"
+    uid: prometheus-sra
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s

@@ -10,6 +10,13 @@ logger = logging.getLogger("sra.metrics")
 # Singleton preguiçoso para evitar exceptions na ausência do client
 _metrics: dict[str, Any] | None = None
 
+# Guarda se o servidor HTTP de métricas já foi iniciado neste processo. O
+# start_http_server do prometheus_client sobe um HTTPServer global em uma thread
+# de background; chamá-lo duas vezes levantaria "Address already in use". Como o
+# mcp_server.py pode criar múltiplos tenants via create_app(), o guard impede
+# tentativas duplicadas (Bloco 13 / E8-T1 — Grafana).
+_metrics_server_started: bool = False
+
 
 def get_metrics() -> dict[str, Any]:
     global _metrics
@@ -76,11 +83,21 @@ def get_metrics() -> dict[str, Any]:
 
 
 def start_metrics_server(port: int = 8001) -> None:
-    """Inicia o servidor de escuta HTTP do Prometheus client em thread de background."""
+    """Inicia o servidor de escuta HTTP do Prometheus client em thread de background.
+
+    Idempotente: chamadas repetidas (ex.: múltiplos tenants via ``create_app``)
+    não reabrem a porta. Fail-open: qualquer erro é logado e engolido, para nunca
+    quebrar o startup da aplicação SRA.
+    """
+    global _metrics_server_started
+    if _metrics_server_started:
+        logger.debug("Metrics Server já está ativo; ignorando chamada repetida.")
+        return
     try:
         from prometheus_client import start_http_server
 
         start_http_server(port)
+        _metrics_server_started = True
         logger.info(f"Prometheus HTTP Metrics Server escutando na porta {port}.")
     except ImportError:
         logger.warning(

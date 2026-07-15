@@ -235,6 +235,19 @@ def create_app(config: Config | None = None) -> FastAPI:
     if os.path.isdir(_STATIC_DIR):
         app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
+    @app.on_event("startup")
+    async def startup_event():
+        # Bloco 13 / E8-T1: expõe as métricas Prometheus em :8001/metrics para o
+        # Grafana fazer scrape. Fail-open: se o prometheus_client não estiver
+        # instalado ou a porta estiver ocupada, apenas loga e segue. Idempotente
+        # (start_metrics_server guarda contra múltiplos tenants no mesmo processo).
+        try:
+            from src.observability.metrics import start_metrics_server
+
+            start_metrics_server(port=8001)
+        except Exception as exc:  # pragma: no cover - defensivo
+            logger.warning("MCP Server: não foi possível subir Metrics Server: %s", exc)
+
     @app.on_event("shutdown")
     async def shutdown_event():
         logger.info("MCP Server: Encerrando conexoes no shutdown...")
