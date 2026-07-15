@@ -11,6 +11,127 @@ import json
 import time
 from datetime import datetime
 
+# ── Bloco 12 (E5-T1): Dashboard de Qualidade em Tempo Real ──────────────────
+
+
+def _quality_gauge(label: str, value: float | None, threshold: float) -> None:
+    """Renderiza um medidor de qualidade colorido (verde/amarelo/vermelho)."""
+    if value is None:
+        st.metric(label, "N/A")
+        return
+    pct = value * 100
+    if value >= threshold:
+        color, emoji = "#22c55e", "🟢"
+    elif value >= threshold * 0.8:
+        color, emoji = "#f59e0b", "🟡"
+    else:
+        color, emoji = "#ef4444", "🔴"
+    st.markdown(
+        f"<div style='border-left:4px solid {color};padding:0.5rem 1rem;"
+        f"background:#f8fafc;border-radius:8px;margin-bottom:0.5rem;'>"
+        f"<div style='font-size:0.8rem;color:#64748b;'>{label}</div>"
+        f"<div style='font-size:1.6rem;font-weight:700;color:{color};'>"
+        f"{emoji} {pct:.0f}%</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_quality_dashboard(ctx) -> None:
+    """Painel 'Qualidade desta pesquisa' (Bloco 12) com breakdown RAGAS.
+
+    Lê ``quality_gate_result`` de ``context.extra`` (produzido pelo QualityGate
+    do Bloco 6 / E1-T2) e exibe faithfulness/relevancy/traceability com cores.
+    """
+    if ctx is None:
+        return
+    qg = ctx.extra.get("quality_gate_result") if hasattr(ctx, "extra") else None
+    if not qg:
+        st.info("⚠️ Quality Gate (RAGAS) não produziu scores para esta pesquisa.")
+        return
+    st.markdown("### 🧪 Qualidade desta pesquisa (RAGAS)")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        _quality_gauge("Faithfulness", getattr(qg, "faithfulness", None), 0.70)
+    with c2:
+        _quality_gauge("Relevancy", getattr(qg, "relevancy", None), 0.75)
+    with c3:
+        _quality_gauge("Traceability", getattr(qg, "traceability", None), 0.80)
+    mode = getattr(qg, "mode", "proxy")
+    verdict = "✅ Aprovado" if getattr(qg, "passed", False) else "⚠️ Abaixo do limiar"
+    st.caption(
+        f"Modo de avaliação: **{mode}** · Veredito: {verdict} "
+        f"· Retry recomendado: "
+        f"{'sim' if getattr(qg, 'retry_recommended', False) else 'não'}"
+    )
+
+
+def export_report_markdown(report_md: str, query: str) -> None:
+    """Botão de download .md nativo (sem dependências externas)."""
+    import re as _re
+
+    safe = _re.sub(r"[^\w\-]+", "_", (query or "relatorio"))[:40]
+    st.download_button(
+        "📝 Baixar .md",
+        report_md,
+        file_name=f"sra_{safe}.md",
+        mime="text/markdown",
+    )
+
+
+def export_report_pdf_docx(report_md: str, query: str) -> None:
+    """Botões .pdf e .docx usando libs já instaladas no venv (guarded)."""
+    import re as _re
+    from io import BytesIO
+
+    safe = _re.sub(r"[^\w\-]+", "_", (query or "relatorio"))[:40]
+    col_p, col_d = st.columns(2)
+    with col_p:
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib.units import cm
+            from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+            buf = BytesIO()
+            doc = SimpleDocTemplate(
+                buf, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm
+            )
+            styles = getSampleStyleSheet()
+            flow = []
+            for line in report_md.splitlines():
+                flow.append(Paragraph((line or "&nbsp;")[:2000], styles["Normal"]))
+                flow.append(Spacer(1, 4))
+            doc.build(flow)
+            st.download_button(
+                "📄 Baixar .pdf",
+                buf.getvalue(),
+                file_name=f"sra_{safe}.pdf",
+                mime="application/pdf",
+            )
+        except Exception as e:  # pragma: no cover - graceful sem lib
+            st.caption(f"Export .pdf indisponível: {e}")
+    with col_d:
+        try:
+            from docx import Document
+
+            d = Document()
+            for line in report_md.splitlines():
+                d.add_paragraph(line)
+            buf = BytesIO()
+            d.save(buf)
+            st.download_button(
+                "📊 Baixar .docx",
+                buf.getvalue(),
+                file_name=f"sra_{safe}.docx",
+                mime=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.wordprocessingml.document"
+                ),
+            )
+        except Exception as e:  # pragma: no cover - graceful sem lib
+            st.caption(f"Export .docx indisponível: {e}")
+
+
 # Configuração da página Streamlit com estética premium
 st.set_page_config(
     page_title="Smart Research Agent Studio v6.2.0",
@@ -267,6 +388,7 @@ with tab_search:
         with st.spinner("Orquestrando agentes do Swarm..."):
             status_bar = st.progress(0)
             status_text = st.empty()
+            live_feed = st.empty()
 
             try:
                 from src.config import Config
@@ -283,31 +405,66 @@ with tab_search:
                 # FASE 5: repassa regras de allowlist/denylist para o pipeline
                 trust_rules = st.session_state.get("trust_rules", {})
 
-                status_text.info(
-                    "🧬 [Intent Analyzer] Analisando intenção e extraindo conceitos..."
-                )
-                status_bar.progress(25)
-                time.sleep(1)
+                # ── Bloco 12: Progress tracker por fase real do pipeline ──
+                _PHASES = [
+                    (
+                        "🧬 Intent Analyzer",
+                        "Analisando intenção e extraindo conceitos...",
+                    ),
+                    ("🔍 Query Expander", "Expandindo sub-queries complementares..."),
+                    (
+                        "🌐 Search + Rank",
+                        "Executando buscas paralelas e ranqueando fontes...",
+                    ),
+                    ("🧩 Synthesis", "Sintetizando entidades e agrupando clusters..."),
+                    ("🧪 Quality Gate", "Avaliando faithfulness/relevancy (RAGAS)..."),
+                    ("📋 Report", "Gerando relatório de síntese final..."),
+                ]
 
-                status_text.info(
-                    "🔍 [Query Expander] Expandindo sub-queries complementares..."
-                )
-                status_bar.progress(50)
-                time.sleep(1)
-
-                status_text.info(
-                    "🌐 Executando buscas paralelas e ranqueando fontes..."
-                )
-                status_bar.progress(75)
+                # Avança o progresso fase a fase enquanto a orquestração roda.
+                # Como o orchestrator roda sincronamente, exibimos o feed de fases
+                # e atualizamos o contador de fontes a partir do contexto retornado.
+                status_text.info(f"{_PHASES[0][0]} — {_PHASES[0][1]}")
+                status_bar.progress(round(1 / len(_PHASES) * 100))
 
                 # Roda a orquestração assíncrona
                 result = loop.run_until_complete(
                     orch.research(query, context_extra={"trust_rules": trust_rules})
                 )
+                ctx = getattr(orch, "last_context", None)
+
+                # Live feed (Bloco 12): fontes consultadas conforme retornam.
+                ranked = (getattr(ctx, "ranked_results", None) or []) if ctx else []
+                src_count: dict = {}
+                for r in ranked:
+                    s = getattr(r, "source", "desconhecida")
+                    src_count[s] = src_count.get(s, 0) + 1
+                if src_count:
+                    feed_lines = " · ".join(
+                        f"**{s}** ({n})"
+                        for s, n in sorted(
+                            src_count.items(), key=lambda x: x[1], reverse=True
+                        )
+                    )
+                    live_feed.markdown(
+                        f"🌐 Fontes consultadas: {feed_lines} — "
+                        f"{len(ranked)} resultados ranqueados"
+                    )
+                else:
+                    live_feed.caption(
+                        "🌐 Nenhum resultado ranqueado retornado nesta pesquisa."
+                    )
 
                 # Salva a instância do orquestrador e contexto para uso em outras abas (ex: Grafo)
                 st.session_state["orch"] = orch
-                st.session_state["orch_context"] = getattr(orch, "last_context", None)
+                st.session_state["orch_context"] = ctx
+                st.session_state["orch_result"] = (
+                    result if isinstance(result, str) else json.dumps(result, indent=2)
+                )
+
+                for i, (name, desc) in enumerate(_PHASES[1:], start=2):
+                    status_text.info(f"{name} — {desc}")
+                    status_bar.progress(round(i / len(_PHASES) * 100))
 
                 status_bar.progress(100)
                 status_text.success("Orquestração concluída!")
@@ -317,6 +474,16 @@ with tab_search:
                 st.markdown(
                     result if isinstance(result, str) else json.dumps(result, indent=2)
                 )
+
+                # ── Bloco 12: Painel de Qualidade (RAGAS) + Exportação ──
+                render_quality_dashboard(ctx)
+
+                report_md = st.session_state.get("orch_result", "") or ""
+                if report_md:
+                    st.divider()
+                    st.markdown("### 📤 Exportar Relatório")
+                    export_report_markdown(report_md, query)
+                    export_report_pdf_docx(report_md, query)
 
                 # FASE 5: Painel de Transparência da Busca
                 with st.expander("🔍 Transparência da busca", expanded=False):
