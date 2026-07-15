@@ -45,9 +45,18 @@ class SemanticKnowledgeGraph:
     Conecta-se ao KuzuDB fornecido e gerencia as tabelas SemanticEntity e RELATION.
     """
 
-    def __init__(self, kuzu_conn: Any = None, llm_client: Any = None):
+    def __init__(
+        self,
+        kuzu_conn: Any = None,
+        llm_client: Any = None,
+        entity_resolver: Any = None,
+    ):
         self.kuzu_conn = kuzu_conn
         self.llm = llm_client
+        # EntityResolver (Bloco 14 / E6-T1): resolve nomes para o nó canônico
+        # antes do MERGE, evitando fragmentação ("OpenAI" vs "Open AI").
+        # None = resolução desabilitada (comportamento anterior preservado).
+        self.entity_resolver = entity_resolver
         if self.kuzu_conn:
             self._init_schema()
 
@@ -181,28 +190,37 @@ class SemanticKnowledgeGraph:
         """
         Adiciona a tripla semântica ao banco de grafos KuzuDB.
         Insere/atualiza os nós SemanticEntity e cria a aresta RELATION correspondente.
+
+        Quando ``self.entity_resolver`` está configurado (Bloco 14 / E6-T1), os
+        nomes de sujeito e objeto são resolvidos para o nó canônico ANTES do
+        MERGE — fundindo variantes como "Open AI" → "OpenAI" e preservando a
+        conectividade do grafo (sem criar nós órfãos nem fragmentação).
         """
         if not self.kuzu_conn:
             logger.debug("KG: KuzuDB não conectado, tripla não adicionada.")
             return
 
+        # Resolução de entidades cross-session (se habilitada).
+        subject_name = self._resolve_entity(triple.subject)
+        object_name = self._resolve_entity(triple.object)
+
         try:
-            # 1. Merge do sujeito
+            # 1. Merge do sujeito (nome canônico)
             sub_type = self._determine_entity_type(
-                triple.subject, triple.relation, is_subject=True
+                subject_name, triple.relation, is_subject=True
             )
             self.kuzu_conn.execute(
                 "MERGE (s:SemanticEntity {name: $name}) ON CREATE SET s.type = $type",
-                {"name": triple.subject, "type": sub_type},
+                {"name": subject_name, "type": sub_type},
             )
 
-            # 2. Merge do objeto
+            # 2. Merge do objeto (nome canônico)
             obj_type = self._determine_entity_type(
-                triple.object, triple.relation, is_subject=False
+                object_name, triple.relation, is_subject=False
             )
             self.kuzu_conn.execute(
                 "MERGE (o:SemanticEntity {name: $name}) ON CREATE SET o.type = $type",
-                {"name": triple.object, "type": obj_type},
+                {"name": object_name, "type": obj_type},
             )
 
             # 3. Verifica se a aresta já existe para evitar duplicações
@@ -213,7 +231,7 @@ class SemanticKnowledgeGraph:
             )
             res = self.kuzu_conn.execute(
                 check_q,
-                {"sub": triple.subject, "obj": triple.object, "rel": triple.relation},
+                {"sub": subject_name, "obj": object_name, "rel": triple.relation},
             )
             if res.has_next():
                 return  # Relação já cadastrada no grafo
@@ -227,8 +245,8 @@ class SemanticKnowledgeGraph:
             self.kuzu_conn.execute(
                 create_q,
                 {
-                    "sub": triple.subject,
-                    "obj": triple.object,
+                    "sub": subject_name,
+                    "obj": object_name,
                     "rel": triple.relation,
                     "conf": float(triple.confidence),
                 },
@@ -522,6 +540,22 @@ class SemanticKnowledgeGraph:
         return {"nodes": list(nodes_map.values()), "links": links}
 
     # ── Helpers internos ──────────────────────────────────────────────────────
+
+    def _resolve_entity(self, name: str) -> str:
+        """Resolve ``name`` para o nó canônico via EntityResolver (Bloco 14).
+
+        Se ``self.entity_resolver`` for None (resolução desabilitada) ou a
+        resolução falhar, retorna o próprio ``name`` (comportamento anterior de
+        MERGE por nome exato — sem quebra de contrato).
+        """
+        if self.entity_resolver is None:
+            return name
+        try:
+            resolved = self.entity_resolver.resolve(name)
+            return resolved if resolved else name
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("KG: resolução de entidade '%s' falhou: %s", name, exc)
+            return name
 
     def _is_valid_entity(self, name: str) -> bool:
         """Valida se a string é uma entidade aceitável (tamanho, conteúdo)."""

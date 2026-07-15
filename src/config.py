@@ -284,6 +284,22 @@ class Config(BaseSettings):
         default=True,
         description="Ativa a revisão de pares adversarial pós-síntese (Peer Review Stage).",
     )
+    # ── Entity Resolution (Bloco 14 / E6-T1) ─────────────────────────────
+    # Resolve variantes de nomes de entidades para o mesmo nó canônico no grafo
+    # de conhecimento ("OpenAI" vs "Open AI" → mesmo nó), preservando a
+    # conectividade (arestas RELATION) e evitando nós órfãos. Usa embedding
+    # coseno via ChromaDB com threshold; desliga graciosamente se o embedder
+    # não estiver disponível (fallback de nome exato).
+    enable_entity_resolution: bool = Field(
+        default=True,
+        description="Ativa a resolução cross-session de entidades no grafo de conhecimento (EntityResolver).",
+    )
+    entity_resolution_threshold: float = Field(
+        default=0.92,
+        ge=0.0,
+        le=1.0,
+        description="Similaridade coseno mínima (0-1) para fundir duas entidades; 0.92 evita false positives técnicos (ex: BERT vs RoBERTa).",
+    )
     # Limiar de confiança (0-100) abaixo do qual o loop ReAct força gap-fill.
     react_confidence_threshold: float = Field(
         default=50.0,

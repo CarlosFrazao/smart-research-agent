@@ -149,7 +149,10 @@ class OrvixMemory:
         # 4. Inicializa o Grafo de Conhecimento Semântico
         from src.knowledge_graph import SemanticKnowledgeGraph
 
-        self.kg = SemanticKnowledgeGraph(kuzu_conn=self.kuzu_conn)
+        self.kg = SemanticKnowledgeGraph(
+            kuzu_conn=self.kuzu_conn,
+            entity_resolver=self._build_entity_resolver(),
+        )
 
     # ── Inicializadores de Infraestrutura ──────────────────────────────────────
 
@@ -304,6 +307,50 @@ class OrvixMemory:
             logger.error(f"OrvixMemory: Erro crítico ao inicializar KuzuDB: {e}")
             self.kuzu_db = None
             self.kuzu_conn = None
+
+    # ── Entity Resolution (Bloco 14 / E6-T1) ─────────────────────────────────
+
+    def _build_entity_resolver(self) -> Any:
+        """Constrói o ``EntityResolver`` se habilitado na config, senão None.
+
+        A resolução cross-session é gated por ``Config.enable_entity_resolution``.
+        Quando desabilitada (ou o embedder ChromaDB está indisponível), retorna
+        None e o grafo de conhecimento mantém o comportamento anterior (MERGE por
+        nome exato, sem resolução). A coleção ChromaDB dedicada
+        (``sra_entity_resolution``) é compartilhada entre sessões no cliente local.
+        """
+        try:
+            from src.config import Config
+
+            config = Config()
+        except Exception:  # noqa: BLE001
+            logger.debug("OrvixMemory: Config indisponível — EntityResolver desligado.")
+            return None
+
+        if not config.enable_entity_resolution:
+            logger.info("OrvixMemory: Entity Resolution desabilitada na config.")
+            return None
+
+        try:
+            from src.entity_resolver import EntityResolver
+
+            resolver = EntityResolver(
+                threshold=config.entity_resolution_threshold,
+                kuzu_conn=self.kuzu_conn,
+                chroma_collection=None,
+                allow_create=True,
+            )
+            logger.info(
+                "OrvixMemory: EntityResolver ativo (threshold=%.2f).",
+                config.entity_resolution_threshold,
+            )
+            return resolver
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "OrvixMemory: falha ao construir EntityResolver (%s) — desligado.",
+                exc,
+            )
+            return None
 
     # ── Escrita de Memória ─────────────────────────────────────────────────────
 
