@@ -111,6 +111,14 @@ class HTTPClient:
     ) -> dict[str, Any]:
         headers = headers or {}
 
+        # Evita conflito "got multiple values for keyword argument 'headers'":
+        # se o chamador passou 'headers' via **kwargs (ex.: proxy que injeta
+        # headers na requisição), extrai e mescla no dict de headers local antes
+        # de repassar **kwargs para o aiohttp (que não aceita headers duplicado).
+        kwargs_headers = kwargs.pop("headers", None)
+        if kwargs_headers:
+            headers = {**headers, **kwargs_headers}
+
         # Injeta headers stealth do WAF Specialist Agent se ativo
         if self.waf_agent:
             stealth_headers = self.waf_agent.get_stealth_headers(url)
