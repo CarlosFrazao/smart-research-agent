@@ -111,14 +111,6 @@ class HTTPClient:
     ) -> dict[str, Any]:
         headers = headers or {}
 
-        # Evita conflito "got multiple values for keyword argument 'headers'":
-        # se o chamador passou 'headers' via **kwargs (ex.: proxy que injeta
-        # headers na requisição), extrai e mescla no dict de headers local antes
-        # de repassar **kwargs para o aiohttp (que não aceita headers duplicado).
-        kwargs_headers = kwargs.pop("headers", None)
-        if kwargs_headers:
-            headers = {**headers, **kwargs_headers}
-
         # Injeta headers stealth do WAF Specialist Agent se ativo
         if self.waf_agent:
             stealth_headers = self.waf_agent.get_stealth_headers(url)
@@ -132,11 +124,21 @@ class HTTPClient:
         for attempt in range(self.max_retries):
             try:
                 session = await self._get_session()
+                # Garante que 'headers' nunca venha duplicado em **kwargs
+                # (ex.: WAF Specialist Agent que re-injeta headers nas contramedidas
+                # a cada iteração do loop de retry). Remove de kwargs e mescla no
+                # dict local antes de repassar ao aiohttp.
+                loop_kwargs = dict(kwargs)
+                extra_headers = loop_kwargs.pop("headers", None)
+                if extra_headers:
+                    headers = {**headers, **extra_headers}
                 if method.upper() == "GET":
-                    req_ctx = session.get(url, headers=headers, params=params, **kwargs)
+                    req_ctx = session.get(
+                        url, headers=headers, params=params, **loop_kwargs
+                    )
                 elif method.upper() == "POST":
                     req_ctx = session.post(
-                        url, headers=headers, json=json_data, **kwargs
+                        url, headers=headers, json=json_data, **loop_kwargs
                     )
                 else:
                     raise ValueError(f"Método HTTP não suportado: {method}")
