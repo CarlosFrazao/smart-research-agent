@@ -129,3 +129,18 @@ class AwesomeSearcher(BaseSearcher):
             metrics={},
             raw=raw_result,
         )
+
+    async def close(self) -> None:
+        """Fecha o GitHubSearcher interno (``self.github``) e os recursos base.
+
+        O ``AwesomeSearcher`` instancia um ``GitHubSearcher`` próprio cujo
+        ``HTTPClient`` (aiohttp) não está no dict de searchers do orquestrador,
+        por isso precisa ser fechado explicitamente aqui — caso contrário
+        vazava uma ``aiohttp.ClientSession`` ("Unclosed client session").
+        """
+        if getattr(self, "github", None) is not None:
+            try:
+                await self.github.close()
+            except Exception as exc:  # noqa: BLE001 - best-effort
+                logger.debug("Falha ao fechar GitHubSearcher interno: %s", exc)
+        await super().close()

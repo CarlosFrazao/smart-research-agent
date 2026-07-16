@@ -259,23 +259,34 @@ class BaseSearcher(ABC):
     async def close(self) -> None:
         """Fecha os recursos e conexões abertas do searcher.
 
-        Encerra tanto o ``httpx.AsyncClient`` (``self._client``) quanto o
-        ``aiohttp.HTTPClient`` (``self.http``), quando presente. Sem este
-        último, cada searcher que usa ``HTTPClient`` vazava uma
-        ``aiohttp.ClientSession`` não fechada ("Unclosed client session").
+        Encerra o ``httpx.AsyncClient`` (``self._client``) e todos os
+        ``aiohttp.HTTPClient`` encontrados nos atributos do searcher
+        (incluindo ``self.http`` e quaisquer nomes alternativos). Sem isto,
+        cada searcher que usa ``HTTPClient`` vazava uma ``aiohttp.ClientSession``
+        não fechada ("Unclosed client session") — cenário observado quando um
+        searcher guarda o ``HTTPClient`` em atributo de nome não padrão.
         """
-        if self._client is not None:
+        # Fecha o httpx.AsyncClient padrão.
+        client = getattr(self, "_client", None)
+        if client is not None:
             try:
-                await self._client.aclose()
+                await client.aclose()
             except Exception:
                 pass
             self._client = None
-        http = getattr(self, "http", None)
-        if http is not None:
-            try:
-                await http.close()
-            except Exception:
-                pass
+
+        # Vara todos os atributos em busca de HTTPClient (aiohttp) para fechar.
+        from src.utils.http_client import HTTPClient
+
+        closed: set[int] = set()
+        for attr_name in tuple(vars(self).keys()):
+            value = getattr(self, attr_name, None)
+            if isinstance(value, HTTPClient) and id(value) not in closed:
+                closed.add(id(value))
+                try:
+                    await value.close()
+                except Exception:
+                    pass
 
     async def _http_request(
         self,
