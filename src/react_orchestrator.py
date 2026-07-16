@@ -194,11 +194,22 @@ class ReActOrchestrator(Orchestrator):
         duration = time.monotonic() - start
         context.mark_complete(stage.name, duration)
 
+        # M2.1: propaga o nº REAL de iterações do loop ReAct ao contexto para
+        # que o ReportStage exiba "Search iterations: N" corretamente (antes
+        # ficava fixo em 1). Atualiza a cada stage para que o valor esteja
+        # disponível quando o report for gerado — dentro do loop ou na
+        # finalização. `_iteration` é o contador oficial do decision engine.
+        result_context = new_context if new_context is not None else context
+        try:
+            result_context.set("iterations", int(self._decision_engine._iteration))
+        except Exception:  # noqa: BLE001 — telemetria nunca derruba o pipeline
+            pass
+
         await self._report_progress(
             progress_callback, step, f"{stage.name} concluído ({duration:.1f}s)"
         )
 
-        return new_context if new_context is not None else context
+        return result_context
 
     async def close_searchers(self) -> None:
         """Fecha searchers após execução ReAct (herdado do Orchestrator)."""

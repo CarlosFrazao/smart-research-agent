@@ -130,18 +130,6 @@ DOMAIN_KEYWORDS = {
     ],
 }
 
-# Domínios técnicos que devem ter precedência sobre saas_b2b em caso de
-# empate na contagem de keywords. saas_b2b é comercial e, quando empata com
-# um sinal técnico genuíno, quase sempre é um falso positivo (ex.: "free"
-# em "lock-free"). A ordem reflete a especificidade decrescente.
-_TECHNICAL_DOMAIN_PRIORITY = (
-    Domain.INFRASTRUCTURE,
-    Domain.AI_ML,
-    Domain.DEV_TOOLS,
-    Domain.OPEN_SOURCE,
-    Domain.AUTOMATION,
-)
-
 # Palavras que sinalizam intenção de notícia/evento atual (Fase 5 — Parte 4).
 # Usadas para rotear queries gerais para Domain.NEWS quando não houver
 # nenhum sinal técnico explícito (evita cair em domínios de dev tooling).
@@ -348,15 +336,20 @@ class IntentAnalyzer:
 
         top_score = max(scores.values())
         if top_score > 0:
-            # Desempate: entre os domínios com a pontuação máxima, prefere um
-            # domínio técnico (na ordem de prioridade) antes de cair no
-            # primeiro do dict (que era sempre saas_b2b).
+            # Desempate por ordem de inserção em DOMAIN_KEYWORDS. Isso preserva
+            # o comportamento legado (saas_b2b tem prioridade quando há um sinal
+            # comercial GENUÍNO tipo "crm"/"erp"). O BUG D (query técnica virar
+            # saas_b2b) foi resolvido na RAIZ — matching por fronteira de
+            # palavra + remoção de keywords ambíguas ("free"/"git") + vocab
+            # técnico expandido — de modo que a query difícil agora vence por
+            # PONTUAÇÃO (infrastructure=5 vs open_source=3), sem depender de
+            # desempate. Empates remanescentes são entre sinais reais.
             tied = [d for d, s in scores.items() if s == top_score]
             if len(tied) == 1:
                 return tied[0]
-            for tech_domain in _TECHNICAL_DOMAIN_PRIORITY:
-                if tech_domain in tied:
-                    return tech_domain
+            for domain in DOMAIN_KEYWORDS:
+                if domain in tied:
+                    return domain
             return tied[0]
 
         # ── Roteamento de notícias (Fase 5 — Parte 4) ──
