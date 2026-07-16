@@ -103,47 +103,53 @@ class ReActOrchestrator(Orchestrator):
         context.extras["session_id"] = session_id
         context.extras["progress_callback"] = progress_callback
 
-        # Loop principal ReAct
-        decision = self._decision_engine.decide(context)
-        while decision.next_stage is not None:
-            stage_name = decision.next_stage
-            self._decision_engine.mark_executed(stage_name)
-
-            try:
-                # Executar estágio via StageFactory (mesmo mecanismo clássico)
-                stage = self._stage_factory.create_stage(stage_name)
-                context = await self._execute_stage_with_progress(
-                    stage, context, progress_callback, session_id
-                )
-                # Registrar trace de decisão para auditoria
-                context.extras.setdefault("react_trace", []).append(
-                    self._decision_engine.export_decision_trace()
-                )
-            except Exception as exc:
-                logger.warning(
-                    "ReActOrchestrator: estágio '%s' falhou (%s) — continuando.",
-                    stage_name,
-                    type(exc).__name__,
-                )
-                context.record_error(stage_name, exc, critical=False)
-
-            # Próxima decisão
+        try:
+            # Loop principal ReAct
             decision = self._decision_engine.decide(context)
+            while decision.next_stage is not None:
+                stage_name = decision.next_stage
+                self._decision_engine.mark_executed(stage_name)
 
-        # Finalização: garantir relatório gerado
-        if not context.report:
-            report_stage = self._stage_factory.create_stage("report")
-            context = await self._execute_stage_with_progress(
-                report_stage, context, progress_callback, session_id
+                try:
+                    # Executar estágio via StageFactory (mesmo mecanismo clássico)
+                    stage = self._stage_factory.create_stage(stage_name)
+                    context = await self._execute_stage_with_progress(
+                        stage, context, progress_callback, session_id
+                    )
+                    # Registrar trace de decisão para auditoria
+                    context.extras.setdefault("react_trace", []).append(
+                        self._decision_engine.export_decision_trace()
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "ReActOrchestrator: estágio '%s' falhou (%s) — continuando.",
+                        stage_name,
+                        type(exc).__name__,
+                    )
+                    context.record_error(stage_name, exc, critical=False)
+
+                # Próxima decisão
+                decision = self._decision_engine.decide(context)
+
+            # Finalização: garantir relatório gerado
+            if not context.report:
+                report_stage = self._stage_factory.create_stage("report")
+                context = await self._execute_stage_with_progress(
+                    report_stage, context, progress_callback, session_id
+                )
+
+            logger.info(
+                "ReActOrchestrator: loop concluído após %d iterações.",
+                self._decision_engine._iteration,
             )
-
-        logger.info(
-            "ReActOrchestrator: loop concluído após %d iterações.",
-            self._decision_engine._iteration,
-        )
-        # Bloco 10 (E7-T1): registra a pesquisa no Audit Log (best-effort).
-        self._audit_research(context)
-        return context.report
+            # Bloco 10 (E7-T1): registra a pesquisa no Audit Log (best-effort).
+            self._audit_research(context)
+            return context.report
+        finally:
+            # Garante o fechamento de searchers/sessions (aiohttp) mesmo em erro.
+            # Sem isto, o ReActOrchestrator vazava as aiohttp.ClientSession dos
+            # searchers (warning "Unclosed client session").
+            await self.close_searchers()
 
     async def _execute_stage_with_progress(
         self,

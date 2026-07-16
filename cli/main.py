@@ -179,5 +179,42 @@ def status():
         console.print(f"  * {name}: [{color}]{state.upper()}[/{color}]")
 
 
+def ensure_search_subcommand(argv: list[str]) -> list[str]:
+    """Garante que ``search`` seja o subcomando implícito quando ausente.
+
+    Permite a invocação documentada no projeto
+    ``python -m cli.main "query" -m cirurgia`` (sem a palavra ``search``),
+    reduzindo erro de uso. Se o primeiro argumento posicional já for um
+    subcomando conhecido ou uma flag, a lista é retornada inalterada.
+
+    Args:
+        argv: Lista de argumentos (``sys.argv[1:]``).
+
+    Returns:
+        list[str]: Argumentos com ``"search"`` inserido na posição 0 quando
+        aplicável.
+    """
+    known_commands = {
+        "search",
+        "schedule",
+        "schedule-list",
+        "schedule-run",
+        "schedule-cancel",
+        "status",
+        "--help",
+        "-h",
+    }
+    if argv and argv[0] not in known_commands and not argv[0].startswith("-"):
+        return ["search", *argv]
+    return list(argv)
+
+
 if __name__ == "__main__":
+    import sys
+
+    # Torna `search` o comando implícito (default) quando o primeiro argumento
+    # posicional não corresponde a um subcomando registrado. Isso permite a
+    # invocação documentada no projeto: `python -m cli.main "query" -m cirurgia`
+    # sem exigir a palavra `search` explícita, reduzindo erro de uso (ver chat_log).
+    sys.argv[1:] = ensure_search_subcommand(sys.argv[1:])
     app()

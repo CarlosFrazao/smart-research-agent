@@ -64,13 +64,19 @@ class HTTPClient:
         return self._session
 
     def __del__(self):
-        if hasattr(self, "_session") and self._session and not self._session.closed:
-            try:
-                loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    loop.create_task(self._session.close())
-            except RuntimeError:
-                pass
+        # Best-effort: se o dono esqueceu de chamar ``close()``, tenta agendar
+        # o fechamento da sessão aiohttp enquanto o loop ainda estiver ativo.
+        # O fechamento definitivo é responsabilidade de ``close()`` (chamado
+        # por BaseSearcher.close() / Orchestrator.close_searchers()).
+        session = getattr(self, "_session", None)
+        if session is None or session.closed:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                loop.create_task(session.close())
+        except RuntimeError:
+            pass
 
     async def get(
         self,

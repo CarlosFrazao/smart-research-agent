@@ -39,25 +39,45 @@ class CircuitBreakerOpenError(SearcherError):
 
 
 class CircuitState(str, Enum):
+    """Estados possíveis de um circuit breaker de busca."""
+
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
 
 
 class CircuitBreakerConfig:
+    """Configuração de limiares e timeouts de um circuit breaker."""
+
     def __init__(
         self,
         failure_threshold: int = 5,
         reset_timeout_seconds: float = 30.0,
         half_open_success_threshold: int = 2,
     ):
+        """Inicializa os limiares do circuit breaker.
+
+        Args:
+            failure_threshold: número de falhas consecutivas antes de abrir.
+            reset_timeout_seconds: tempo de espera no estado OPEN antes do
+                teste half-open.
+            half_open_success_threshold: sucessos necessários no half-open para
+                fechar novamente.
+        """
         self.failure_threshold = failure_threshold
         self.reset_timeout_seconds = reset_timeout_seconds
         self.half_open_success_threshold = half_open_success_threshold
 
 
 class CircuitBreaker:
+    """Protege chamadas de busca contra falhas em cascata.
+
+    Transiciona entre CLOSED, OPEN e HALF_OPEN conforme o volume de falhas,
+    rejeitando chamadas enquanto OPEN para evitar sobrecarregar fontes caídas.
+    """
+
     def __init__(self, name: str, config: CircuitBreakerConfig | None = None) -> None:
+        """Cria um circuit breaker com nome e configuração opcional."""
         self.name = name
         self.config = config or CircuitBreakerConfig()
         self._state = CircuitState.CLOSED
@@ -67,6 +87,7 @@ class CircuitBreaker:
 
     @property
     def state(self) -> CircuitState:
+        """Estado atual, promovendo OPEN -> HALF_OPEN após o timeout de reset."""
         if self._state is CircuitState.OPEN and self._opened_at is not None:
             elapsed = time.monotonic() - self._opened_at
             if elapsed >= self.config.reset_timeout_seconds:
@@ -78,6 +99,7 @@ class CircuitBreaker:
         return self._state
 
     def before_call(self) -> None:
+        """Valida se a chamada pode prosseguir; levanta se o breaker está OPEN."""
         if self.state is CircuitState.OPEN:
             raise CircuitBreakerOpenError(
                 f"circuit breaker '{self.name}' está OPEN — chamadas rejeitadas "
@@ -85,6 +107,7 @@ class CircuitBreaker:
             )
 
     def on_success(self) -> None:
+        """Registra uma chamada bem-sucedida e fecha o breaker se aplicável."""
         if self._state is CircuitState.HALF_OPEN:
             self._half_open_success_count += 1
             if self._half_open_success_count >= self.config.half_open_success_threshold:
@@ -95,6 +118,7 @@ class CircuitBreaker:
             self._failure_count = 0
 
     def on_failure(self) -> None:
+        """Registra uma falha e abre o breaker ao atingir o limiar."""
         self._failure_count += 1
         if self._state is CircuitState.HALF_OPEN:
             logger.warning(
@@ -114,6 +138,7 @@ class CircuitBreaker:
             self._opened_at = time.monotonic()
 
     def stats(self) -> dict:
+        """Retorna um dicionário com nome, estado e contagem de falhas."""
         return {
             "name": self.name,
             "state": self.state.value,
@@ -133,6 +158,14 @@ class BaseSearcher(ABC):
     """
 
     def __init__(self, config: dict[str, Any] | None = None, **kwargs: Any):
+        """Inicializa o searcher com timeout, limiares de circuit breaker e retry.
+
+        Args:
+            config: dicionário de configuração (timeout, max_results, enabled,
+                credenciais e parâmetros de circuit breaker/retry). Se ``None``,
+                usa ``kwargs``.
+            **kwargs: parâmetros alternativos quando ``config`` não é informado.
+        """
         if config is None:
             config = kwargs
         elif isinstance(config, str):
@@ -167,15 +200,18 @@ class BaseSearcher(ABC):
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "BaseSearcher":
+        """Context manager: cria o ``httpx.AsyncClient`` ao entrar."""
         self._client = httpx.AsyncClient(timeout=self.timeout)
         return self
 
     async def __aexit__(self, *exc_info) -> None:
+        """Context manager: fecha o ``httpx.AsyncClient`` ao sair."""
         if self._client is not None:
             await self._client.aclose()
             self._client = None
 
     def _ensure_client(self) -> httpx.AsyncClient:
+        """Retorna o ``httpx.AsyncClient`` atual, criando um sob demanda."""
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self.timeout)
         return self._client
@@ -221,13 +257,25 @@ class BaseSearcher(ABC):
         return []
 
     async def close(self) -> None:
-        """Fecha os recursos e conexões abertas do searcher."""
+        """Fecha os recursos e conexões abertas do searcher.
+
+        Encerra tanto o ``httpx.AsyncClient`` (``self._client``) quanto o
+        ``aiohttp.HTTPClient`` (``self.http``), quando presente. Sem este
+        último, cada searcher que usa ``HTTPClient`` vazava uma
+        ``aiohttp.ClientSession`` não fechada ("Unclosed client session").
+        """
         if self._client is not None:
             try:
                 await self._client.aclose()
             except Exception:
                 pass
             self._client = None
+        http = getattr(self, "http", None)
+        if http is not None:
+            try:
+                await http.close()
+            except Exception:
+                pass
 
     async def _http_request(
         self,
