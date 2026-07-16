@@ -298,6 +298,11 @@ class SearchStage(PipelineStage):
         plan: SourcePlan = context.source_plan
         intent = context.intent
 
+        # FEAT-003 (Resiliência Bloco 3): avisos de transparência de busca.
+        # Coleta fontes do plano que não foram atendidas (sem searcher
+        # registrado ou sem credencial) para expor ao usuário no relatório.
+        search_warnings: List[str] = list(context.extra.get("search_warnings", []))
+
         for source_name, source_queries in plan.sources.items():
             # Filtro por modo de operação (se presente no contexto)
             allowed_searchers = context.metadata.get("allowed_searchers")
@@ -312,8 +317,26 @@ class SearchStage(PipelineStage):
                     "Check SearcherFactory.create_searchers() and Config credentials.",
                     source_name,
                 )
+                search_warnings.append(
+                    f"Fonte '{source_name}' no plano não tem searcher registrado "
+                    f"(sem credencial/config)."
+                )
                 continue
             if not getattr(searcher, "enabled", True):
+                continue
+
+            # FEAT-003: searcher presente, mas credencial essencial ausente.
+            searcher_credentials = getattr(searcher, "has_credentials", None)
+            if searcher_credentials is False:
+                logger.warning(
+                    "Source '%s' registrado, mas sem credencial configurada. "
+                    "A busca será pulada/limitada — verifique a env var correspondente.",
+                    source_name,
+                )
+                search_warnings.append(
+                    f"Fonte '{source_name}' sem credencial configurada — "
+                    f"busca indisponível ou limitada."
+                )
                 continue
 
             for eq in source_queries:
@@ -344,6 +367,12 @@ class SearchStage(PipelineStage):
                     name=f"{source_name}:{eq.query[:30]}",
                 )
                 tasks.append(task)
+
+        # FEAT-003: persiste avisos de transparência no contexto para o
+        # report_stage expor no rodapé do relatório. Preserva avisos já
+        # existentes em context.extra["search_warnings"] (acumula, não sobrescreve).
+        if search_warnings:
+            context.extra["search_warnings"] = list(search_warnings)
 
         return tasks, cached_results
 

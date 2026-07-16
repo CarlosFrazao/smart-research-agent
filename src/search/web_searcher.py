@@ -24,10 +24,15 @@ class WebSearcher(BaseSearcher):
             config (dict[str, Any]): Dicionário contendo as configurações globais do agente.
         """
         super().__init__(config)
+        firecrawl_api_key = config.get("firecrawl_api_key", "")
         self.firecrawl = FirecrawlClient(
-            api_key=config.get("firecrawl_api_key", ""),
+            api_key=firecrawl_api_key,
             base_url=config.get("firecrawl_base_url"),
         )
+        # FEAT-003 (Resiliência Bloco 3): sinaliza se a credencial essencial
+        # (FIRECRAWL_API_KEY) está ausente. O SearchStage usa esse atributo
+        # para emitir um aviso "sem credencial" em vez de sumir silenciosamente.
+        self.has_credentials = bool(firecrawl_api_key and firecrawl_api_key.strip())
 
     async def search(self, query: str, **kwargs) -> list[SearchResult]:
         """Realiza busca assíncrona por termos no Web.

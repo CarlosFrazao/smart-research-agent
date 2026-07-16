@@ -238,6 +238,31 @@ class ReportStage(PipelineStage):
             if hasattr(context, "extra"):
                 context.extra["synthesis_warning"] = warning
 
+        # FEAT-003 (Resiliência Bloco 3): expõe no rodapé do relatório as
+        # fontes que não foram buscadas por falta de searcher/credencial,
+        # tornando a falha visível em vez de silenciosa.
+        search_warnings = (
+            context.extra.get("search_warnings", [])
+            if hasattr(context, "extra")
+            else []
+        )
+        if search_warnings:
+            footer_lines = [
+                "",
+                "---",
+                "",
+                "## ⚠️ Fontes Não Atendidas",
+                "",
+                "As seguintes fontes do plano de busca não retornaram resultados "
+                "por falta de configuração (credencial ausente ou searcher não "
+                "registrado):",
+                "",
+            ]
+            for w in search_warnings:
+                footer_lines.append(f"- {w}")
+            report_md += "\n".join(footer_lines)
+            context.report = report_md
+
         return context
 
     async def execute(
