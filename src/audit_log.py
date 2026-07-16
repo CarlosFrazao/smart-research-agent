@@ -3,13 +3,20 @@ Audit Log (Bloco 10 / E7-T1) — Registro de auditoria de pesquisas.
 
 Mantém um log append-only de cada pesquisa executada pelo SRA em
 ``logs/audit.jsonl`` (um objeto JSON por linha), com rotação diária e
-retenção de 30 dias (`TimedRotatingFileHandler`). O objetivo é prover
-rastreabilidade forense (qual query, modo, fontes, score RAGAS e custo
-estimado de tokens) sem dependências externas (apenas stdlib).
+retenção de 30 dias. O objetivo é prover rastreabilidade forense (qual
+query, modo, fontes, score RAGAS e custo estimado de tokens) sem
+dependências externas (apenas stdlib + concurrent-log-handler no Windows).
 
 O ``AuditLogger`` é **best-effort**: qualquer falha de I/O (disco cheio,
 sem permissão) é logada e nunca aborta o pipeline de pesquisa — a
 auditoria é um observador, não um participante crítico do fluxo.
+
+Aprimoramentos de logging (portados do Hermes Agent):
+  * Handler de rotação tolerante a Windows — evita ``WinError 32`` quando
+    múltiplos processos escrevem no mesmo ``audit.jsonl`` (usa
+    ``ConcurrentRotatingFileHandler`` no Windows, stdlib no POSIX).
+  * ``RedactingFormatter`` — mascara segredos (API keys, tokens) antes de
+    escrevê-los em disco, alinhado ao Bloco E7-T1 (detect-secrets).
 """
 
 from __future__ import annotations
@@ -19,8 +26,9 @@ import logging
 import os
 import threading
 from datetime import datetime, timezone
-from logging.handlers import TimedRotatingFileHandler
 from typing import Any
+
+from src.logging_utils import TimedRotatingFileHandler, redact_sensitive_text
 
 logger = logging.getLogger("audit_log")
 
@@ -47,7 +55,15 @@ class AuditLogger:
         self._ensure_handler()
 
     def _ensure_handler(self) -> None:
-        """Cria o handler de rotação uma única vez (lazy, gracioso)."""
+        """Cria o handler de rotação uma única vez (lazy, gracioso).
+
+        Usa ``TimedRotatingFileHandler`` tolerante a Windows (portado do
+        Hermes): no Windows ele serializa a rotação com um lock cross-process
+        para evitar ``PermissionError [WinError 32]`` quando vários processos
+        escrevem no mesmo arquivo.  Os segredos são mascarados antes da
+        escrita via ``redact_sensitive_text`` (Bloco E7-T1), preservando o
+        contrato de uma linha JSON válida por registro.
+        """
         if self._handler is not None:
             return
         try:
@@ -95,6 +111,8 @@ class AuditLogger:
             "token_estimate": token_estimate,
         }
         line = json.dumps(entry, ensure_ascii=False, default=str)
+        # Mascara segredos (API keys, tokens) antes de persistir — Bloco E7-T1.
+        safe_line = redact_sensitive_text(line)
 
         with self._lock:
             if self._handler is None:
@@ -107,7 +125,7 @@ class AuditLogger:
                     if parent and not os.path.isdir(parent):
                         os.makedirs(parent, exist_ok=True)
                     with open(self.log_path, "a", encoding="utf-8") as fh:
-                        fh.write(line + "\n")
+                        fh.write(safe_line + "\n")
                 except Exception as exc:  # pragma: no cover - defensivo
                     logger.warning("AuditLogger: falha ao escrever log: %s", exc)
                 return
@@ -118,7 +136,7 @@ class AuditLogger:
                         level=logging.INFO,
                         pathname=__file__,
                         lineno=0,
-                        msg=line,
+                        msg=safe_line,
                         args=(),
                         exc_info=None,
                     )

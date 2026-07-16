@@ -32,6 +32,7 @@ dependencies = [
     "kuzu>=0.11.0",
     "watchdog>=4.0",
     "structlog>=24.1.0",
+    "concurrent-log-handler>=0.9.25",  # Rotação de log tolerante a Windows (WinError 32)
     "sentence-transformers",
     "pyarrow",
     "streamlit",
