@@ -548,7 +548,11 @@ class StageFactory:
 
     def _create_search_stage(self) -> PipelineStage:
         """Factory para SearchStage."""
-        from src.pipeline.stages.search_stage import SearchStage, SearchStageConfig
+        from src.pipeline.stages.search_stage import (
+            SearchStage,
+            SearchStageConfig,
+            TIMEOUT_MODE_MULTIPLIER,
+        )
         from src.utils.circuit_breaker import CircuitBreakerRegistry
 
         searchers = {}
@@ -560,11 +564,20 @@ class StageFactory:
         if cb_registry is None:
             cb_registry = CircuitBreakerRegistry()
 
+        # M3.1 — resolve o multiplicador de timeout a partir do modo ativo.
+        mode_name = None
+        if orch is not None:
+            op_mode = getattr(orch, "operation_mode", None)
+            mode_name = getattr(op_mode, "name", None) or getattr(
+                getattr(orch, "config", None), "operation_mode", None
+            )
+        timeout_multiplier = TIMEOUT_MODE_MULTIPLIER.get(mode_name, 1.0)
+
         return SearchStage(
             searchers=searchers,
             cache=self._deps.get("cache"),
             ranker=getattr(orch, "ranker", None) if orch else None,
-            config=SearchStageConfig(),
+            config=SearchStageConfig(timeout_multiplier=timeout_multiplier),
             circuit_breaker_registry=cb_registry,
             health_monitor=getattr(orch, "health_monitor", None) if orch else None,
             sanitizer=getattr(orch, "sanitizer", None) if orch else None,

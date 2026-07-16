@@ -113,19 +113,46 @@ SOURCE_TIMEOUT_MAP: dict[str, float] = {
     "_default_scraping": 25.0,
 }
 
+# M3.1 — Multiplicador de timeout por MODO de operação. Modos "hardcore"
+# (black_ops) usam proxies residenciais/móveis e múltiplos scrapers em
+# cascata, então precisam de SLA mais folgado para não estrangular conectores
+# lentos-porém-completos (Gap G: github/reddit davam TimeoutError no
+# black_ops). Modos rápidos (guerrilha/radar) mantêm timeouts apertados.
+# Modos não listados usam 1.0 (comportamento atual, retrocompatível).
+TIMEOUT_MODE_MULTIPLIER: dict[str, float] = {
+    "guerrilha": 0.8,  # modo relâmpago — ainda mais apertado
+    "radar": 0.8,
+    "cirurgia": 1.0,
+    "concorrencia": 1.0,
+    "arqueologia": 1.5,  # wayback/scraping histórico é lento
+    "debate": 1.2,
+    "academico": 1.3,
+    "mito": 1.0,
+    "black_ops": 2.2,  # hardcore: proxies pesados + cascata de scrapers
+}
 
-def get_timeout_for_source(source_name: str) -> float:
+
+def get_timeout_for_source(source_name: str, multiplier: float = 1.0) -> float:
     """Retorna o timeout (em segundos) para uma fonte específica.
 
     Resolve o SLA por categoria: fontes mapeadas explicitamente usam seu valor;
     fontes não mapeadas caem no default de scraping (se não-confiáveis) ou no
-    default de API (caso contrário).
+    default de API (caso contrário). O ``multiplier`` (SLA por modo — M3.1)
+    escala o valor base: modos hardcore folgam o timeout, modos rápidos apertam.
     """
     if source_name in SOURCE_TIMEOUT_MAP:
-        return SOURCE_TIMEOUT_MAP[source_name]
-    if source_name in UNTRUSTED_SOURCES:
-        return SOURCE_TIMEOUT_MAP["_default_scraping"]
-    return SOURCE_TIMEOUT_MAP["_default_api"]
+        base = SOURCE_TIMEOUT_MAP[source_name]
+    elif source_name in UNTRUSTED_SOURCES:
+        base = SOURCE_TIMEOUT_MAP["_default_scraping"]
+    else:
+        base = SOURCE_TIMEOUT_MAP["_default_api"]
+    try:
+        m = float(multiplier)
+    except (TypeError, ValueError):
+        m = 1.0
+    if m <= 0:
+        m = 1.0
+    return base * m
 
 
 @dataclass
@@ -135,6 +162,10 @@ class SearchStageConfig:
     # Concorrência
     max_concurrent_per_source: int = 3  # Semaphore por source (3-5)
     global_timeout: float = 120.0  # Timeout total do stage
+
+    # M3.1 — Multiplicador de timeout por modo (resolvido a partir de
+    # TIMEOUT_MODE_MULTIPLIER pelo StageFactory). 1.0 = SLA base.
+    timeout_multiplier: float = 1.0
 
     # Early termination
     early_termination_enabled: bool = True
@@ -583,7 +614,9 @@ class SearchStage(PipelineStage):
         ``get_timeout_for_source`` (SLA diferenciado da Fase 5), em vez do
         valor fixo do atributo ``searcher.timeout``.
         """
-        timeout = get_timeout_for_source(source_name)
+        timeout = get_timeout_for_source(
+            source_name, multiplier=self.config.timeout_multiplier
+        )
         if not isinstance(timeout, (int, float)):
             timeout = 30.0
         try:
