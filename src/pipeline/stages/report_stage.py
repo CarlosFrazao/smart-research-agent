@@ -119,6 +119,42 @@ class ReportStage(PipelineStage):
     def llm(self, value: Any) -> None:
         self._llm = value
 
+    @staticmethod
+    def _extract_data_sources(
+        context: PipelineContext, results: list[Any]
+    ) -> list[str]:
+        """Deriva a lista de fontes de DADOS efetivamente consultadas.
+
+        Prioriza os campos ``source`` dos resultados sintetizados/ranqueados
+        (arxiv, github, reddit, ...). Faz fallback para as chaves do plano de
+        busca (``context.source_plan.sources``). Nunca usa nomes de stages do
+        pipeline, evitando o bug histórico que exibia
+        "intent, expand, search, ..." como "fontes pesquisadas".
+        """
+        sources: set[str] = set()
+
+        def _collect(items: list[Any]) -> None:
+            for item in items or []:
+                src = getattr(item, "source", None)
+                if src:
+                    sources.add(str(src))
+                    continue
+                # SynthesizedResult pode agregar múltiplas fontes.
+                multi = getattr(item, "sources", None)
+                if multi:
+                    sources.update(str(s) for s in multi if s)
+
+        _collect(results)
+        if not sources:
+            _collect(getattr(context, "ranked_results", []))
+        if not sources:
+            plan = getattr(context, "source_plan", None)
+            plan_sources = getattr(plan, "sources", None) if plan else None
+            if isinstance(plan_sources, dict):
+                sources.update(str(k) for k in plan_sources)
+
+        return sorted(sources)
+
     async def run(self, context: PipelineContext) -> PipelineContext:
         """Método de entrada do pipeline que executa a geração do relatório.
 
@@ -131,16 +167,39 @@ class ReportStage(PipelineStage):
         # Extrai ou constrói o ResearchMetadata
         metadata = context.metadata
         if not isinstance(metadata, ResearchMetadata):
-            # Fallback seguro para metadados
+            # Fallback seguro para metadados.
+            # Fontes reais de DADOS (arxiv, github, ...) vêm dos resultados,
+            # não dos nomes das stages do pipeline (bug histórico exibia
+            # 'intent, expand, search...' como "fontes pesquisadas").
+            data_sources = self._extract_data_sources(context, results)
+
+            # Duração real da execução (context.started_at → agora). O antigo
+            # default 0.0 gerava "Total time: 0.0s" no cabeçalho.
+            try:
+                duration = float(context.elapsed_seconds())
+            except Exception:
+                duration = float(sum(context.stage_durations.values()))
+
+            # Iterações reais: em ReAct, cada re-execução de uma stage é
+            # registrada em completed_stages. Usamos o nº de vezes que a stage
+            # 'search' foi concluída como proxy de iterações de busca; fallback
+            # para extra["iterations"] ou 1.
+            iterations = context.get("iterations") or context.completed_stages.count(
+                "search"
+            )
+            if not iterations:
+                iterations = 1
+
             metadata = ResearchMetadata(
                 query=query,
                 timestamp=datetime.now(),
                 domain=context.get("domain", "general"),
-                sources=list(context.completed_stages),
+                sources=data_sources,
                 total_results=len(results),
-                iterations=context.get("iterations", 1),
+                iterations=iterations,
                 overall_confidence=context.get("overall_confidence", 0.8),
                 low_confidence_warnings=context.get("low_confidence_warnings", []),
+                duration_seconds=duration,
             )
 
         # Executa geração das seções

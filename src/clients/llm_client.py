@@ -726,8 +726,35 @@ class LLMClient:
                     json.loads(blob)
                     return blob
                 except json.JSONDecodeError:
+                    # Último recurso: repara defeitos comuns de LLMs locais
+                    # (vírgulas à direita, aspas tipográficas) e tenta de novo.
+                    repaired = LLMClient._repair_json_defects(blob)
+                    if repaired != blob:
+                        try:
+                            json.loads(repaired)
+                            return repaired
+                        except json.JSONDecodeError:
+                            pass
                     continue
         return None
+
+    @staticmethod
+    def _repair_json_defects(blob: str) -> str:
+        """Corrige defeitos sintáticos frequentes em JSON de LLMs locais.
+
+        Repara: (1) aspas tipográficas “ ” ‘ ’ → aspas ASCII; (2) vírgulas
+        à direita antes de ``]`` ou ``}``. Não tenta reparar JSON truncado
+        (isso é deixado para o retry com prompt de reparo em
+        ``generate_structured``). Retorna a string possivelmente modificada.
+        """
+        if not blob:
+            return blob
+        repaired = (
+            blob.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+        )
+        # Remove vírgulas à direita: ", ]" → " ]" e ", }" → " }"
+        repaired = re.sub(r",\s*([\]}])", r"\1", repaired)
+        return repaired
 
     @staticmethod
     def _safe_parse_json(text: str) -> Any:

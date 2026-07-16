@@ -23,24 +23,46 @@ from src.types import SynthesizedResult
 # Patterns
 # ---------------------------------------------------------------------------
 
-# Patterns that indicate a comparative query
-_COMPARISON_PATTERNS = [
+# Strong comparison signals — unambiguous intent to compare. Any of these
+# is sufficient to classify a query as comparative.
+_STRONG_COMPARISON_PATTERNS = [
     r"\bvs\.?\b",
     r"\bversus\b",
-    r"\bou\b",  # Portuguese: "A ou B"
-    r"\bor\b",
-    r"\bx\b",  # common in PT: "Python x Java"
     r"\bcompar[ae]",
+    r"\bcompare[d]?\b",
     r"\bmelhor\b",  # "qual é melhor"
     r"\bbetter\b",
     r"\bdiferen[çc]a",
     r"\bdifference\b",
 ]
 
-_COMPARISON_RE = re.compile(
-    "|".join(_COMPARISON_PATTERNS),
+# Weak comparison signals — stopwords that ALSO appear in ordinary prose
+# ("commits or pull requests", "A or B"). These only count as a comparison
+# when the query is short and yields exactly two short, distinct entities.
+# Without this guard, a single "or"/"ou"/"x" turns a 60-word technical query
+# into a bogus two-column table (historical BUG A).
+_WEAK_COMPARISON_PATTERNS = [
+    r"\bou\b",  # Portuguese: "A ou B"
+    r"\bor\b",
+    r"\bx\b",  # common in PT: "Python x Java"
+]
+
+_STRONG_COMPARISON_RE = re.compile(
+    "|".join(_STRONG_COMPARISON_PATTERNS),
     re.IGNORECASE,
 )
+
+_WEAK_COMPARISON_RE = re.compile(
+    "|".join(_WEAK_COMPARISON_PATTERNS),
+    re.IGNORECASE,
+)
+
+# Máximo de palavras numa query "curta" onde um comparador fraco (or/ou/x)
+# ainda pode indicar comparação genuína (ex.: "Python or Rust for backend").
+_WEAK_SIGNAL_MAX_WORDS = 12
+# Máximo de palavras que uma "entidade" comparada pode ter. Uma entidade
+# com dezenas de palavras é, na verdade, um pedaço de frase — não um item.
+_MAX_ENTITY_WORDS = 6
 
 # Splitters that separate the two sides of a comparison
 _SPLITTER_RE = re.compile(
@@ -99,12 +121,37 @@ class Comparator:
         if not query or not query.strip():
             return False, []
 
-        is_comparison = bool(_COMPARISON_RE.search(query))
-        if not is_comparison:
+        has_strong = bool(_STRONG_COMPARISON_RE.search(query))
+        has_weak = bool(_WEAK_COMPARISON_RE.search(query))
+        if not has_strong and not has_weak:
             return False, []
 
         entities = self._extract_entities(query)
-        return True, entities
+
+        # Uma comparação exige exatamente 2+ entidades curtas e distintas.
+        valid_entities = [
+            e for e in entities if e and len(e.split()) <= _MAX_ENTITY_WORDS
+        ]
+        # Deduplica preservando ordem (case-insensitive).
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for e in valid_entities:
+            key = e.lower()
+            if key not in seen:
+                seen.add(key)
+                deduped.append(e)
+
+        if len(deduped) < 2:
+            return False, []
+
+        # Sinal FRACO (or/ou/x) só vale para queries curtas. Isso impede que
+        # "commits or pull requests" numa query longa vire uma comparação.
+        if not has_strong:
+            n_words = len(query.split())
+            if n_words > _WEAK_SIGNAL_MAX_WORDS:
+                return False, []
+
+        return True, deduped
 
     def build_entity_profiles(
         self,

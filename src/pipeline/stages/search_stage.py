@@ -143,6 +143,14 @@ class SearchStageConfig:
     )
     early_termination_count: int = 15  # N resultados de alta qualidade para parar
 
+    # Salvaguarda de volume + justiça entre fontes
+    # O teto de volume só pode cancelar tarefas pendentes DEPOIS que cada
+    # fonte distinta do plano tiver tido ao menos uma query concluída. Isso
+    # impede que uma fonte rápida e prolífica (ex.: arXiv) encha a cota e
+    # cancele fontes que o usuário pediu explicitamente (ex.: github).
+    max_total_results: int = 50  # Teto de volume (salvaguarda secundária)
+    enforce_source_fairness: bool = True  # Garante ≥1 fonte concluída antes do teto
+
     # Circuit breaker
     circuit_breaker_failure_threshold: int = 5
     circuit_breaker_recovery_timeout: float = 60.0
@@ -387,6 +395,16 @@ class SearchStage(PipelineStage):
         results: List[SearchResult] = []
         pending = set(tasks)
 
+        # Justiça entre fontes: mapeia o conjunto de fontes que têm ao menos
+        # uma task no plano vs. as que já concluíram (com sucesso ou falha).
+        # O teto de volume só corta pendentes quando todas as fontes distintas
+        # tiverem sido consultadas ao menos uma vez.
+        planned_sources: set[str] = set()
+        for _t in tasks:
+            _name = _t.get_name()
+            planned_sources.add(_name.split(":", 1)[0] if ":" in _name else _name)
+        completed_sources: set[str] = set()
+
         while pending and not self._stop_event.is_set():
             done, pending = await asyncio.wait(
                 pending,
@@ -403,9 +421,16 @@ class SearchStage(PipelineStage):
                 try:
                     res = task.result()
                     if isinstance(res, Exception):
+                        # Mesmo em falha, a fonte foi "consultada" para fins
+                        # de justiça (não deve bloquear o teto indefinidamente).
+                        t_name = task.get_name()
+                        completed_sources.add(
+                            t_name.split(":", 1)[0] if ":" in t_name else t_name
+                        )
                         logger.error(f"Task {task.get_name()} falhou: {res}")
                         continue
                     source_name, query_str, task_results = res
+                    completed_sources.add(source_name)
                     if task_results:
                         results.extend(task_results)
                         # Early termination check
@@ -429,12 +454,33 @@ class SearchStage(PipelineStage):
                 except Exception as e:
                     logger.error(f"Erro ao processar resultado de task: {e}")
 
-            # Salvaguarda de volume máximo de resultados
-            if len(results) >= 50:
-                logger.info(
-                    "Early termination secundário: limite máximo de 50 resultados atingido."
+            # Salvaguarda de volume máximo de resultados — só pode cancelar
+            # pendentes DEPOIS que todas as fontes distintas do plano tiverem
+            # sido consultadas ao menos uma vez (justiça entre fontes). Isso
+            # evita que uma fonte prolífica (ex.: arXiv) encha o teto e cancele
+            # fontes que o usuário pediu explicitamente (ex.: github).
+            if len(results) >= self.config.max_total_results:
+                fairness_ok = (
+                    not self.config.enforce_source_fairness
+                    or completed_sources >= planned_sources
                 )
-                self._stop_event.set()
+                if fairness_ok:
+                    logger.info(
+                        "Early termination secundário: limite máximo de %d resultados "
+                        "atingido (todas as %d fontes consultadas).",
+                        self.config.max_total_results,
+                        len(planned_sources),
+                    )
+                    self._stop_event.set()
+                else:
+                    missing = planned_sources - completed_sources
+                    logger.info(
+                        "Teto de volume (%d) atingido, mas %d fonte(s) ainda pendente(s) "
+                        "por justiça entre fontes: %s. Continuando a coleta.",
+                        self.config.max_total_results,
+                        len(missing),
+                        sorted(missing),
+                    )
 
             if self._stop_event.is_set():
                 break
