@@ -165,3 +165,70 @@ class TestExtractJsonBlob:
         import json
         parsed = json.loads(result)
         assert parsed == [1, 2, 3]
+
+
+class TestRepairCascadeWiring:
+    """Conexão explícita de _repair_json_defects e _repair_truncated_json
+    dentro de _safe_parse_json (cascata: direto → bloco → defeitos → truncado).
+    """
+
+    # ── Reparo de defeitos comuns ────────────────────────────────────────────
+
+    def test_trailing_comma_array_recovered(self):
+        assert LLMClient._safe_parse_json('[{"a": 1,}, {"b": 2,},]') == [
+            {"a": 1},
+            {"b": 2},
+        ]
+
+    def test_trailing_comma_object_recovered(self):
+        assert LLMClient._safe_parse_json('{"a": 1, "b": 2,}') == {"a": 1, "b": 2}
+
+    def test_smart_quotes_recovered(self):
+        assert LLMClient._safe_parse_json("{“key”: “val”}") == {"key": "val"}
+
+    # ── Reparo de JSON truncado (cortado no limite de tokens) ────────────────
+
+    def test_truncated_array_dangling_object(self):
+        assert LLMClient._safe_parse_json('[{"a": 1}, {"b": 2}, {"c":') == [
+            {"a": 1},
+            {"b": 2},
+        ]
+
+    def test_truncated_missing_closing_bracket(self):
+        assert LLMClient._safe_parse_json('[{"a": 1}, {"b": 2}') == [
+            {"a": 1},
+            {"b": 2},
+        ]
+
+    def test_truncated_open_string(self):
+        assert LLMClient._safe_parse_json('{"name": "cut off here') == {
+            "name": "cut off here"
+        }
+
+    def test_truncated_nested_array(self):
+        assert LLMClient._safe_parse_json('{"items": [1, 2, 3') == {
+            "items": [1, 2, 3]
+        }
+
+    def test_truncated_key_without_value(self):
+        assert LLMClient._safe_parse_json('{"a": 1, "b":') == {"a": 1}
+
+    # ── Negativos ────────────────────────────────────────────────────────────
+
+    def test_pure_garbage_returns_none(self):
+        assert LLMClient._safe_parse_json("isto nao e json de forma alguma") is None
+
+    def test_none_input_returns_none(self):
+        assert LLMClient._safe_parse_json(None) is None
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ('{"a": 1}', {"a": 1}),
+            ('[{"a": 1,},]', [{"a": 1}]),
+            ('{"items": [1, 2', {"items": [1, 2]}),
+            ("lixo total", None),
+        ],
+    )
+    def test_cascade_parametrized(self, raw, expected):
+        assert LLMClient._safe_parse_json(raw) == expected

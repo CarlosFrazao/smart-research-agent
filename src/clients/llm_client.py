@@ -203,7 +203,9 @@ class LLMClient:
         from src.token_economy import TokenEconomy
 
         self.token_economy = TokenEconomy(default_model=self.model)
-        self.max_repair_attempts = 1
+        # M3.2 — 2 tentativas de reparo (3 chamadas no total) reduzem a taxa de
+        # fallback com LLMs locais, que frequentemente erram o JSON na 1ª/2ª.
+        self.max_repair_attempts = 2
         # Sinal visível de falha de geração estruturada (FEAT-002).
         # None = última chamada de generate_structured bem-sucedida.
         # str  = descrição da última falha (LLM vazio/sem JSON/erro de rede).
@@ -736,7 +738,123 @@ class LLMClient:
                         except json.JSONDecodeError:
                             pass
                     continue
+        # M3.2 — Último recurso: JSON TRUNCADO (modelo local cortado no limite
+        # de tokens) não tem colchete de fechamento, então nem casa o regex
+        # ganancioso acima. Tenta fechar os brackets abertos a partir do
+        # primeiro '[' ou '{' e parsear.
+        truncated = LLMClient._repair_truncated_json(candidate)
+        if truncated is not None:
+            try:
+                json.loads(truncated)
+                return truncated
+            except json.JSONDecodeError:
+                pass
         return None
+
+    @staticmethod
+    def _repair_truncated_json(text: str) -> str | None:
+        """Tenta reparar JSON truncado fechando brackets/strings em aberto.
+
+        Estratégia conservadora para respostas de LLM local cortadas no limite
+        de tokens: (1) localiza o início do JSON ('[' ou '{'); (2) remove uma
+        eventual última entrada incompleta após a última vírgula; (3) fecha
+        strings e brackets abertos na ordem correta. Retorna ``None`` se não
+        houver um início de JSON plausível. NÃO garante validade — o caller
+        valida com ``json.loads``.
+        """
+        if not text:
+            return None
+        start = min(
+            (i for i in (text.find("["), text.find("{")) if i >= 0),
+            default=-1,
+        )
+        if start < 0:
+            return None
+        snippet = text[start:]
+
+        # Reaplica reparos comuns primeiro (aspas/vírgulas).
+        snippet = LLMClient._repair_json_defects(snippet)
+
+        # Percorre e rastreia a pilha de brackets, ignorando o que está dentro
+        # de strings. Detecta se terminamos dentro de uma string aberta.
+        stack: list[str] = []
+        in_string = False
+        escaped = False
+        for ch in snippet:
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch in "[{":
+                stack.append(ch)
+            elif ch == "]" and stack and stack[-1] == "[":
+                stack.pop()
+            elif ch == "}" and stack and stack[-1] == "{":
+                stack.pop()
+
+        if not stack and not in_string:
+            return snippet  # já balanceado (defeitos podem ter sido resolvidos)
+
+        repaired = snippet
+        if in_string:
+            repaired += '"'  # fecha a string cortada
+            # A string fechada era um valor/chave incompleto — se estava
+            # pendurada após vírgula, remove a entrada inteira mais abaixo.
+
+        # Remove uma última entrada incompleta pendurada após a última vírgula.
+        # Cobre: chave sem valor ('..., "k":'), objeto incompleto
+        # ('..., {"k":') e valor cortado. Aplica repetidamente até estabilizar.
+        prev = None
+        while prev != repaired:
+            prev = repaired
+            # objeto/entrada incompleto após vírgula: ', {...' sem fechar
+            repaired = re.sub(r",\s*\{[^{}\[\]]*$", "", repaired)
+            # "chave": [valor] incompleto
+            repaired = re.sub(r",\s*\"[^\"]*\"\s*:\s*[^,{}\[\]]*$", "", repaired)
+            # "chave": sem valor
+            repaired = re.sub(r",\s*\"[^\"]*\"\s*:?\s*$", "", repaired)
+            # vírgula solta
+            repaired = re.sub(r",\s*$", "", repaired)
+            # dentro de um objeto recém-aberto: '{"k":' → '{'
+            repaired = re.sub(r"\{\s*\"[^\"]*\"\s*:\s*$", "{", repaired)
+            repaired = repaired.rstrip()
+
+        # Se sobrou um objeto/array vazio pendurado tipo '{' recém-limpo,
+        # remove-o se estiver logo após uma vírgula agora inexistente.
+        repaired = re.sub(r",\s*\{\s*$", "", repaired)
+        repaired = (
+            re.sub(r"\{\s*$", "", repaired) if repaired.endswith("{") else repaired
+        )
+        # Recalcula a pilha após a limpeza (a remoção pode ter fechado brackets).
+        stack2: list[str] = []
+        in_str2 = False
+        esc2 = False
+        for ch in repaired:
+            if in_str2:
+                if esc2:
+                    esc2 = False
+                elif ch == "\\":
+                    esc2 = True
+                elif ch == '"':
+                    in_str2 = False
+                continue
+            if ch == '"':
+                in_str2 = True
+            elif ch in "[{":
+                stack2.append(ch)
+            elif ch == "]" and stack2 and stack2[-1] == "[":
+                stack2.pop()
+            elif ch == "}" and stack2 and stack2[-1] == "{":
+                stack2.pop()
+        for opener in reversed(stack2):
+            repaired += "]" if opener == "[" else "}"
+        return repaired
 
     @staticmethod
     def _repair_json_defects(blob: str) -> str:
@@ -758,26 +876,85 @@ class LLMClient:
 
     @staticmethod
     def _safe_parse_json(text: str) -> Any:
-        """Tenta parsear JSON de uma string, com fallback para extração de bloco.
+        """Tenta parsear JSON de uma string, com cascata de reparo.
 
-        Retorna o objeto Python decodificado ou ``None`` se impossível.
-        Usa ``_extract_json_blob`` para tolerar markdown/ruído.
+        Cascata (mais barato → mais agressivo), retornando no 1º sucesso:
+          1. Parse direto do texto.
+          2. Extração de bloco via ``_extract_json_blob`` (tolera markdown/ruído).
+          3. Reparo de defeitos comuns via ``_repair_json_defects`` (vírgulas à
+             direita, aspas tipográficas).
+          4. Reparo de JSON truncado via ``_repair_truncated_json`` (fecha
+             brackets/strings de respostas cortadas no limite de tokens).
+
+        Retorna o objeto Python decodificado ou ``None`` se nada funcionar.
         """
         if not text:
             return None
-        # Tenta direto
+
+        # 1. Parse direto
         try:
             return json.loads(text.strip())
         except json.JSONDecodeError:
             pass
-        # Tenta extrair bloco JSON
+
+        # 2. Extração de bloco JSON (já aplica reparos internamente)
         blob = LLMClient._extract_json_blob(text)
         if blob is not None:
             try:
                 return json.loads(blob)
             except json.JSONDecodeError:
-                return None
+                pass
+
+        # 3. Reparo de defeitos comuns aplicado diretamente ao texto
+        repaired = LLMClient._repair_json_defects(text.strip())
+        if repaired:
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError:
+                pass
+
+        # 4. Reparo de JSON truncado (último recurso)
+        truncated = LLMClient._repair_truncated_json(text)
+        if truncated is not None:
+            try:
+                return json.loads(truncated)
+            except json.JSONDecodeError:
+                pass
+
         return None
+
+    @staticmethod
+    def _schema_example(schema: dict[str, Any]) -> str:
+        """Gera um esqueleto JSON mínimo a partir do schema (few-shot repair).
+
+        Produz um exemplo compacto com valores placeholder por tipo, para
+        guiar LLMs locais no reparo. Retorna string vazia se o schema não
+        for interpretável. Best-effort — nunca levanta exceção.
+        """
+
+        def _sample(node: Any) -> Any:
+            if not isinstance(node, dict):
+                return "..."
+            t = node.get("type")
+            if t == "array":
+                item = _sample(node.get("items", {"type": "string"}))
+                return [item]
+            if t == "object":
+                props = node.get("properties", {})
+                if not props:
+                    return {}
+                # Limita a 3 chaves para manter o exemplo compacto.
+                return {k: _sample(v) for k, v in list(props.items())[:3]}
+            if t == "integer" or t == "number":
+                return 0
+            if t == "boolean":
+                return True
+            return "..."
+
+        try:
+            return json.dumps(_sample(schema), ensure_ascii=False)
+        except Exception:  # noqa: BLE001 — few-shot é opcional
+            return ""
 
     async def generate_structured(
         self, prompt: str, schema: dict[str, Any], temperature: float = 0.1
@@ -810,6 +987,10 @@ class LLMClient:
             + "\nNao inclua markdown, apenas JSON puro."
         )
 
+        # M3.2 — exemplo mínimo (few-shot) derivado do schema. LLMs locais
+        # acertam muito mais o formato quando veem um esqueleto concreto.
+        example_skeleton = self._schema_example(schema)
+
         last_response: str = ""
         for attempt in range(self.max_repair_attempts + 1):
             if attempt == 0:
@@ -817,8 +998,14 @@ class LLMClient:
             else:
                 instruction = (
                     f"{json_prompt}\n\nSua resposta anterior NAO foi um JSON valido. "
-                    f"Responda APENAS o JSON puro, sem texto adicional nem markdown."
+                    f"Responda APENAS o JSON puro, sem texto adicional nem markdown, "
+                    f"sem virgulas sobrando e com TODAS as chaves/colchetes fechados."
                 )
+                if example_skeleton:
+                    instruction += (
+                        f"\nExemplo do formato esperado (preencha com dados reais): "
+                        f"{example_skeleton}"
+                    )
             try:
                 response = await self.generate(instruction, temperature=temperature)
             except Exception as exc:
