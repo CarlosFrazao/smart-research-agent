@@ -321,17 +321,43 @@ class GenericAPISearcher(BaseSearcher):
     def _build_headers(self, raw_headers: dict[str, str]) -> dict[str, str]:
         """Resolve placeholders ``{ENV_VAR}`` de headers a partir de os.environ.
 
+        Se a env var resolvida for vazia (ausente ou ``""``), o header é
+        **omitido** da requisição em vez de enviado como valor vazio (ex:
+        ``Bearer ``), evitando o erro ``Illegal header value`` do httpx. Um
+        único ``logger.warning`` é emitido por header ignorado.
+
         Args:
             raw_headers: Headers com possíveis placeholders de env var.
 
         Returns:
-            Headers com placeholders resolvidos (env var ausente vira "").
+            Headers com placeholders resolvidos; headers com env var
+            ausente/vazia são omitidos silenciosamente (com 1 aviso).
         """
         resolved: dict[str, str] = {}
         for key, value in raw_headers.items():
-            resolved[key] = _PLACEHOLDER_RE.sub(
-                lambda m: os.environ.get(m.group(1), ""), str(value)
-            )
+            # Resolve cada placeholder {ENV_VAR} para o valor de os.environ.
+            # Rastreia se algum placeholder resolveu para vazio (env var ausente
+            # ou ""), pois nesse caso o header deve ser OMITIDO (e nao enviado
+            # como "Bearer " vazio, que quebra o httpx com Illegal header value).
+            missing_placeholder = False
+
+            def _resolve(m: "re.Match[str]") -> str:
+                nonlocal missing_placeholder
+                val = os.environ.get(m.group(1), "")
+                if val == "":
+                    missing_placeholder = True
+                return val
+
+            rendered = _PLACEHOLDER_RE.sub(_resolve, str(value))
+            if missing_placeholder:
+                logger.warning(
+                    "GenericAPISearcher[%s]: header '%s' ignorado — "
+                    "env var ausente/vazia no placeholder.",
+                    self.source_id,
+                    key,
+                )
+                continue
+            resolved[key] = rendered
         return resolved
 
     def _extract_items(self, data: Any) -> list[Any]:
