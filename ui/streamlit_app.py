@@ -288,11 +288,13 @@ with st.sidebar:
             "concorrencia",
             "black_ops",
             "debate",
+            "mito",
         ],
         help=(
             "guerrilha=rápido, cirurgia=preciso com auditoria, "
             "black_ops=pesquisa profunda, "
-            "debate=motor multi-agente (hipóteses opostas + juiz LLM)"
+            "debate=motor multi-agente (hipóteses opostas + juiz LLM), "
+            "mito=fact-checking de mitos populares (web/Wikipedia/Snopes/Reddit)"
         ),
     )
     max_results = st.slider("Resultados máximos por fonte", 3, 25, 12)
