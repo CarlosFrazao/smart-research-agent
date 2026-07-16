@@ -729,6 +729,29 @@ class LLMClient:
                     continue
         return None
 
+    @staticmethod
+    def _safe_parse_json(text: str) -> Any:
+        """Tenta parsear JSON de uma string, com fallback para extração de bloco.
+
+        Retorna o objeto Python decodificado ou ``None`` se impossível.
+        Usa ``_extract_json_blob`` para tolerar markdown/ruído.
+        """
+        if not text:
+            return None
+        # Tenta direto
+        try:
+            return json.loads(text.strip())
+        except json.JSONDecodeError:
+            pass
+        # Tenta extrair bloco JSON
+        blob = LLMClient._extract_json_blob(text)
+        if blob is not None:
+            try:
+                return json.loads(blob)
+            except json.JSONDecodeError:
+                return None
+        return None
+
     async def generate_structured(
         self, prompt: str, schema: dict[str, Any], temperature: float = 0.1
     ) -> Any:
@@ -776,20 +799,13 @@ class LLMClient:
                 self.last_failure = f"erro de rede/LLM: {exc}"
                 return safe_fallback
             last_response = response or ""
-            blob = self._extract_json_blob(last_response)
-            if blob is not None:
-                try:
-                    parsed = json.loads(blob)
-                    self.last_failure = None
-                    return parsed
-                except json.JSONDecodeError:
-                    logger.warning(
-                        f"generate_structured: JSON extraído inválido (tentativa {attempt + 1})"
-                    )
+            parsed = self._safe_parse_json(last_response)
+            if parsed is not None:
+                self.last_failure = None
+                return parsed
             else:
                 logger.warning(
-                    f"generate_structured: nenhum JSON encontrado na resposta "
-                    f"(tentativa {attempt + 1}): {last_response[:80]!r}"
+                    f"generate_structured: nenhum JSON válido encontrado (tentativa {attempt + 1})"
                 )
 
         logger.error(

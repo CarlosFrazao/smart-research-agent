@@ -56,3 +56,14 @@ domains:
     secondary:
       - multilingual
       - scraping
+  myth:
+    description: "Verificação de mitos populares e fact-checking — web, Wikipedia, Snopes, Reddit"
+    primary:
+      - web
+      - searxng
+      - wikipedia
+      - snopes
+    secondary:
+      - reddit
+      - multilingual
+    notes: "Usado para claims de mito popular (ex: 'cérebro usa 10%'). Prioriza fontes de verificação."

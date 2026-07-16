@@ -254,6 +254,31 @@ class OperationModes:
             active_personas=["prism_scientist"],
             enable_adversarial_pass=True,
         ),
+        # ── GAP de mitos populares (investigação "cérebro usa 10%") ────────────
+        "mito": OperationConfig(
+            name="mito",
+            description="Verificação de mitos populares e fact-checking — prioriza web, "
+            "Wikipedia, Snopes e Reddit para desmascarar afirmações amplamente difundidas. "
+            "Ideal para claims como 'o cérebro usa apenas 10%' ou 'beber água fria queima calorias'.",
+            searchers=[
+                "web",
+                "searxng",
+                "wikipedia",
+                "snopes",
+                "reddit",
+            ],
+            scrapers=["firecrawl", "jina"],
+            confidence_threshold=0.70,
+            max_depth=2,
+            enable_auditor=True,
+            enable_race=True,
+            proxy_strategy="rotate_careful",
+            cache_strategy="moderate",
+            timeout_seconds=180,
+            cost_optimization=False,
+            active_personas=["prism_scientist"],
+            enable_adversarial_pass=True,
+        ),
     }
 
     # Modo padrão quando nenhum modo é especificado
