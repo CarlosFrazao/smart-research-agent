@@ -162,6 +162,14 @@ class SearchStageConfig:
     # Fallback
     fallback_on_empty: bool = True  # Usa SerpAPI se nenhum resultado
 
+    # Relevance floor (Onda 1 / M1.1) — descarta resultados sem sobreposição
+    # de tokens significativa com a query ORIGINAL. Protege contra lixo que
+    # entra quando a expansão de query degrada (ex.: SearXNG trazendo
+    # "Agenda Cultural de Manaus" numa pesquisa sobre MVCC).
+    relevance_floor_enabled: bool = True
+    relevance_floor_min_overlap: float = 0.08  # sobreposição mínima [0..1]
+    relevance_floor_min_keep: int = 5  # nunca deixa a coleta abaixo disso
+
 
 class SearchStage(PipelineStage):
     """Stage de busca paralela com semáforo, circuit breaker e early termination.
@@ -270,6 +278,10 @@ class SearchStage(PipelineStage):
         if not all_results and self.config.fallback_on_empty:
             fallback_results = await self._fallback_serpapi(context)
             all_results.extend(fallback_results)
+
+        # 3.1 (M1.1) Relevance floor — remove resultados off-topic antes do rank
+        if self.config.relevance_floor_enabled:
+            all_results = self._apply_relevance_floor(all_results, context.query)
 
         # 4. Ranqueamento
         ranked = await self.ranker.rank(all_results)
@@ -673,6 +685,136 @@ class SearchStage(PipelineStage):
         return results
 
     # ── FASE 5: Allowlist/Denylist (trust_rules) ─────────────────────────────
+
+    # Stopwords mínimas (PT+EN) para o cálculo de sobreposição de tokens.
+    _RELEVANCE_STOPWORDS = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "of",
+            "for",
+            "and",
+            "or",
+            "is",
+            "are",
+            "to",
+            "in",
+            "on",
+            "with",
+            "how",
+            "what",
+            "best",
+            "vs",
+            "from",
+            "by",
+            "at",
+            "as",
+            "be",
+            "have",
+            "has",
+            "do",
+            "does",
+            "whether",
+            "that",
+            "this",
+            "these",
+            "those",
+            "real",
+            "recent",
+            "actually",
+            "been",
+            "de",
+            "da",
+            "do",
+            "das",
+            "dos",
+            "um",
+            "uma",
+            "para",
+            "com",
+            "como",
+            "que",
+            "qual",
+            "os",
+            "as",
+            "no",
+            "na",
+            "e",
+            "ou",
+        }
+    )
+
+    @classmethod
+    def _significant_tokens(cls, text: str) -> set[str]:
+        """Extrai tokens significativos (>=3 chars, sem stopwords) de um texto."""
+        import re as _re
+
+        tokens = _re.findall(r"[a-zA-Z0-9À-ÿ]+", (text or "").lower())
+        return {t for t in tokens if len(t) >= 3 and t not in cls._RELEVANCE_STOPWORDS}
+
+    def _apply_relevance_floor(
+        self, results: List[SearchResult], query: str
+    ) -> List[SearchResult]:
+        """Remove resultados sem sobreposição de tokens com a query original.
+
+        Calcula a fração de tokens significativos da query que aparecem no
+        título+descrição de cada resultado. Resultados abaixo de
+        ``relevance_floor_min_overlap`` são descartados — mas nunca abaixo de
+        ``relevance_floor_min_keep`` resultados (degradação suave: é melhor
+        mostrar algo fraco do que um relatório vazio).
+
+        Protege contra o lixo geo-local que o SearXNG traz quando a expansão
+        de query degrada (ex.: "Agenda Cultural de Manaus" numa pesquisa
+        técnica). Fontes estruturadas confiáveis (arxiv/github/pubmed) NÃO são
+        filtradas, pois já vêm de uma consulta dirigida.
+
+        Args:
+            results: Resultados brutos coletados.
+            query: A query ORIGINAL do usuário (imune à degradação da expansão).
+
+        Returns:
+            List[SearchResult]: Resultados relevantes; ordem preservada.
+        """
+        if not results:
+            return results
+
+        query_tokens = self._significant_tokens(query)
+        if not query_tokens:
+            return results  # sem sinal na query — não filtra
+
+        scored: list[tuple[float, SearchResult]] = []
+        for r in results:
+            source = (getattr(r, "source", "") or "").lower()
+            # Fontes estruturadas confiáveis são isentas (consulta dirigida).
+            if source in TRUSTED_SOURCES:
+                scored.append((1.0, r))
+                continue
+            text = f"{getattr(r, 'title', '')} {getattr(r, 'description', '')}"
+            result_tokens = self._significant_tokens(text)
+            if not result_tokens:
+                scored.append((0.0, r))
+                continue
+            overlap = len(query_tokens & result_tokens) / len(query_tokens)
+            scored.append((overlap, r))
+
+        kept = [r for ov, r in scored if ov >= self.config.relevance_floor_min_overlap]
+        dropped = len(results) - len(kept)
+
+        # Degradação suave: se filtrou demais, recompõe pelos melhores.
+        if len(kept) < self.config.relevance_floor_min_keep:
+            scored.sort(key=lambda pair: pair[0], reverse=True)
+            kept = [r for _, r in scored[: self.config.relevance_floor_min_keep]]
+            dropped = len(results) - len(kept)
+
+        if dropped > 0:
+            logger.info(
+                "Relevance floor: %d resultado(s) off-topic removido(s) "
+                "(overlap < %.2f com a query original).",
+                dropped,
+                self.config.relevance_floor_min_overlap,
+            )
+        return kept
 
     def _apply_trust_rules(
         self, results: List[SearchResult], context: PipelineContext

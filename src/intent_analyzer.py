@@ -35,9 +35,12 @@ DOMAIN_KEYWORDS = {
         "pricing",
         "preco",
         "custo",
-        "free",
+        # "free" removido: fronteira de palavra ainda casaria com "lock-free".
+        # Termos comerciais mais específicos evitam falsos positivos técnicos.
         "quanto custa",
         "gratis",
+        "subscription",
+        "assinatura",
     ],
     Domain.DEV_TOOLS: [
         "ide",
@@ -45,9 +48,46 @@ DOMAIN_KEYWORDS = {
         "ci/cd",
         "testing",
         "debugger",
-        "git",
+        # "git" removido: casaria só como palavra isolada, mas é ruído;
+        # "github" pertence a open_source. Mantém ferramentas de dev reais.
         "vscode",
         "editor",
+        "compiler",
+        "profiler",
+        "benchmark",
+        "debugging",
+    ],
+    # Banco de dados e concorrência: vocabulário técnico que estava ausente
+    # e fazia queries de BD caírem em saas_b2b/general (BUG D).
+    Domain.INFRASTRUCTURE: [
+        "docker",
+        "kubernetes",
+        "k8s",
+        "cloud",
+        "serverless",
+        "terraform",
+        "aws",
+        "database",
+        "databases",
+        "banco de dados",
+        "mvcc",
+        "deadlock",
+        "concurrency",
+        "concorrencia",
+        "concorrência",
+        "lock-free",
+        "lock contention",
+        "starvation",
+        "sql",
+        "postgres",
+        "postgresql",
+        "duckdb",
+        "kuzudb",
+        "sqlite",
+        "redis",
+        "transaction",
+        "throughput",
+        "latency",
     ],
     Domain.AI_ML: [
         "llm",
@@ -59,6 +99,8 @@ DOMAIN_KEYWORDS = {
         "gpt",
         "claude",
         "embedding",
+        "rag",
+        "fine-tuning",
     ],
     Domain.AUTOMATION: [
         "n8n",
@@ -69,25 +111,36 @@ DOMAIN_KEYWORDS = {
         "automation",
         "pipeline",
     ],
-    Domain.INFRASTRUCTURE: [
-        "docker",
-        "kubernetes",
-        "k8s",
-        "cloud",
-        "serverless",
-        "terraform",
-        "aws",
-    ],
     Domain.OPEN_SOURCE: [
         "github",
         "open source",
+        "open-source",
         "library",
         "framework",
         "package",
         "npm",
         "pypi",
+        "pull request",
+        "commit",
+        "commits",
+        "issue",
+        "issues",
+        "repository",
+        "repo",
     ],
 }
+
+# Domínios técnicos que devem ter precedência sobre saas_b2b em caso de
+# empate na contagem de keywords. saas_b2b é comercial e, quando empata com
+# um sinal técnico genuíno, quase sempre é um falso positivo (ex.: "free"
+# em "lock-free"). A ordem reflete a especificidade decrescente.
+_TECHNICAL_DOMAIN_PRIORITY = (
+    Domain.INFRASTRUCTURE,
+    Domain.AI_ML,
+    Domain.DEV_TOOLS,
+    Domain.OPEN_SOURCE,
+    Domain.AUTOMATION,
+)
 
 # Palavras que sinalizam intenção de notícia/evento atual (Fase 5 — Parte 4).
 # Usadas para rotear queries gerais para Domain.NEWS quando não houver
@@ -256,8 +309,29 @@ class IntentAnalyzer:
             maxlen=self._CACHE_MAX_SIZE
         )
 
+    @staticmethod
+    def _keyword_matches(keyword: str, query_lower: str) -> bool:
+        """Verifica se ``keyword`` aparece como palavra/frase inteira na query.
+
+        Usa fronteira de palavra (``\\b``) em vez de substring bruto para
+        evitar falsos positivos como "free" ⊂ "lock-free", "git" ⊂ "github"
+        ou "ai" ⊂ "domain". Keywords com caracteres especiais (ex.: "ci/cd",
+        "c++") caem em correspondência de substring segura.
+        """
+        # Escapa o keyword; \b só funciona bem em limites alfanuméricos, então
+        # para tokens que começam/terminam em não-palavra usamos substring.
+        if re.search(r"[^\w\s]", keyword):
+            return keyword in query_lower
+        return re.search(rf"\b{re.escape(keyword)}\b", query_lower) is not None
+
     def _heuristic_domain(self, query: str) -> Domain:
         """Classifica o dominio da query usando correspondencia de palavras-chave.
+
+        Estratégia (corrige BUG D):
+          1. Contagem por fronteira de palavra (não substring), evitando
+             falsos positivos como "free" em "lock-free".
+          2. Desempate: domínios técnicos têm precedência sobre saas_b2b,
+             que é comercial e costuma ganhar empates por falso positivo.
 
         Args:
             query: Query do usuario.
@@ -269,11 +343,21 @@ class IntentAnalyzer:
         scores = {domain: 0 for domain in Domain}
         for domain, keywords in DOMAIN_KEYWORDS.items():
             for kw in keywords:
-                if kw in query_lower:
+                if self._keyword_matches(kw, query_lower):
                     scores[domain] += 1
-        best = max(scores, key=lambda k: scores[k])
-        if scores[best] > 0:
-            return best
+
+        top_score = max(scores.values())
+        if top_score > 0:
+            # Desempate: entre os domínios com a pontuação máxima, prefere um
+            # domínio técnico (na ordem de prioridade) antes de cair no
+            # primeiro do dict (que era sempre saas_b2b).
+            tied = [d for d, s in scores.items() if s == top_score]
+            if len(tied) == 1:
+                return tied[0]
+            for tech_domain in _TECHNICAL_DOMAIN_PRIORITY:
+                if tech_domain in tied:
+                    return tech_domain
+            return tied[0]
 
         # ── Roteamento de notícias (Fase 5 — Parte 4) ──
         # Nenhum domínio técnico detectado: verifica se a query tem sinais
