@@ -166,6 +166,56 @@ class SourcePlanner:
         self.user_id = user_id
         self.mode = mode
         self.domain_map = self._load_domain_map()
+        # M2.2: conjunto de fontes REALMENTE disponíveis (searchers
+        # instanciados com credencial). Quando fornecido, o plano filtra
+        # fontes fantasma (ex.: serpapi sem lib, sharepoint sem credencial)
+        # ANTES de montar o SourcePlan — evitando o WARNING repetido "no
+        # registered searcher" no SearchStage. None = sem filtragem (retro-
+        # compatível com todos os call sites que não injetam a lista).
+        self.available_sources: set[str] | None = None
+
+    def _finalize_plan(
+        self,
+        sources: dict[str, list],
+        primary: list[str],
+        secondary: list[str],
+    ) -> SourcePlan:
+        """Monta o SourcePlan filtrando fontes indisponíveis (M2.2).
+
+        Se ``self.available_sources`` estiver definido, remove de ``sources``,
+        ``primary`` e ``secondary`` qualquer fonte não instanciada. Registra
+        UMA linha de log com as fontes descartadas (transparência sem spam).
+        Se a filtragem esvaziar o plano, mantém o plano original (degradação
+        suave — melhor tentar do que não buscar nada).
+        """
+        if not self.available_sources:
+            return SourcePlan(sources=sources, primary=primary, secondary=secondary)
+
+        avail = self.available_sources
+        dropped = sorted({s for s in sources if s not in avail})
+        if not dropped:
+            return SourcePlan(sources=sources, primary=primary, secondary=secondary)
+
+        filtered_sources = {s: q for s, q in sources.items() if s in avail}
+        if not filtered_sources:
+            logger.warning(
+                "SourcePlanner: todas as fontes do plano estão indisponíveis "
+                "(%s) — mantendo plano original para não zerar a busca.",
+                dropped,
+            )
+            return SourcePlan(sources=sources, primary=primary, secondary=secondary)
+
+        logger.info(
+            "SourcePlanner: %d fonte(s) fantasma removida(s) do plano "
+            "(sem searcher/credencial): %s.",
+            len(dropped),
+            dropped,
+        )
+        return SourcePlan(
+            sources=filtered_sources,
+            primary=[s for s in primary if s in avail],
+            secondary=[s for s in secondary if s in avail],
+        )
 
     @staticmethod
     def _run_async(coro: Any) -> Any:
@@ -338,7 +388,7 @@ class SourcePlanner:
                             queries, source, intent
                         )
 
-                    return SourcePlan(
+                    return self._finalize_plan(
                         sources=mode_plan, primary=primary, secondary=secondary
                     )
             except Exception as e:
@@ -403,7 +453,7 @@ class SourcePlanner:
         for source in primary + secondary:
             plan[source] = self._select_queries_for_source(queries, source, intent)
 
-        return SourcePlan(sources=plan, primary=primary, secondary=secondary)
+        return self._finalize_plan(sources=plan, primary=primary, secondary=secondary)
 
     def _plan_universal_with_llm(
         self,
@@ -471,7 +521,7 @@ class SourcePlanner:
         for source in primary + secondary:
             plan[source] = self._select_queries_for_source(queries, source, intent)
 
-        return SourcePlan(sources=plan, primary=primary, secondary=secondary)
+        return self._finalize_plan(sources=plan, primary=primary, secondary=secondary)
 
     async def _plan_with_llm(self, intent: IntentResult, query: str) -> list[str]:
         """Roteamento dinâmico via LLM para o dominio universal.

@@ -411,6 +411,13 @@ class ExpandStage:
                         getattr(orchestrator, "config", None), "operation_mode", None
                     )
                 planner = SourcePlanner(mode=mode_name)
+                # M2.2: injeta as fontes REALMENTE instanciadas (searchers com
+                # credencial) para o planner descartar fontes fantasma
+                # (serpapi/sharepoint) antes de montar o plano.
+                if orchestrator is not None:
+                    live_searchers = getattr(orchestrator, "searchers", None)
+                    if isinstance(live_searchers, dict) and live_searchers:
+                        planner.available_sources = set(live_searchers.keys())
                 context.source_plan = planner.plan(
                     intent, context.expanded_queries, context
                 )
