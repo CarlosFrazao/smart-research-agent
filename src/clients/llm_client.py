@@ -43,6 +43,16 @@ class OutputValidationError(LLMClientError):
     pass
 
 
+class StructuredGenerationError(RuntimeError):
+    """Falha de geração estruturada (LLM retornou vazio/inválido).
+
+    Não é estourada para o caller — `generate_structured` retorna um fallback
+    seguro (`[]`/`{}`). O sinal visível fica em `LLMClient.last_failure`.
+    """
+
+    pass
+
+
 def _retryable_exceptions_for(
     provider: "LLMProvider",
 ) -> tuple[type[BaseException], ...]:
@@ -194,6 +204,10 @@ class LLMClient:
 
         self.token_economy = TokenEconomy(default_model=self.model)
         self.max_repair_attempts = 1
+        # Sinal visível de falha de geração estruturada (FEAT-002).
+        # None = última chamada de generate_structured bem-sucedida.
+        # str  = descrição da última falha (LLM vazio/sem JSON/erro de rede).
+        self.last_failure: str | None = None
         self._retry_config = RetryConfig(
             max_attempts=4,
             initial_wait_seconds=1.0,
@@ -759,12 +773,15 @@ class LLMClient:
                 response = await self.generate(instruction, temperature=temperature)
             except Exception as exc:
                 logger.warning(f"generate_structured: falha de rede/LLM: {exc}")
+                self.last_failure = f"erro de rede/LLM: {exc}"
                 return safe_fallback
             last_response = response or ""
             blob = self._extract_json_blob(last_response)
             if blob is not None:
                 try:
-                    return json.loads(blob)
+                    parsed = json.loads(blob)
+                    self.last_failure = None
+                    return parsed
                 except json.JSONDecodeError:
                     logger.warning(
                         f"generate_structured: JSON extraído inválido (tentativa {attempt + 1})"
@@ -778,6 +795,9 @@ class LLMClient:
         logger.error(
             "generate_structured: falha definitiva ao obter JSON válido. "
             "Retornando fallback seguro."
+        )
+        self.last_failure = (
+            "falha definitiva ao obter JSON válido; última resposta vazia/sem JSON"
         )
         return safe_fallback
 

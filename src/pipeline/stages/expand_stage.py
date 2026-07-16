@@ -552,6 +552,26 @@ class ExpandStage:
                         )
             # --- FIM DO BLOCANTE HUMAN-IN-THE-LOOP (HITL) ---
 
+        # FEAT-002 (Resiliência Bloco 2): sinal visível de falha de geração
+        # estruturada durante a expansão. O QueryExpander chama
+        # LLMClient.generate_structured internamente; se ele caiu no fallback
+        # seguro (LLM vazio/sem JSON), registramos o aviso no contexto.
+        expander = self._query_expander
+        if expander is not None:
+            expander_llm = getattr(expander, "llm", None) or getattr(
+                expander, "llm_client", None
+            )
+            last_failure = getattr(expander_llm, "last_failure", None)
+            if last_failure:
+                warning = (
+                    "Expansão de query com degradação: generate_structured retornou "
+                    f"fallback seguro ({last_failure}). Expansões podem estar incompletas."
+                )
+                logger.warning(f"expand_stage: {warning}")
+                extras = getattr(context, "extras", None)
+                if isinstance(extras, dict):
+                    context.extras["synthesis_warning"] = warning
+
         return context
 
     # ------------------------------------------------------------------ #

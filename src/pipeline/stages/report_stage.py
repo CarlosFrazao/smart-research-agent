@@ -225,6 +225,19 @@ class ReportStage(PipelineStage):
         context.report = report_md
         context.set("report_sections", sections)
 
+        # FEAT-002 (Resiliência Bloco 2): sinal visível de falha de geração
+        # estruturada. Se o LLM falhou ao produzir JSON válido (generate_structured
+        # caiu no fallback seguro), registramos o aviso no contexto para que o
+        # relatório (e consumidores downstream) possam sinalizar degradação.
+        if hasattr(self, "llm") and getattr(self.llm, "last_failure", None):
+            warning = (
+                "Síntese LLM com degradação: generate_structured retornou fallback "
+                f"seguro ({self.llm.last_failure}). Seções podem estar incompletas."
+            )
+            logger.warning(f"ReportStage: {warning}")
+            if hasattr(context, "extra"):
+                context.extra["synthesis_warning"] = warning
+
         return context
 
     async def execute(
