@@ -254,3 +254,42 @@ Não exponha o `uvicorn` diretamente. Coloque um proxy reverso (nginx ou Caddy)
 
 > ⚠️ A configuração padrão (sem `SRA_API_KEY`, CORS `*`) é apenas para
 > desenvolvimento local. Nunca a deixe assim em produção.
+
+---
+
+## 🛡️ Resiliência e Transparência de Falhas (MVP de Resiliência)
+
+O SRA foi reforçado para **tornar a falha visível e rastreável** em vez de
+engoli-la silenciosamente. Três correções P0 (FEAT-001/002/003) compõem o MVP
+de Resiliência:
+
+| Feature | O que resolve | Comportamento |
+|---------|---------------|---------------|
+| **FEAT-001** — Header defensivo | `GenericAPISearcher` montava `Authorization: Bearer ` (vazio) quando a env var estava ausente, quebrando a requisição com `Illegal header value`. | Headers com env var ausente/vazia são **omitidos** da requisição; 1 `logger.warning` único por source. |
+| **FEAT-002** — Sinal de falha na síntese | `generate_structured` retornava fallback mudo quando o LLM vinha vazio/não-JSON, entregando relatório incompleto sem aviso. | `LLMClient` expõe `last_failure`; callers (`report_stage`, `expand_stage`) registram `context.extra["synthesis_warning"]`. Retorno estruturado mantido (sem quebrar parsing). |
+| **FEAT-003** — Credencial-aware no `SearchStage` | Fontes sem searcher/credencial sumiam do relatório sem explicação. | `SearchStage` popula `context.extra["search_warnings"]` ("sem searcher" / "sem credencial"); `report_stage` expõe a seção **⚠️ Fontes Não Atendidas** no rodapé do Markdown. |
+
+### Por que importa
+
+Em uso real, o agente "falha graciosamente demais": credencial ausente
+(`FIRECRAWL_API_KEY`, `NOTION_API_KEY`), API `401` ou LLM vazio produziam
+relatórios incompletos **sem dizer por quê**. Agora, o rodapé do relatório
+informa explicitamente quais fontes não foram atendidas e por que — guiando a
+correta configuração do `.env`.
+
+Exemplo de rodapé gerado quando `notion` está no plano mas sem credencial:
+
+```markdown
+## ⚠️ Fontes Não Atendidas
+
+As seguintes fontes do plano de busca não retornaram resultados por falta de
+configuração (credencial ausente ou searcher não registrado):
+
+- Fonte 'notion' no plano não tem searcher registrado (sem credencial/config).
+```
+
+### Cobertura de testes
+
+Cada feature tem suite TDD dedicada (`tests/test_generic_api_searcher_headers.py`,
+`tests/test_generate_structured_failure.py`, `tests/test_search_stage_credentials.py`),
+todas verdes. Nenhuma nova dependência foi adicionada (Regra #5 do CLAUDE.md).
