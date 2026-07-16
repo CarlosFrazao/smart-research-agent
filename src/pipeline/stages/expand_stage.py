@@ -403,7 +403,14 @@ class ExpandStage:
             if getattr(context, "source_plan", None) is None:
                 from src.source_planner import SourcePlanner
 
-                planner = SourcePlanner()
+                orchestrator = context.extras.get("orchestrator")
+                mode_name = None
+                if orchestrator is not None:
+                    op_mode = getattr(orchestrator, "operation_mode", None)
+                    mode_name = getattr(op_mode, "name", None) or getattr(
+                        getattr(orchestrator, "config", None), "operation_mode", None
+                    )
+                planner = SourcePlanner(mode=mode_name)
                 context.source_plan = planner.plan(
                     intent, context.expanded_queries, context
                 )

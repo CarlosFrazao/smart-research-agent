@@ -158,11 +158,13 @@ class SourcePlanner:
         llm: Any = None,
         feedback_store: Any = None,
         user_id: str | None = None,
+        mode: str | None = None,
     ):
         self.config = config or {}
         self.llm = llm
         self.feedback_store = feedback_store
         self.user_id = user_id
+        self.mode = mode
         self.domain_map = self._load_domain_map()
 
     @staticmethod
@@ -266,6 +268,85 @@ class SourcePlanner:
         # Segundo fallback: se "universal" também não existir, use "general"
         if domain_key not in self.domain_map:
             domain_key = "general"
+
+        # ── Roteamento por MODO de operação (M1 — modo 'mito') ───────────────
+        # Quando o modo de operação define searchers explícitos, eles têm
+        # prioridade sobre o mapeamento por domínio. Isso garante que modos
+        # como 'mito' (fact-checking) direcionem a busca para as fontes
+        # certas (web/Wikipedia/Snopes/Reddit) independentemente do domínio
+        # detectado pelo IntentAnalyzer. O domínio detectado vira secundário
+        # (complemento), preservando cobertura sem quebrar o comportamento
+        # dos modos que já funcionavam (cirurgia, guerrilha, etc.).
+        if self.mode:
+            try:
+                from src.operation_modes import OperationModes
+
+                mode_cfg = OperationModes.get_mode(self.mode)
+                mode_searchers = list(mode_cfg.searchers)
+                if mode_searchers:
+                    mapping = self.domain_map.get(domain_key, DOMAIN_SOURCES["general"])
+                    domain_primary = list(mapping.get("primary", []))
+                    domain_secondary = list(mapping.get("secondary", []))
+
+                    # Primary = searchers do modo; secondary = domínio detectado
+                    # (sem duplicar os já presentes no primary).
+                    secondary = [
+                        s
+                        for s in domain_primary + domain_secondary
+                        if s not in mode_searchers
+                    ]
+                    primary = mode_searchers
+
+                    logger.info(
+                        "SourcePlanner: modo '%s' sobrepôs fontes → primary=%s",
+                        self.mode,
+                        primary,
+                    )
+
+                    # Pula o roteamento defensivo de notícias e o LLM-router
+                    # abaixo, pois o modo já definiu o plano explícito.
+                    primary = self._apply_user_weights(primary, domain_key)
+                    secondary = self._apply_user_weights(secondary, domain_key)
+
+                    # Fase 2 — TrustRuleStore: aplica regras de allow/deny
+                    if context is None:
+                        mode_trust_rules = {}
+                    elif isinstance(context, dict):
+                        mode_trust_rules = context.get("extra", {}).get(
+                            "trust_rules", {}
+                        )
+                    else:
+                        mode_trust_rules = getattr(context, "extra", {}).get(
+                            "trust_rules", {}
+                        )
+                    if mode_trust_rules:
+                        denied = {
+                            s for s, tier in mode_trust_rules.items() if tier == "deny"
+                        }
+                        allowed_priority = [
+                            s for s, tier in mode_trust_rules.items() if tier == "allow"
+                        ]
+                        primary = [s for s in primary if s not in denied]
+                        secondary = [s for s in secondary if s not in denied]
+                        for s in reversed(allowed_priority):
+                            if s not in primary:
+                                primary.insert(0, s)
+
+                    mode_plan: dict[str, list] = {}
+                    for source in primary + secondary:
+                        mode_plan[source] = self._select_queries_for_source(
+                            queries, source, intent
+                        )
+
+                    return SourcePlan(
+                        sources=mode_plan, primary=primary, secondary=secondary
+                    )
+            except Exception as e:
+                logger.warning(
+                    "SourcePlanner: falha ao aplicar modo '%s', usando roteamento por domínio: %s",
+                    self.mode,
+                    e,
+                )
 
         # FASE 5 — Roteamento defensivo de notícias (Parte 4): se o
         # IntentAnalyzer classificou como GENERAL mas a query traz sinais

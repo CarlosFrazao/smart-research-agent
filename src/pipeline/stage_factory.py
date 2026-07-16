@@ -148,7 +148,11 @@ class StageFactory:
 
         orchestrator.intent_analyzer = IntentAnalyzer(orchestrator.llm)
         orchestrator.query_expander = QueryExpander(orchestrator.llm)
-        orchestrator.source_planner = SourcePlanner(llm=orchestrator.llm)
+        # OperationMode (necessário antes do SourcePlanner p/ roteamento por modo)
+        mode_name = getattr(config, "operation_mode", OperationModes.DEFAULT_MODE)
+        orchestrator.source_planner = SourcePlanner(
+            llm=orchestrator.llm, mode=mode_name
+        )
         orchestrator.ranker = QualityRanker(orchestrator.llm)
         orchestrator.confidence_scorer = ConfidenceScorerV2(llm_client=orchestrator.llm)
         orchestrator.gap_detector = GapDetector(orchestrator.llm)
@@ -172,7 +176,6 @@ class StageFactory:
         orchestrator.dlq = DeadLetterQueue(path=getattr(config, "dlq_path", "./.dlq"))
 
         # OperationMode
-        mode_name = getattr(config, "operation_mode", OperationModes.DEFAULT_MODE)
         orchestrator.operation_mode = OperationModes.get_mode(mode_name)
 
         # ResearchAuditor
