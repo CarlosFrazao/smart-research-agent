@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 
 from src.clients.llm_client import LLMClient
 from src.exceptions import BudgetExceededError
+from src.search.content_normalizer import ContentNormalizer
 from src.token_economy import TokenEconomy
 from src.types import SearchResult, ExpandedQuery, IntentResult, Domain, Intention
 
@@ -121,11 +122,18 @@ class DeepResearcher:
         orchestrator=None,
         memory=None,
         budget: ResearchBudget | None = None,
+        content_normalizer: ContentNormalizer | None = None,
     ):
         self.llm = llm_client
         self.orchestrator = orchestrator
         # OrvixMemoryV2 opcional — injeta contexto do grafo nas hipóteses
         self.memory = memory
+        # ContentNormalizer opcional (FEAT-004): limpa/resume descrições brutas
+        # antes de entrar no contexto de hipóteses, poupando tokens. Se None,
+        # o texto bruto é usado (fallback gracioso, sem quebrar a assinatura).
+        self.content_normalizer = content_normalizer
+        # TokenEconomy opcional para contabilizar a economia real de tokens.
+        self.token_economy = getattr(llm_client, "token_economy", None)
         self.config = getattr(orchestrator, "config", None)
 
         # Sincroniza parâmetros baseados nas constantes/configuração
@@ -488,6 +496,77 @@ class DeepResearcher:
                 )
             return []
 
+    async def _build_result_context(self, parent_results: list[SearchResult]) -> str:
+        """Normaliza as descrições brutas dos resultados para o contexto de hipóteses.
+
+        Com ``content_normalizer`` injetado (FEAT-004), cada descrição é limpa
+        (e resumida, se houver LLMClient) antes de entrar no prompt — reduzindo
+        o consumo de tokens do deep research. A economia real (chars brutos vs.
+        chars normalizados) é registrada em ``TokenEconomy`` quando disponível.
+
+        Sem normalizador, faz fallback para o texto bruto truncado (compatível
+        com o comportamento pré-FEAT-004), nunca quebrando a assinatura.
+
+        Args:
+            parent_results: Resultados do nó pai cujas descrições alimentam o
+                contexto de geração de hipóteses.
+
+        Returns:
+            Texto de contexto já pronto para ser concatenado ao prompt.
+        """
+        top = parent_results[:5]
+        if not top:
+            return ""
+
+        # Tolerante a objetos construídos via ``__new__`` sem ``__init__``
+        # (alguns testes legados), usando getattr com default seguro.
+        normalizer = getattr(self, "content_normalizer", None)
+        token_economy = getattr(self, "token_economy", None)
+
+        snippets: list[str] = []
+        raw_total_chars = 0
+        norm_total_chars = 0
+
+        for r in top:
+            title = r.title or "(sem título)"
+            raw_desc = r.description or ""
+            raw_total_chars += len(raw_desc)
+
+            if normalizer is not None:
+                # Limpa HTML/whitespace primeiro (normalize) e depois resume
+                # (summarize) para reduzir tokens — sem isso, tags brutas
+                # vazariam para o contexto de hipóteses.
+                cleaned = normalizer.normalize(raw_desc)
+                norm_desc = await normalizer.summarize(cleaned)
+            else:
+                norm_desc = raw_desc[:80]
+
+            norm_total_chars += len(norm_desc)
+            snippets.append(f"- {title}: {norm_desc}")
+
+        # Registra a economia de tokens (apenas quando há ganho real).
+        if (
+            token_economy is not None
+            and normalizer is not None
+            and raw_total_chars > norm_total_chars
+        ):
+            model = (
+                getattr(self.config, "model", "default") if self.config else "default"
+            )
+            saved_chars = raw_total_chars - norm_total_chars
+            saved_tokens = self.token_economy.count_tokens(
+                "x" * saved_chars, model=model
+            )
+            self.budget.tokens_used += saved_tokens
+            logger.debug(
+                "ContentNormalizer: %d chars reduzidos (~%d tokens poupados) no "
+                "contexto de hipóteses.",
+                saved_chars,
+                saved_tokens,
+            )
+
+        return "\n".join(snippets)
+
     async def _generate_hypotheses(
         self, query: str, parent_results: list[SearchResult]
     ) -> list[str]:
@@ -496,10 +575,7 @@ class DeepResearcher:
         Enriches the prompt with graph/vector context from OrvixMemoryV2
         when available, surfacing related past research automatically.
         """
-        context_snippets = "\n".join(
-            f"- {r.title or '(sem título)'}: {(r.description or '')[:80]}"
-            for r in parent_results[:5]
-        )
+        context_snippets = await self._build_result_context(parent_results)
 
         # ── Contexto do RAG Híbrido (OrvixMemoryV2) ───────────────────────
         memory_context = ""
