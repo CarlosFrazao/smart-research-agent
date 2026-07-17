@@ -27,7 +27,10 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from src.clients.provider_profiles import ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +100,6 @@ _REASONING_RE = re.compile(
     re.IGNORECASE,
 )
 
-_GROQ_FREE_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
-
 
 @dataclass(frozen=True)
 class RoutingDecision:
@@ -124,6 +125,64 @@ class SmartModelRouter:
             self._openrouter_key = openrouter_api_key
         else:
             self._openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
+        # Registry declarativo (FEAT-007). None até load_provider_profiles().
+        self._registry: "ProviderRegistry | None" = None
+
+    # ── Registry declarativo (FEAT-007) ──────────────────────────
+
+    def load_provider_profiles(self, yaml_path: str) -> bool:
+        """Carrega providers de um YAML declarativo (FEAT-007).
+
+        Em caso de falha (arquivo ausente/inválido), mantém ``_registry=None``
+        e o roteador continua usando os tiers hardcoded (fallback). Retorna
+        True se ao menos um provider foi carregado.
+        """
+        from src.clients.provider_profiles import ProviderRegistry
+
+        self._registry = ProviderRegistry.load(yaml_path)
+        loaded = len(self._registry)
+        if loaded == 0:
+            logger.warning(
+                "SmartModelRouter: nenhum provider do YAML carregado — fallback hardcoded."
+            )
+            return False
+        logger.info("SmartModelRouter: %d provider(s) carregado(s) do YAML.", loaded)
+        return True
+
+    def register_provider(self, profile) -> None:
+        """Registra um provider dinamicamente (FEAT-007).
+
+        Permite adicionar providers sem editar o core. Cria o registry
+        sob demanda se ainda não foi carregado de um YAML.
+        """
+        if self._registry is None:
+            from src.clients.provider_profiles import ProviderRegistry
+
+            self._registry = ProviderRegistry()
+        self._registry.register_provider(profile)
+
+    def _model_for(self, provider: str, tier: "ModelTier") -> str:
+        """Resolve o model_id do tier, consultando o registry se disponível.
+
+        Fallback: dicts hardcoded ``_ANTHROPIC_MODELS`` etc. (mantém
+        backward-compat quando o YAML está ausente/inválido).
+        """
+        if self._registry is not None:
+            profile = self._registry.get(provider)
+            if profile is not None:
+                model_id = profile.get_model(tier)
+                if model_id:
+                    return model_id
+        # Fallback hardcoded.
+        if provider == "openrouter":
+            return _OPENROUTER_MODELS[tier]
+        if provider == "gemini":
+            return _GEMINI_MODELS[tier]
+        if provider == "groq":
+            return _GROQ_MODELS[tier]
+        if provider == "ollama":
+            return _OLLAMA_MODELS[tier]
+        return _ANTHROPIC_MODELS[tier]
 
     def route(
         self,
@@ -139,7 +198,7 @@ class SmartModelRouter:
 
         # Tier free: tentar OpenRouter com Llama gratuito
         if tier == "free" and self._openrouter_key:
-            model_id = _GROQ_FREE_MODEL
+            model_id = self._model_for("openrouter", "free")
             reason = f"task={task_type} score={score} → free tier via OpenRouter (Llama 3.1 8B)"
             logger.debug(f"SmartModelRouter: {reason}")
             return RoutingDecision(
@@ -150,19 +209,8 @@ class SmartModelRouter:
                 provider_override="openrouter",
             )
 
-        # Demais tiers: usar modelo do provider atual
-        if provider == "openrouter":
-            model_map = _OPENROUTER_MODELS
-        elif provider == "gemini":
-            model_map = _GEMINI_MODELS
-        elif provider == "groq":
-            model_map = _GROQ_MODELS
-        elif provider == "ollama":
-            model_map = _OLLAMA_MODELS
-        else:
-            model_map = _ANTHROPIC_MODELS
-
-        model_id = model_map[tier]
+        # Demais tiers: usar modelo do provider atual (registry ou fallback)
+        model_id = self._model_for(provider, tier)
 
         # Sobrescrita específica para o Ollama em tarefas de programação complexas
         if provider == "ollama" and tier in ("sonnet", "opus"):

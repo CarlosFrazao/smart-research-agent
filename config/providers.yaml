@@ -1,0 +1,39 @@
+# Registry declarativo de providers do SmartModelRouter (FEAT-007).
+#
+# REGRA DE SEGURANÇA: nunca coloque secrets aqui. Use apenas o NOME da
+# variável de ambiente em `api_key_env`. A chave real vem do .env / OS env.
+#
+# Tiers suportados: free | haiku | sonnet | opus
+# (devem casar com os tiers do SmartModelRouter)
+#
+# Para adicionar um provider: basta acrescentar um item em `providers`.
+# O SmartModelRouter carrega este arquivo e, se ausente/inválido, cai nos
+# tiers hardcoded (fallback).
+
+providers:
+  - name: anthropic
+    display_name: "Anthropic (Claude)"
+    api_key_env: ANTHROPIC_API_KEY  # pragma: allowlist secret
+    models:
+      free: claude-haiku-4-5-20251001
+      haiku: claude-haiku-4-5-20251001
+      sonnet: claude-sonnet-4-6
+      opus: claude-opus-4-8
+
+  - name: gemini
+    display_name: "Google Gemini"
+    api_key_env: GEMINI_API_KEY  # pragma: allowlist secret
+    models:
+      free: gemini-2.5-flash
+      haiku: gemini-2.5-flash
+      sonnet: gemini-2.5-flash
+      opus: gemini-2.5-pro
+
+  - name: openrouter
+    display_name: "OpenRouter"
+    api_key_env: OPENROUTER_API_KEY  # pragma: allowlist secret
+    models:
+      free: meta-llama/llama-3.1-8b-instruct:free
+      haiku: anthropic/claude-haiku-4-5
+      sonnet: anthropic/claude-sonnet-4-6
+      opus: anthropic/claude-opus-4-8
