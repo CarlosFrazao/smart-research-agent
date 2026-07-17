@@ -11,6 +11,7 @@ Usage: activated only when --mode deep is passed. Cost ~5-10x standard.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import heapq
 import logging
 import uuid
@@ -18,6 +19,7 @@ from dataclasses import dataclass, field
 
 from src.clients.llm_client import LLMClient
 from src.exceptions import BudgetExceededError
+from src.pipeline.checkpoint import DeepCheckpoint, checkpoint_every
 from src.search.content_normalizer import ContentNormalizer
 from src.token_economy import TokenEconomy
 from src.types import SearchResult, ExpandedQuery, IntentResult, Domain, Intention
@@ -123,6 +125,8 @@ class DeepResearcher:
         memory=None,
         budget: ResearchBudget | None = None,
         content_normalizer: ContentNormalizer | None = None,
+        checkpoint: DeepCheckpoint | None = None,
+        run_id: str | None = None,
     ):
         self.llm = llm_client
         self.orchestrator = orchestrator
@@ -135,6 +139,16 @@ class DeepResearcher:
         # TokenEconomy opcional para contabilizar a economia real de tokens.
         self.token_economy = getattr(llm_client, "token_economy", None)
         self.config = getattr(orchestrator, "config", None)
+
+        # Checkpoint (FEAT-006): recuperação após crash. Quando ``checkpoint``
+        # é injetado, o deep research persiste progresso a cada
+        # ``checkpoint_every()`` passos e retoma de um ``run_id`` estável.
+        # Se ``run_id`` é None mas há checkpoint, deriva um id determinístico
+        # a partir da query (hash sha256[:16]) para permitir resume por query.
+        self.checkpoint = checkpoint
+        self.run_id = run_id
+        self._steps_done = 0
+        self._resumed_from = 0
 
         # Sincroniza parâmetros baseados nas constantes/configuração
         if self.config:
@@ -166,12 +180,33 @@ class DeepResearcher:
         """
         logger.info(f"DeepResearcher: starting for query='{query[:60]}'")
 
+        # FEAT-006: mantém a query corrente para o snapshot de checkpoint.
+        self._current_query = query
+        # Raiz da árvore, usada para gerar o draft parcial do checkpoint.
+        self._last_root = None
+
+        # FEAT-006: tenta retomar de um checkpoint existente antes de qualquer
+        # trabalho. O estado salvo carrega ``steps_done`` para fins de log/auditoria;
+        # a árvore em si é reconstruída de forma determinística a partir da query,
+        # pois o contrato do FEAT-005 persiste apenas {query, steps_done, draft}.
+        if self.checkpoint is not None:
+            if self.run_id is None:
+                self.run_id = hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
+            restored = self.checkpoint.load(self.run_id)
+            if restored is not None:
+                self._resumed_from = int(restored.get("steps_done", 0) or 0)
+                logger.info(
+                    f"DeepResearcher: resuming run '{self.run_id}' "
+                    f"from step {self._resumed_from}"
+                )
+
         root = ResearchNode(
             id="root",
             query=query,
             hypothesis=f"Main research goal: {query}",
             depth=0,
         )
+        self._last_root = root
 
         budget_exceeded = False
         try:
@@ -180,6 +215,9 @@ class DeepResearcher:
             root.results = await self._search_for_node(root)
             root.confidence = self._estimate_confidence(root.results)
             root.status = "explored"
+            # Passo 1 concluído: contabiliza e persiste checkpoint se habilitado.
+            self._steps_done += 1
+            self._maybe_checkpoint(query)
 
             # 2. Executa a expansão em Beam Search por nível (BFS)
             frontier = [root]
@@ -240,6 +278,10 @@ class DeepResearcher:
                 if search_tasks:
                     await asyncio.gather(*search_tasks)
 
+                # FEAT-006: a árvore cresce a cada level — atualiza a raiz do
+                # draft parcial para o próximo checkpoint.
+                self._last_root = root
+
                 # Aplica o Beam Search: mantém apenas os top `BEAM_WIDTH` de maior confiança
                 if len(next_frontier) > self.BEAM_WIDTH:
                     survivors = heapq.nlargest(
@@ -258,6 +300,27 @@ class DeepResearcher:
 
             # Ajusta os status dos nós pais com base nos status dos filhos
             self._update_parent_statuses(root)
+
+            # FEAT-006: checkpoint final da árvore completa (garante que o
+            # estado persisted até o último passo, mesmo fora do múltiplo de
+            # ``checkpoint_every``).
+            self._last_root = root
+            if self.checkpoint is not None and self.run_id is not None:
+                try:
+                    self.checkpoint.save(
+                        self.run_id,
+                        {
+                            "query": query,
+                            "steps_done": self._steps_done,
+                            "draft": self._export_tree_as_markdown(root),
+                        },
+                    )
+                    logger.info(
+                        f"DeepResearcher: checkpoint final salvo para run "
+                        f"'{self.run_id}' (step {self._steps_done})"
+                    )
+                except Exception as exc:  # pragma: no cover — defesa
+                    logger.warning(f"DeepResearcher: falha no checkpoint final: {exc}")
 
         except BudgetExceededError as e:
             logger.warning(f"DeepResearcher: budget exceeded: {e}")
@@ -287,6 +350,42 @@ class DeepResearcher:
             dead_end_hypotheses=dead_ends,
             budget_exceeded=budget_exceeded,
             budget_summary=self.budget.summary(),
+        )
+
+    def _maybe_checkpoint(self, query: str) -> None:
+        """Persiste o progresso corrente se o checkpoint estiver habilitado.
+
+        Salva a cada ``checkpoint_every()`` passos concluídos. O ``draft`` é o
+        markdown parcial da árvore (já redigido por ``DeepCheckpoint``), e o
+        ``steps_done`` reflete o total de nós explorados nesta execução.
+
+        Falhas de escrita são tratadas dentro de ``DeepCheckpoint.save`` (log +
+        degradação graciosa), então este método nunca levanta.
+        """
+        if self.checkpoint is None or self.run_id is None:
+            return
+        if self._steps_done <= 0 or self._steps_done % checkpoint_every() != 0:
+            return
+        try:
+            draft = (
+                self._export_tree_as_markdown(self._last_root)
+                if getattr(self, "_last_root", None) is not None
+                else ""
+            )
+        except Exception as exc:  # pragma: no cover — defesa contra árvore parcial
+            logger.debug("checkpoint draft skipped: %s", exc)
+            draft = ""
+        self.checkpoint.save(
+            self.run_id,
+            {
+                "query": query,
+                "steps_done": self._steps_done,
+                "draft": draft,
+            },
+        )
+        logger.info(
+            f"DeepResearcher: checkpoint salvo para run '{self.run_id}' "
+            f"(step {self._steps_done})"
         )
 
     async def _check_budget(self) -> None:
@@ -321,6 +420,10 @@ class DeepResearcher:
         try:
             await self._check_budget()
             self.budget.nodes_created += 1
+
+            # FEAT-006: cada nó explorado é 1 passo de checkpoint.
+            self._steps_done += 1
+            self._maybe_checkpoint(self._current_query or "")
 
             logger.debug(
                 f"Exploring node id={child.id} depth={child.depth} q='{child.query[:50]}'"
