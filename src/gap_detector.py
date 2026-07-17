@@ -27,7 +27,15 @@ from src.clients.llm_client import LLMClient
 from src.types import GapAnalysis, IntentResult, RankedResult
 from src.agent_persona_loader import AgentPersonaLoader
 
+try:
+    from src.memory.session_index import SessionSearchIndex
+except ImportError:  # pragma: no cover - import guard para ambiente mínimo
+    SessionSearchIndex = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+# Número máximo de sessões passadas anexadas ao contexto de gap-detection.
+DEFAULT_SESSION_INDEX_TOP_K = 3
 
 # Fracao minima de resultados novos entre iteracoes para que valha a pena
 # continuar; abaixo disso consideramos "retornos decrescentes".
@@ -84,12 +92,17 @@ class GapDetector:
         max_budget_usd: float = DEFAULT_MAX_BUDGET_USD,
         min_new_results_ratio: float = DEFAULT_MIN_NEW_RESULTS_RATIO,
         max_new_queries: int = DEFAULT_MAX_NEW_QUERIES,
+        session_index: "SessionSearchIndex | None" = None,
     ):
         self.llm = llm_client
         self.max_iterations = 3
         self.max_budget_usd = max_budget_usd
         self.min_new_results_ratio = min_new_results_ratio
         self.max_new_queries = max_new_queries
+        # Índice FTS5 de sessões passadas (FEAT-001). Opcional: quando None,
+        # o GapDetector opera sem enriquecimento de contexto histórico
+        # (comportamento anterior à portabilidade Hermes→SRA).
+        self.session_index = session_index
 
         # Persona loader for GapDetector integration
         self.persona_loader = AgentPersonaLoader()
@@ -133,6 +146,11 @@ class GapDetector:
         diminishing_gap = self._check_diminishing_returns(results, state)
         if diminishing_gap is not None:
             return diminishing_gap
+
+        # FEAT-002: enriquece o contexto de detecção com sessões de pesquisa
+        # passadas relevantes (aprendizado de pesquisas anteriores). Falhas no
+        # índice degradam graciosamente — nunca quebram a detecção de gaps.
+        past_sessions = self._retrieve_session_context(query)
 
         state.previous_result_count = len(results)
         state.iterations_run += 1
@@ -193,6 +211,13 @@ class GapDetector:
         )
         for i, r in enumerate(results[:10]):
             prompt_text += f"{i + 1}. [{r.source}] {r.title} (score: {r.score})\n"
+
+        # FEAT-002: anexa contexto de sessões passadas para ajudar o LLM a
+        # identificar lacunas que já foram cobertas em pesquisas anteriores.
+        if past_sessions:
+            prompt_text += "\nSessoes de pesquisa anteriores relevantes:\n"
+            for hit in past_sessions:
+                prompt_text += f"- {hit['query']} (relatorio: {hit['report_path']})\n"
 
         prompt_text += (
             "\nResponda em JSON:\n"
@@ -426,3 +451,42 @@ class GapDetector:
         if "/" in title:
             return title.split("/")[-1]
         return title.split()[0] if title else ""
+
+    # ── Contexto de sessões passadas (FEAT-002) ───────────────────────────
+
+    def _retrieve_session_context(self, query: str) -> list[dict]:
+        """Recupera até ``DEFAULT_SESSION_INDEX_TOP_K`` sessões passadas relevantes.
+
+        Consulta o ``SessionSearchIndex`` (FEAT-001) por termos da query atual e
+        retorna os hits para enriquecer o contexto de gap-detection. Qualquer
+        erro no índice (I/O, schema, indisponibilidade) é capturado e logado,
+        retornando lista vazia — o gap-detection continua sem o enriquecimento.
+
+        Args:
+            query: Query original da pesquisa atual.
+
+        Returns:
+            Lista de dicts ``{"id", "query", "report_path", "created_at"}`` dos
+            hits mais relevantes, ou lista vazia se não houver índice ou erro.
+        """
+        if self.session_index is None:
+            return []
+        try:
+            hits = self.session_index.search(query, limit=DEFAULT_SESSION_INDEX_TOP_K)
+            if not hits:
+                logger.debug(
+                    "GapDetector: nenhuma sessão passada relevante para %r", query
+                )
+            else:
+                logger.info(
+                    "GapDetector: %d sessao(oes) passada(s) anexada(s) ao contexto.",
+                    len(hits),
+                )
+            return hits
+        except Exception as exc:  # degradação graciosa — nunca quebra o detect()
+            logger.warning(
+                "GapDetector: falha ao consultar session_index (%s); "
+                "continuando sem contexto de sessoes passadas.",
+                exc,
+            )
+            return []
