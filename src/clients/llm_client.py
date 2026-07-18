@@ -483,6 +483,18 @@ class LLMClient:
                     )
                     response = await asyncio.wait_for(coro, timeout=30.0)
                     return response.text or ""
+
+                elif self.provider == LLMProvider.DEEPSEEK:
+                    if not self._client:
+                        raise RuntimeError("DeepSeek client não inicializado")
+                    response = await self._client.chat.completions.create(
+                        model=self.model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        messages=[{"role": "user", "content": prompt}],
+                        timeout=30.0,
+                    )
+                    return response.choices[0].message.content
             except Exception as exc:
                 if not isinstance(exc, (TypeError, ValueError, NameError, KeyError)):
                     if self._rotate_key():
