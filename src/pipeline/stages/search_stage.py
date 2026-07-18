@@ -472,8 +472,16 @@ class SearchStage(PipelineStage):
                         )
                         logger.error(f"Task {task.get_name()} falhou: {res}")
                         continue
-                    source_name, query_str, task_results = res
+                    source_name, query_str, task_results, error_msg = res
                     completed_sources.add(source_name)
+
+                    if error_msg:
+                        if not hasattr(context, "extra") or context.extra is None:
+                            context.extra = {}
+                        context.extra.setdefault("search_errors", []).append(
+                            f"{source_name}: {error_msg}"
+                        )
+
                     if task_results:
                         results.extend(task_results)
                         # Early termination check
@@ -539,11 +547,13 @@ class SearchStage(PipelineStage):
 
     async def _search_with_protection(
         self, searcher: Any, source_name: str, query: str, domain: str
-    ) -> tuple[str, str, List[SearchResult]]:
+    ) -> tuple[str, str, List[SearchResult], Optional[str]]:
         """Executa busca com circuit breaker + semaphore + timeout.
 
         Returns:
-            (source_name, query, results)
+            (source_name, query, results, error_msg) onde ``error_msg`` é None
+            em caso de sucesso ou a mensagem de erro capturada (Circuit Breaker
+            aberto, exceção protegida) para auditoria de cobertura.
         """
         cb = self.cb_registry.get(
             source_name,
@@ -563,13 +573,13 @@ class SearchStage(PipelineStage):
                 # 4.1: Gerar result_id canônico para cada resultado
                 for r in result:
                     r.result_id = generate_result_id(source_name, r.url or "")
-                return source_name, query, result
+                return source_name, query, result, None
         except CircuitBreakerOpen:
             logger.warning(f"Circuit breaker OPEN para '{source_name}' — pulando")
-            return source_name, query, []
+            return source_name, query, [], "Circuit Breaker OPEN"
         except Exception as e:
             logger.error(f"Erro protegido em '{source_name}': {e}")
-            return source_name, query, []
+            return source_name, query, [], str(e)
 
     async def _sanitize_results(
         self, results: List[SearchResult], source_name: str

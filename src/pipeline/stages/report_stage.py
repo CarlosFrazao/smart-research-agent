@@ -305,20 +305,31 @@ class ReportStage(PipelineStage):
             if hasattr(context, "extra")
             else []
         )
-        if search_warnings:
+        search_errors = (
+            context.extra.get("search_errors", []) if hasattr(context, "extra") else []
+        )
+        if search_warnings or search_errors:
             footer_lines = [
                 "",
                 "---",
                 "",
-                "## ⚠️ Fontes Não Atendidas",
+                "## ⚠️ Fontes Não Atendidas / Com Falha",
                 "",
-                "As seguintes fontes do plano de busca não retornaram resultados "
-                "por falta de configuração (credencial ausente ou searcher não "
-                "registrado):",
+                "As seguintes fontes do plano de busca apresentaram falhas ou "
+                "restrições:",
                 "",
             ]
-            for w in search_warnings:
-                footer_lines.append(f"- {w}")
+            if search_warnings:
+                footer_lines.append(
+                    "### Configuração Ausente (Credencial ou Searcher):"
+                )
+                for w in search_warnings:
+                    footer_lines.append(f"- {w}")
+                footer_lines.append("")
+            if search_errors:
+                footer_lines.append("### Falhas de Rede / Limites de API:")
+                for e in search_errors:
+                    footer_lines.append(f"- {e}")
             report_md += "\n".join(footer_lines)
             context.report = report_md
 
