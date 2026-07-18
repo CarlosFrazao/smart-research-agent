@@ -573,11 +573,19 @@ class StageFactory:
             )
         timeout_multiplier = TIMEOUT_MODE_MULTIPLIER.get(mode_name, 1.0)
 
+        # B2/F5 — teto hard de tempo por fonte em black_ops (30s). O modo
+        # hardcore usa multiplicador 2.2x, o que levaria firecrawl a 66s; o
+        # budget impede fontes lentas de ocupar a pipeline além do orçamento.
+        per_source_time_budget = 30.0 if mode_name == "black_ops" else None
+
         return SearchStage(
             searchers=searchers,
             cache=self._deps.get("cache"),
             ranker=getattr(orch, "ranker", None) if orch else None,
-            config=SearchStageConfig(timeout_multiplier=timeout_multiplier),
+            config=SearchStageConfig(
+                timeout_multiplier=timeout_multiplier,
+                per_source_time_budget=per_source_time_budget,
+            ),
             circuit_breaker_registry=cb_registry,
             health_monitor=getattr(orch, "health_monitor", None) if orch else None,
             sanitizer=getattr(orch, "sanitizer", None) if orch else None,

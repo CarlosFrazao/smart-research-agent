@@ -167,6 +167,13 @@ class SearchStageConfig:
     # TIMEOUT_MODE_MULTIPLIER pelo StageFactory). 1.0 = SLA base.
     timeout_multiplier: float = 1.0
 
+    # B2/F5 — Teto HARD de tempo por fonte individual (segundos). Quando
+    # definido (ex.: 30s para black_ops), limita o timeout resolvido por
+    # categoria×modo, impedindo que uma fonte lenta ocupe a pipeline além do
+    # orçamento mesmo sob o multiplicador 2.2x do black_ops. None = sem teto
+    # (comportamento atual, retrocompatível).
+    per_source_time_budget: Optional[float] = None
+
     # Early termination
     early_termination_enabled: bool = True
     early_termination_threshold: float = (
@@ -635,6 +642,12 @@ class SearchStage(PipelineStage):
         )
         if not isinstance(timeout, (int, float)):
             timeout = 30.0
+        # B2/F5 — aplica teto hard por fonte quando configurado. Garante que
+        # o orçamento de tempo por fonte nunca exceda o budget mesmo sob o
+        # multiplicador 2.2x do black_ops (evita ~55s ociosos por fonte).
+        budget = self.config.per_source_time_budget
+        if isinstance(budget, (int, float)) and budget > 0:
+            timeout = min(float(timeout), float(budget))
         try:
             results = await asyncio.wait_for(
                 searcher.search(query, domain=domain),
