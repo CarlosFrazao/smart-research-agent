@@ -89,19 +89,59 @@ class FirecrawlClient:
             for k in ("429", "rate limit", "timeout", "503", "502", "connection")
         )
 
+    @staticmethod
+    def _is_connection_refused(exc: Exception) -> bool:
+        """Detecta Recusa de Conexão (container Firecrawl off / WinError 10061).
+
+        O ``NewConnectionError`` do httpx (e o ``ConnectionRefusedError``
+        nativo) carrega a causa raiz ``[WinError 10061]`` quando o container
+        alvo está offline. Isso NÃO é erro transitório — retry infinito só
+        gera ruído e latência (F3 do plano de blindagem black_ops). Tratamos
+        como fail-fast: 1 retry curto (1s) e desiste.
+        """
+        if isinstance(exc, ConnectionRefusedError):
+            return True
+        msg = str(exc).lower()
+        if "winerror 10061" in msg or "connection refused" in msg:
+            return True
+        # httpx.NewConnectionError envolve a causa em __cause__.
+        cause = getattr(exc, "__cause__", None)
+        if cause is not None:
+            if isinstance(cause, ConnectionRefusedError):
+                return True
+            cmsg = str(cause).lower()
+            if "winerror 10061" in cmsg or "connection refused" in cmsg:
+                return True
+        return False
+
     async def _with_retry(self, coro_fn, *args, **kwargs):
         last_exc: Exception | None = None
+        # B1/F3: Recusa de conexão (container off) recebe 1 retry curto (1s)
+        # e desiste — não entra na cascata de 3 tentativas de 7s.
+        connection_refused = False
         for attempt, delay in enumerate(_RETRY_DELAYS, start=1):
             try:
                 return await coro_fn(*args, **kwargs)
             except Exception as exc:
                 last_exc = exc
+                if self._is_connection_refused(exc):
+                    connection_refused = True
+                    logger.warning(
+                        f"Firecrawl: conexão recusada (container offline?) em "
+                        f"tentativa {attempt}: {exc}. Fail-fast (1 retry 1s)."
+                    )
+                    if attempt >= 2:
+                        raise
+                    await asyncio.sleep(1.0)
+                    continue
                 if not self._is_retryable(exc) or attempt == len(_RETRY_DELAYS):
                     raise
                 logger.warning(
                     f"Firecrawl tentativa {attempt} falhou ({exc}), aguardando {delay}s..."
                 )
                 await asyncio.sleep(delay)
+        if connection_refused:
+            raise last_exc  # type: ignore[misc]
         raise last_exc  # type: ignore[misc]
 
     def _normalize_search_results(self, results) -> list[dict[str, Any]]:
