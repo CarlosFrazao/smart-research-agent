@@ -576,10 +576,16 @@ class SearchStage(PipelineStage):
                 return source_name, query, result, None
         except CircuitBreakerOpen:
             logger.warning(f"Circuit breaker OPEN para '{source_name}' — pulando")
-            return source_name, query, [], "Circuit Breaker OPEN"
+            # A1/F2: error_msg não-vazio garante propagação para
+            # context.extra["search_errors"] em _execute_with_early_termination.
+            return source_name, query, [], f"Circuit Breaker OPEN para '{source_name}'"
         except Exception as e:
             logger.error(f"Erro protegido em '{source_name}': {e}")
-            return source_name, query, [], str(e)
+            # A2/F1: exceções como asyncio.TimeoutError têm str(e) == "" (args
+            # vazios), o que tornaria error_msg falsy e silenciaria a falha.
+            # Garantimos uma mensagem não-vazia para auditoria de cobertura.
+            msg = str(e).strip() or f"{type(e).__name__}: falha em '{source_name}'"
+            return source_name, query, [], msg
 
     async def _sanitize_results(
         self, results: List[SearchResult], source_name: str
