@@ -320,3 +320,158 @@ class RedactingFormatter(Formatter):
         """Formata o record e redacta segredos do resultado."""
         original = super().format(record)
         return redact_sensitive_text(original)
+
+
+# ---------------------------------------------------------------------------
+# 3. Deduplicação de handlers + configuração central do root logger (F6/D1)
+# ---------------------------------------------------------------------------
+# Sintoma observado (F6): múltiplos ``basicConfig``/``addHandler`` espalhados
+# (main.py, mcp_server.py, proxy_manager.py, utils/logging.py) adicionam handlers
+# repetidos ao root logger → cada linha de log aparece 2x+ (stdout duplicado ou
+# stdout+file iguais).  Estas funções garantem no máximo 1 StreamHandler (stdout)
+# + 1 FileHandler por logger, eliminando a duplicação de forma idempotente.
+
+
+def _handler_signature(handler: logging.Handler) -> Optional[tuple]:
+    """Retorna uma assinatura estável para detectar handlers duplicados.
+
+    Agrupa por: (tipo, stream_destino_ou_caminho_arquivo).  Dois handlers com a
+    mesma assinatura em um mesmo logger são considerados duplicados — apenas o
+    primeiro é mantido.
+    """
+    if isinstance(handler, logging.FileHandler):
+        path = getattr(handler, "baseFilename", None)
+        if path is None and isinstance(handler, RotatingFileHandler):
+            path = getattr(handler, "baseFilename", None)
+        return ("file", path)
+    if isinstance(handler, logging.StreamHandler) and not isinstance(
+        handler, logging.FileHandler
+    ):
+        stream = getattr(handler, "stream", None)
+        dest = (
+            "stdout"
+            if stream is sys.stdout
+            else ("stderr" if stream is sys.stderr else id(stream))
+        )
+        return ("stream", dest)
+    # TimedRotating/Rotating stdlib também são FileHandler (cobertos acima);
+    # qualquer outro tipo usa a classe como chave.
+    return ("other", type(handler).__qualname__)
+
+
+def dedupe_handlers(logger: logging.Logger) -> int:
+    """Remove handlers duplicados de ``logger`` (mantém o primeiro de cada assinatura).
+
+    Idempotente: chamar repetidas vezes não altera um logger já desduplicado.
+    Retorna o número de handlers removidos.
+    """
+    seen: set = set()
+    kept: list[logging.Handler] = []
+    removed = 0
+    for handler in logger.handlers:
+        sig = _handler_signature(handler)
+        if sig in seen:
+            removed += 1
+            continue
+        seen.add(sig)
+        kept.append(handler)
+    if removed:
+        logger.handlers[:] = kept
+    return removed
+
+
+def dedupe_root_handlers() -> int:
+    """Desduplica os handlers do root logger (caso mais comum de F6)."""
+    return dedupe_handlers(logging.getLogger())
+
+
+# Formato padrão usado por ``configure_root_logger`` — redação aplicada via
+# RedactingFormatter para nunca persistir segredos em disco.
+_DEFAULT_FMT = (
+    "%(asctime)s [%(levelname)s] %(name)s [corr=%(correlation_id)s]: %(message)s"
+)
+_DEFAULT_DATEFMT = "%H:%M:%S"
+
+
+def configure_root_logger(
+    level: str = "INFO",
+    *,
+    log_file: Optional[str] = None,
+    fmt: Optional[str] = None,
+    datefmt: Optional[str] = None,
+    force: bool = False,
+) -> logging.Logger:
+    """Configura o root logger com no máximo 1 stdout + 1 file handler (F6/D1).
+
+    - Sempre desduplica antes de adicionar (idempotente).
+    - Sem ``log_file``: garante exatamente 1 ``StreamHandler(stdout)``.
+    - Com ``log_file``: garante 1 stdout + 1 ``FileHandler`` (redação em disco).
+    - Respeita ``force`` para limpar handlers preexistentes quando desejado.
+
+    Args:
+        level: Nível de log ("DEBUG"/"INFO"/...).
+        log_file: Caminho opcional de arquivo de log.
+        fmt: Formato de linha (default SRA).
+        datefmt: Formato de data.
+        force: Se True, remove todos os handlers antes de (re)configurar.
+
+    Returns:
+        O root logger configurado.
+    """
+    root = logging.getLogger()
+    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+
+    if force:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+
+    _fmt = fmt or _DEFAULT_FMT
+    _datefmt = datefmt or _DEFAULT_DATEFMT
+
+    # 1) stdout — garante exatamente 1 StreamHandler(stdout).
+    has_stdout = any(
+        isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.FileHandler)
+        and getattr(h, "stream", None) is sys.stdout
+        for h in root.handlers
+    )
+    if not has_stdout:
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setFormatter(RedactingFormatter(_fmt, datefmt=_datefmt))
+        sh.addFilter(CorrelationIdFilter())
+        root.addHandler(sh)
+
+    # 2) file — garante no máximo 1 FileHandler apontando para log_file.
+    if log_file:
+        file_path = os.path.abspath(log_file)
+        has_file = any(
+            isinstance(h, logging.FileHandler)
+            and getattr(h, "baseFilename", None) == file_path
+            for h in root.handlers
+        )
+        if not has_file:
+            fh = logging.FileHandler(file_path, encoding="utf-8")
+            fh.setFormatter(RedactingFormatter(_fmt, datefmt=_datefmt))
+            fh.addFilter(CorrelationIdFilter())
+            root.addHandler(fh)
+
+    # Remove qualquer duplicata remanescente (idempotente).
+    dedupe_handlers(root)
+    return root
+
+
+class CorrelationIdFilter(logging.Filter):
+    """Filtro que injeta ``correlation_id`` (default ``-``) em todo ``LogRecord``.
+
+    Mantido aqui para que ``configure_root_logger`` seja self-contained e não
+    dependa de ``src.utils.logging`` (evita import circular / overhead).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "correlation_id"):
+            record.correlation_id = "-"
+        return True

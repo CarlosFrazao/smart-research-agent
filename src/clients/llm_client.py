@@ -402,7 +402,7 @@ class LLMClient:
                     elif _is_rate_limit(exc):
                         last_exc = exc
                         if attempt < RATE_LIMIT_MAX_RETRIES:
-                            logger.warning(
+                            logger.debug(
                                 f"[RateLimit] {self.provider.value} — tentativa {attempt}/{RATE_LIMIT_MAX_RETRIES}. "
                                 f"Aguardando {wait:.0f}s antes de retry..."
                             )

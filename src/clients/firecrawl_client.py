@@ -126,7 +126,7 @@ class FirecrawlClient:
                 last_exc = exc
                 if self._is_connection_refused(exc):
                     connection_refused = True
-                    logger.warning(
+                    logger.debug(
                         f"Firecrawl: conexão recusada (container offline?) em "
                         f"tentativa {attempt}: {exc}. Fail-fast (1 retry 1s)."
                     )
@@ -136,7 +136,7 @@ class FirecrawlClient:
                     continue
                 if not self._is_retryable(exc) or attempt == len(_RETRY_DELAYS):
                     raise
-                logger.warning(
+                logger.debug(
                     f"Firecrawl tentativa {attempt} falhou ({exc}), aguardando {delay}s..."
                 )
                 await asyncio.sleep(delay)
