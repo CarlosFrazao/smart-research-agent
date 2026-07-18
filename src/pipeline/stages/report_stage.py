@@ -202,7 +202,10 @@ class ReportStage(PipelineStage):
                 duration_seconds=duration,
             )
 
-        # Executa geração das seções
+        # Executa geração das seções (injeta coverage_note para transparência A3/F7)
+        self._coverage_note = (
+            context.extra.get("coverage_note", "") if context.extra else ""
+        )
         sections = await self.execute(query, results, metadata)
 
         # Monta relatório final em Markdown
@@ -308,6 +311,15 @@ class ReportStage(PipelineStage):
         search_errors = (
             context.extra.get("search_errors", []) if hasattr(context, "extra") else []
         )
+
+        # A3/F7 (Blindagem black_ops): nota de cobertura para o resumo executivo.
+        # Garante que o LLM saiba quais fontes do plano foram puladas por falta
+        # de credencial, tornando a omissão transparente no corpo do relatório
+        # (não só no rodapé).
+        coverage_note = self._build_coverage_note(search_warnings, search_errors)
+        if coverage_note:
+            context.extra["coverage_note"] = coverage_note
+
         if search_warnings or search_errors:
             footer_lines = [
                 "",
@@ -555,6 +567,9 @@ class ReportStage(PipelineStage):
             else ""
         )
 
+        # A3/F7: reflete no resumo executivo as fontes puladas por credencial.
+        coverage_note = getattr(self, "_coverage_note", "") or ""
+
         prompt = f"""Você é um analista técnico sênior. Escreva em Português do Brasil.
 
 Gere UM ÚNICO JSON com exatamente 3 campos: "executive_summary", "recommendation" e "trends".
@@ -572,6 +587,7 @@ CONTEXTO DA PESQUISA:
 - Iterações: {metadata.iterations}
 {confidence_note}
 {warnings_note}
+{coverage_note}
 
 TOP 5 PROJETOS ENCONTRADOS:
 {top_lines}
@@ -694,6 +710,9 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
             else ""
         )
 
+        # A3/F7: reflete no resumo executivo as fontes puladas por credencial.
+        coverage_note = getattr(self, "_coverage_note", "") or ""
+
         prompt = (
             "Você é um analista técnico sênior. Escreva em Português do Brasil.\n"
             "Gere um resumo executivo de 3-5 frases sobre os achados principais.\n\n"
@@ -706,7 +725,8 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
             f"Resultados encontrados: {metadata.total_results}\n"
             f"Iterações: {metadata.iterations}\n"
             f"{confidence_note}\n"
-            f"{warnings_note}\n\n"
+            f"{warnings_note}\n"
+            f"{coverage_note}\n\n"
             f"Top 5 projetos encontrados:\n{top_lines}\n\n"
             "Resumo executivo:"
         )
@@ -987,6 +1007,53 @@ RESPONDA APENAS COM O JSON VÁLIDO, sem texto adicional:
             sentiment_section=sections.get("sentiment_section", ""),
             comparison_section=sections.get("comparison_section", ""),
         )
+
+    @staticmethod
+    def _build_coverage_note(
+        search_warnings: list[str], search_errors: list[str]
+    ) -> str:
+        """Gera nota de cobertura para o resumo executivo (A3/F7, Blindagem black_ops).
+
+        Extrai as fontes mencionadas em ``search_warnings`` (credencial/searcher
+        ausente) e ``search_errors`` (circuit breaker / timeout / rede) para que
+        o resumo executivo do relatório reflita explicitamente o que NÃO foi
+        coberto — em vez de silenciar a omissão.
+
+        Args:
+            search_warnings: Avisos de configuração ausente (credencial/searcher).
+            search_errors: Falhas de rede / limites de API / circuit breaker.
+
+        Returns:
+            str: Texto da nota (ou string vazia se não houver o que reportar).
+        """
+        if not search_warnings and not search_errors:
+            return ""
+
+        parts: list[str] = []
+        if search_warnings:
+            # Extrai o nome da fonte entre aspas simples: Fonte 'exa' ...
+            import re as _re
+
+            sources = sorted(
+                {
+                    m.group(1)
+                    for w in search_warnings
+                    if (m := _re.search(r"'([^']+)'", w))
+                }
+            )
+            if sources:
+                parts.append(
+                    "FONTES NÃO PESQUISADAS POR FALTA DE CREDENCIAL/SEARCHER: "
+                    + ", ".join(sources)
+                    + ". Não mencione resultados dessas fontes como se tivessem "
+                    "sido consultadas."
+                )
+        if search_errors:
+            parts.append(
+                "FALHAS DE BUSCA (rede/limite/circuit breaker): "
+                + "; ".join(search_errors[:5])
+            )
+        return " | ".join(parts)
 
     @staticmethod
     def _build_confidence_section(ranked_results: Any) -> str:
