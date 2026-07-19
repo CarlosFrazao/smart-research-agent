@@ -179,23 +179,29 @@ class FirecrawlClient:
         return {}
 
     async def search(
-        self, query: str, limit: int = 10, stealth: bool = True
+        self, query: str, limit: int = 10, stealth: bool = True, scrape: bool = False
     ) -> list[dict[str, Any]]:
+        """Busca no Firecrawl.
+
+        Por padrão (``scrape=False``) faz apenas a busca leve de links
+        (sem raspagem de página) — responde em poucos segundos. O scrape
+        profundo (Playwright baixando o markdown de cada URL) é opcional e
+        deve ser acionado sob demanda (ex.: ``scrape_url``), pois pode exceder
+        o timeout de fonte do pipeline (30s) e disparar CircuitBreaker.
+        """
         if not self.app:
             return []
         try:
             from firecrawl.v1.client import V1ScrapeOptions
 
-            scrape_options = V1ScrapeOptions(
-                formats=["markdown"],
-                skipTlsVerification=True,
-                timeout=30000,
-            )
-            params = {
-                "limit": limit,
-                "scrape_options": scrape_options,
-                "timeout": 30000,
-            }
+            params: dict[str, Any] = {"limit": limit}
+            if scrape:
+                params["scrape_options"] = V1ScrapeOptions(
+                    formats=["markdown"],
+                    skipTlsVerification=True,
+                    timeout=30000,
+                )
+                params["timeout"] = 30000
             if self.firecrawl_deterministic_json:
                 params["deterministic_json"] = True
 
@@ -215,7 +221,8 @@ class FirecrawlClient:
                 )
                 return []
             logger.warning(
-                f"Busca Firecrawl com parâmetros estendidos falhou ({e}). Tentando busca simples..."
+                f"Busca Firecrawl (scrape={scrape}) falhou ({e}). "
+                f"Tentando busca simples sem scrape..."
             )
             try:
                 results = await self._with_retry(
