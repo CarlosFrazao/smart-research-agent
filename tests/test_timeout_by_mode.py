@@ -43,10 +43,14 @@ def test_invalid_multiplier_falls_back_to_base():
 
 
 def test_unknown_source_uses_default_scaled():
-    # Fonte não mapeada e não-confiável cai no _default_scraping, escalado.
+    # Fonte não mapeada explicitamente, mas listada em UNTRUSTED_SOURCES,
+    # cai no _default_scraping, escalado. 'twitter' está em UNTRUSTED_SOURCES
+    # mas não em SOURCE_TIMEOUT_MAP (exercita o caminho do default).
     from src.pipeline.stages.search_stage import UNTRUSTED_SOURCES
 
-    src = next(iter(UNTRUSTED_SOURCES))
+    src = "twitter"
+    assert src in UNTRUSTED_SOURCES
+    assert src not in SOURCE_TIMEOUT_MAP
     base = SOURCE_TIMEOUT_MAP["_default_scraping"]
     assert get_timeout_for_source(src, 2.0) == base * 2.0
 
