@@ -20,10 +20,10 @@
 ### Solução cirúrgica
 1. **`src/clients/firecrawl_client.py`**
    - Adicionar `_is_auth_error(exc)`: detecta `401` / `AuthenticationError` / `"unauthorized"` / `"api key"`.
-   - Em `_with_retry` (ou no `search`), ao detectar auth error → setar `self.permanently_failed = True` + log `ERROR` único e claro ("Firecrawl token inválido — desativando e roteando para fallback"). Não retries infinitos.
+   - Em `search()` (e `_with_retry`), ao detectar auth error → setar `self.auth_failed = True` + log `ERROR` único e claro ("Firecrawl token inválido — desativando e roteando para fallback"). Não retries infinitos.
 2. **`src/search/firecrawl_searcher.py`**
    - Aceitar `web_fallback: BaseSearcher | None` no `__init__`.
-   - Em `search()`, no `except`, antes de `self.fallback(query)`: se `self.client.permanently_failed` e houver `web_fallback`, delegar `return await self.web_fallback.search(query, **kwargs)`.
+   - Em `search()`, no bloco `finally`, se `getattr(self.client, "auth_failed", False)` e houver `web_fallback`, delegar `return await self._run_web_fallback(query)`.
 3. **`src/search/factory.py`** (linha 134)
    - Sempre instanciar um `JinaSearcher` dedicado (zero-config, `r.jina.ai`) como `jina_fallback`.
    - `searchers["firecrawl"] = FirecrawlSearcher({**cfg, "web_fallback": jina_fallback})`.
@@ -33,7 +33,7 @@
 ### Testes (TDD)
 - `tests/test_firecrawl_resiliencia.py`:
   - mock `FirecrawlClient.search` lançando `FirecrawlAuthenticationError` → `FirecrawlSearcher.search` retorna resultados do Jina fallback (não `[]`).
-  - mock retornando 401 → `client.permanently_failed == True`.
+  - mock retornando 401 → `client.auth_failed == True`.
   - smoke: `FirecrawlSearcher` com `web_fallback=None` continua retornando `[]` (comportamento antigo preservado).
 
 ### Skills a carregar (antes de codar)
