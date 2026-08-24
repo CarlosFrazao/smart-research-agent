@@ -84,7 +84,10 @@ UNTRUSTED_SOURCES = frozenset(
 
 SOURCE_TIMEOUT_MAP: dict[str, float] = {
     # APIs estruturadas rápidas
-    "github": 8.0,
+    # 2026-08-24: github/reddit/awesome estouravam timeout sob carga paralela
+    # (12 queries × N fontes) mesmo com a API respondendo em ~2-4s isolada.
+    # Valores medidos em produção: github precisa de >15s no pico do stage.
+    "github": 20.0,
     "arxiv": 8.0,
     "hackernews": 6.0,
     "wikipedia": 5.0,
@@ -97,7 +100,8 @@ SOURCE_TIMEOUT_MAP: dict[str, float] = {
     "courtlistener": 10.0,
     "sec_edgar": 12.0,
     # Agregadores e fontes médias
-    "reddit": 10.0,
+    "reddit": 20.0,
+    "awesome": 20.0,
     "producthunt": 10.0,
     "rss": 8.0,
     "mercadolivre": 10.0,
