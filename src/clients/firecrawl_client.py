@@ -145,27 +145,60 @@ class FirecrawlClient:
         raise last_exc  # type: ignore[misc]
 
     def _normalize_search_results(self, results) -> list[dict[str, Any]]:
-        """Normaliza resposta do SDK v4 para lista de dicts."""
+        """Normaliza resposta do SDK v4 para lista de dicts.
+
+        2026-08-24: o SDK firecrawl-py >= 4.30 (API v2) retorna ``SearchData``
+        com os resultados em ``results.web`` (categorias web/news/images), não
+        em ``results.data``. Esta versão cobre ambos os formatos e descarta
+        itens-placeholder com todos os campos vazios (bug observado em
+        produção: WebSearcher recebia N itens sem título/url).
+        """
         if results is None:
             return []
-        # V1SearchResponse tem .data como lista de V1SearchResult
-        if hasattr(results, "data") and results.data is not None:
-            items = results.data
-            return [
-                {
-                    "title": getattr(item, "title", "") or "",
-                    "url": getattr(item, "url", "") or "",
-                    "markdown": getattr(item, "markdown", "")
-                    or getattr(item, "description", "")
-                    or "",
-                    "description": getattr(item, "description", "") or "",
-                }
-                for item in items
-            ]
+
+        def _dump_items(items: Any) -> list[dict[str, Any]]:
+            out: list[dict[str, Any]] = []
+            for item in items or []:
+                d = item.model_dump() if hasattr(item, "model_dump") else item
+                if not isinstance(d, dict):
+                    continue
+                md = d.get("metadata") or {}
+                title = d.get("title") or md.get("title") or ""
+                url = d.get("url") or md.get("sourceURL") or md.get("url") or ""
+                description = d.get("description") or d.get("markdown") or ""
+                # descarta placeholder totalmente vazio
+                if not url and not title and not description:
+                    continue
+                out.append(
+                    {
+                        "title": title,
+                        "url": url,
+                        "markdown": description[:20000],
+                        "description": description,
+                        "metadata": md,
+                    }
+                )
+            return out
+
+        # Formato v2 (SDK >= 4.30): categorias web/news/images
+        for category in ("web", "news", "images"):
+            cat = getattr(results, category, None)
+            if cat:
+                dumped = _dump_items(cat)
+                if dumped:
+                    return dumped
+
+        # Formato legado v1: results.data como lista de V1SearchResult
+        data = getattr(results, "data", None)
+        if data:
+            dumped = _dump_items(data)
+            if dumped:
+                return dumped
+
         if isinstance(results, list):
-            return results
+            return _dump_items(results)
         if isinstance(results, dict):
-            return results.get("data", [])
+            return _dump_items(results.get("data", []) or results.get("web", []))
         return []
 
     def _normalize_scrape_result(self, result) -> dict[str, Any]:

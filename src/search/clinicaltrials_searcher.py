@@ -84,7 +84,9 @@ class ClinicalTrialsSearcher(BaseSearcher):
         params = {
             "query.term": " OR ".join(terms),
             "pageSize": min(self.max_results, 50),
-            "sort": "relevance",  # opcional — endpoint pode ignorar; mantido para uso futuro
+            # NOTA 2026-08-24: o valor "relevance" NÃO é aceito pela API v2
+            # (retorna HTTP 400). Sem o parâmetro, a ordenação default já é
+            # por relevância — parâmetro removido.
         }
 
         response = await self.http.get(_API_BASE, params=params)

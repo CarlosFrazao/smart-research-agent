@@ -1126,8 +1126,11 @@ async def _get_trending_impl(hours: int = 24, max_records: int = 10) -> str:
             ensure_ascii=False,
         )
     except Exception as e:
-        logger.error(f"[get_trending] erro: {e}")
-        return json.dumps({"error": str(e)})
+        # 2026-08-24: str(e) de exceções como httpx.ConnectTimeout é string
+        # VAZIA — o caller via {"error": ""} sem contexto. Incluir o tipo.
+        err_msg = f"{type(e).__name__}: {e}".strip(": ")
+        logger.error(f"[get_trending] erro: {err_msg}")
+        return json.dumps({"error": err_msg})
 
 
 def _register_mcp_tools(app: FastAPI) -> None:
@@ -1745,10 +1748,14 @@ def _register_mcp_tools(app: FastAPI) -> None:
             """
             try:
                 store = FeedbackStore()
+                # 2026-08-24: aliases "up"/"down" (documentados na skill e usados
+                # por clientes legados) mapeados para os sinais canônicos.
+                signal_aliases = {"up": "useful", "down": "not_useful"}
+                canonical_signal = signal_aliases.get(signal.lower(), signal)
                 # Passa source_name se fornecido (nova feature Fase 4)
                 entry = store.record(
                     result_id=result_id,
-                    signal=signal,
+                    signal=canonical_signal,
                     query=query,
                     source_name=source_name or None,
                 )
