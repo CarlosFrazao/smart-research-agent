@@ -313,6 +313,13 @@ class Config(BaseSettings):
     budget_cost_per_query_usd: float = Field(default=10.0)
     budget_timeout_seconds: float = Field(default=300.0)
 
+    # Human-In-The-Loop: quando False, o pipeline NUNCA suspende esperando
+    # aprovacao humana (via REST/CLI nao ha quem responda — o default de 300s
+    # por solicitacao virava 5+ min de espera morta por pesquisa).
+    hitl_enabled: bool = Field(default=False)
+    # Timeout (s) caso hitl_enabled=True.
+    hitl_timeout_seconds: float = Field(default=30.0)
+
     # SerpAPI — fallback de último recurso para buscas na web
     serpapi_api_key: str | None = Field(default=None)
     serpapi_enabled: bool = Field(default=True)

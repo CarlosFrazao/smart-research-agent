@@ -306,7 +306,11 @@ class ExpandStage:
                             "tente 'como fazer X em Python'."
                         ),
                     },
-                    timeout=300.0,
+                    timeout=float(
+                        getattr(orchestrator.config, "hitl_timeout_seconds", 30.0)
+                    )
+                    if orchestrator and hasattr(orchestrator, "config")
+                    else 30.0,
                 )
                 if (
                     clarification
@@ -492,7 +496,11 @@ class ExpandStage:
                     session_id=session_id,
                     request_type="source_plan",
                     data=hitl_data,
-                    timeout=300.0,  # Timeout de 5 minutos
+                    timeout=float(
+                        getattr(orchestrator.config, "hitl_timeout_seconds", 30.0)
+                    )
+                    if orchestrator and hasattr(orchestrator, "config")
+                    else 30.0,
                 )
 
                 # Reconstrói queries expandidas e plano a partir do feedback do usuário

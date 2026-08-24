@@ -247,6 +247,22 @@ class RedditSearcher(BaseSearcher):
             reddit_query = f"{query} site:reddit.com"
             raw_results = await self._firecrawl.search(reddit_query, limit=15)
             if not raw_results:
+                # Foco self-hosted: o operador `site:` nem sempre é respeitado
+                # pelo indexador do Firecrawl local. Fallback: busca semântica
+                # com "reddit" explícito e filtro por domínio reddit.com.
+                logger.info(
+                    f"Reddit Firecrawl: site: vazio para '{query[:40]}'. "
+                    "Tentando busca sem qualificador..."
+                )
+                raw_results = await self._firecrawl.search(f"reddit {query}", limit=15)
+                if raw_results:
+                    raw_results = [
+                        r
+                        for r in raw_results
+                        if "reddit.com" in (r.get("url", "") or "")
+                    ]
+
+            if not raw_results:
                 return []
 
             results = []

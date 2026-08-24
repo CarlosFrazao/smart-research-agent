@@ -10,8 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml .
 # Gera wheels das dependências na pasta /wheels (preferindo binários pré-compilados)
+# sse-starlette/starlette pinados (<3.0 / <0.42) no pyproject para compatibilidade
+# com streamlit; sem repetir as restricoes aqui, mcp[fastapi] baixa versoes novas
+# e o install cego de /wheels/*.whl no stage final quebra com ResolutionImpossible.
 RUN pip wheel --prefer-binary --wheel-dir=/wheels -e ".[all]" && \
-    pip wheel --prefer-binary --wheel-dir=/wheels uvicorn "mcp[fastapi]"
+    pip wheel --prefer-binary --wheel-dir=/wheels uvicorn "mcp[fastapi]<2.0" \
+        "sse-starlette<3.0.0" "starlette>=0.40.0,<0.42.0"
 
 # Stage 2: Runtime image without compilation tools
 FROM python:3.11-slim

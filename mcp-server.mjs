@@ -6,6 +6,8 @@ import readline from 'node:readline';
 const SSE_URL = 'http://127.0.0.1:3458/mcp/sse';
 const HOST = 'http://127.0.0.1:3458';
 const MAX_BUFFER_SIZE = 50;
+const MAX_CONNECT_ATTEMPTS = 10;
+const CONNECT_TIMEOUT_MS = 10_000;
 
 async function main() {
   let postUrl = null;
@@ -31,7 +33,7 @@ async function main() {
     console.error(`[RESEARCH BRIDGE] Conectando ao Smart Research Agent SSE (Tentativa ${attempt})...`);
 
     try {
-      const response = await fetch(SSE_URL);
+      const response = await fetch(SSE_URL, { signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       console.error('[RESEARCH BRIDGE] Conexao SSE estabelecida com sucesso!');
@@ -65,6 +67,15 @@ async function main() {
       }
     } catch (err) {
       console.error(`[RESEARCH BRIDGE] Desconectado: ${err.message}`);
+    }
+
+    if (attempt >= MAX_CONNECT_ATTEMPTS) {
+      console.error(
+        `[RESEARCH BRIDGE] Falha: ${MAX_CONNECT_ATTEMPTS} tentativas sem sucesso. ` +
+          'Verifique se o container do Smart Research Agent esta no ar ' +
+          `(docker compose up -d) e se a porta 3458 responde em ${SSE_URL}. Encerrando.`
+      );
+      process.exit(1);
     }
 
     const delay = Math.min(15000, 1000 * Math.pow(2, attempt - 1)) + Math.random() * 1000;

@@ -152,6 +152,40 @@ def _is_daily_quota(exc: Exception) -> bool:
     return any(kw in msg for kw in _DAILY_QUOTA_MESSAGES)
 
 
+def _is_connection_error(exc: Exception) -> bool:
+    """Retorna True se é falha de conectividade (base URL inacessível).
+
+    Cobre SDKs OpenAI/Groq (``APIConnectionError``), HTTPX e o padrão OpenRouter,
+    além de ``ConnectionError``/``TimeoutError`` nativos. Endpoint morto (ex.:
+    proxy local desligado) não se resolve com retry — failover direto.
+    """
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+        return True
+    # openai.APIConnectionError / APITimeoutError / InternalServerError
+    if type(exc).__name__ in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "ConnectTimeout",
+        "ReadTimeout",
+        "ConnectionError",
+    }:
+        return True
+    msg = str(exc).lower()
+    return any(
+        k in msg
+        for k in (
+            "connection error",
+            "connection refused",
+            "connection reset",
+            "failed to connect",
+            "timed out",
+            "timeout",
+            "connect call failed",
+            "winerror 10061",
+        )
+    )
+
+
 class LLMProvider(StrEnum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
@@ -413,6 +447,17 @@ class LLMClient:
                                 f"[Failover] {self.provider.value} esgotou {RATE_LIMIT_MAX_RETRIES} tentativas. "
                                 "Acionando cadeia de failover..."
                             )
+                    elif _is_connection_error(exc):
+                        # Base URL inacessível/endpoint morto (ex.: proxy local
+                        # desligado) — não é problema de rate-limit, mas também
+                        # não adianta retry: vai direto à cadeia de failover.
+                        last_exc = exc
+                        logger.warning(
+                            f"[Failover] {self.provider.value} falhou por erro de "
+                            f"conexão ({type(exc).__name__}). Acionando cadeia de "
+                            "failover imediatamente..."
+                        )
+                        break
                     else:
                         raise
 

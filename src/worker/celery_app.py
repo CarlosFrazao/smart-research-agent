@@ -29,6 +29,12 @@ celery_app.conf.update(
     task_soft_time_limit=3000,  # Alerta aos 50min
     worker_prefetch_multiplier=1,  # Um task por vez
     result_expires=86400,  # 24 horas
+    broker_transport_options={
+        "socket_keepalive": True,  # Envia keepalive TCP
+        "socket_timeout": 30,  # Timeout de socket
+        "retry_on_timeout": True,  # Tenta novamente em timeout
+    },
+    broker_heartbeat=10,  # Heartbeat a cada 10s para evitar ociosidade
 )
 
 

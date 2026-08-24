@@ -26,7 +26,7 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "slowapi>=0.1.9",
-    "mcp>=1.0",
+    "mcp>=1.0,<2.0",
     "prometheus-client>=0.20",  # Métricas expostas em :8001/metrics (Bloco 13 / E8-T1)
     "chromadb>=0.5.0",
     "kuzu>=0.11.0",
@@ -35,7 +35,21 @@ dependencies = [
     "concurrent-log-handler>=0.9.25",  # Rotação de log tolerante a Windows (WinError 32)
     "sentence-transformers",
     "pyarrow",
-    "streamlit",
+    # Pinned to avoid streamlit>=1.59 importing the removed starlette symbol
+    # DEFAULT_EXCLUDED_CONTENT_TYPES (ImportError on startup). 1.45.0 is the last
+    # known-good line that no longer references that symbol; starlette 0.40.x still
+    # ships it and is required by fastapi 0.115 in the shared venv.
+    "streamlit>=1.45.0,<1.59.0",
+    # starlette 0.40.0 still exposes DEFAULT_EXCLUDED_CONTENT_TYPES and is the floor
+    # accepted by fastapi 0.115 (>=0.37,<0.43). Keep <0.42.0 to avoid the removal.
+    "starlette>=0.40.0,<0.42.0",
+    "sse-starlette<3.0.0",
+    "brotli",
+    "curl-cffi",
+    # Providers de LLM/busca usados pelos searchers (faltavam na imagem:
+    # groq fora da cadeia de LLM e serpapi/GH code search sem decode brotli)
+    "groq>=0.20.0",
+    "google-search-results>=2.1.0",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,24 @@
 @echo off
 setlocal enabledelayedexpansion
+
+:: ============================================================
+:: Smart Research Agent (SRA) - Launcher
+:: Resolves repo path dynamically from script location (no hardcoded paths)
+:: ============================================================
+set "SRA_REPO=%~dp0..\smart-research-agent"
+pushd "%SRA_REPO%" 2>nul
+if errorlevel 1 (
+    echo [ARES] [ERRO] Nao foi possivel localizar o repositorio smart-research-agent em: %SRA_REPO%
+    echo [ARES] [ERRO] Execute este bat a partir da pasta ATALHOS_AG dentro de E:\Meus LLmos
+    pause
+    exit /b 1
+)
+:: Normaliza para caminho absoluto
+for %%I in (.) do set "SRA_REPO=%%~fI"
+popd
+
 echo [ARES] Iniciando Smart Research Agent SRA-V3.0 (Nivel Supremo)...
+echo [ARES] Repo: %SRA_REPO%
 echo.
 
 :: ============================================================
@@ -43,7 +61,7 @@ echo.
 ::   1) Subir SRA Docker primeiro (mais leve: ~5GB)
 ::   2) Firecrawl pode ser iniciado manualmente via START_Firecrawl.bat quando necessario
 :: ============================================================
-cd /d "E:\Meus LLmos\smart-research-agent"
+cd /d "%SRA_REPO%"
 
 set SRA_MODE=host
 
@@ -81,7 +99,7 @@ if "!SRA_MODE!"=="docker" (
     start "SRA MCP Server Monitor" cmd /k "echo [ARES] MCP Server no container Docker - acesse http://localhost:3458 & echo [ARES] Para reiniciar: docker compose restart mcp-server & cmd /k"
 ) else (
     echo [ARES] [AVISO] Modo host: Redis/ChromaDB/SearXNG usam fallback em memoria.
-    start "SRA MCP Server (Host Mode)" cmd /k "cd /d E:\Meus LLmos\smart-research-agent && call .venv\Scripts\activate.bat && set HOST_MODE=true && uvicorn src.mcp_server:app --host 0.0.0.0 --port 3458"
+    start "SRA MCP Server (Host Mode)" cmd /k "cd /d \"%SRA_REPO%\" && call .venv\Scripts\activate.bat && set HOST_MODE=true && uvicorn src.mcp_server:app --host 0.0.0.0 --port 3458"
     echo [ARES] Aguardando 10 segundos para o MCP Server iniciar...
     timeout /t 10 /nobreak >nul
 )
@@ -91,20 +109,20 @@ echo.
 :: PASSO 2 - Celery Background Worker (host, usa .venv local)
 :: ============================================================
 echo [ARES] [2/4] Iniciando Celery Worker em background...
-if not exist "E:\Meus LLmos\smart-research-agent\.venv\Scripts\celery.exe" (
+if not exist "%SRA_REPO%\.venv\Scripts\celery.exe" (
     echo [ARES] [AVISO] Celery nao encontrado no .venv. Instalando automaticamente...
-    call "E:\Meus LLmos\smart-research-agent\.venv\Scripts\activate.bat" && pip install celery redis
+    call "%SRA_REPO%\.venv\Scripts\activate.bat" && pip install celery redis
     if errorlevel 1 (
         echo [ARES] [ERRO] Falha ao instalar Celery. Worker sera iniciado mesmo assim.
     )
 )
-start "SRA Celery Worker" cmd /k "cd /d E:\Meus LLmos\smart-research-agent && call .venv\Scripts\activate.bat && celery -A src.worker.celery_app worker --loglevel=info --pool=solo"
+start "SRA Celery Worker" cmd /k "cd /d \"%SRA_REPO%\" && call .venv\Scripts\activate.bat && celery -A src.worker.celery_app worker --loglevel=info --pool=solo"
 
 :: ============================================================
 :: PASSO 3 - Streamlit Web UI (host, usa .venv local)
 :: ============================================================
 echo [ARES] [3/4] Iniciando Web UI Streamlit (Porta 8501)...
-start "SRA Streamlit Web UI" cmd /k "cd /d E:\Meus LLmos\smart-research-agent && call .venv\Scripts\activate.bat && streamlit run ui/streamlit_app.py --server.port 8501"
+start "SRA Streamlit Web UI" cmd /k "cd /d \"%SRA_REPO%\" && call .venv\Scripts\activate.bat && streamlit run ui/streamlit_app.py --server.port 8501"
 
 :: ============================================================
 :: PASSO 4 - Firecrawl (INICIAR MANUALMENTE QUANDO NECESSARIO)
