@@ -165,6 +165,7 @@ class GapDetector:
                     missing_aspects=["poucos resultados"],
                     new_queries=[f"{query} open source", f"{query} alternative"],
                     confidence="alta",
+                    confidence_score=0.9,
                     rationale="Menos de 10 resultados encontrados",
                 ),
                 query,
@@ -177,6 +178,7 @@ class GapDetector:
                     missing_aspects=["cobertura de fontes insuficiente"],
                     new_queries=[f"{query} site:github.com", f"{query} reddit"],
                     confidence="media",
+                    confidence_score=0.6,
                     rationale=f"Apenas {source_coverage} fontes cobertas",
                 ),
                 query,
@@ -189,6 +191,7 @@ class GapDetector:
                     missing_aspects=["pouca diversidade de projetos"],
                     new_queries=[f"best {query} 2026", f"{query} vs"],
                     confidence="media",
+                    confidence_score=0.6,
                     rationale="Menos de 3 projetos distintos nos top 20",
                 ),
                 query,
@@ -270,7 +273,17 @@ class GapDetector:
         try:
             result = await self.llm.generate_structured(prompt_text, schema)
             self._track_llm_cost(state)
-            return self._finalize(GapAnalysis(**result), query)
+            # Mapear confidence do LLM para confidence_score numérico
+            llm_confidence = result.get("confidence", "media")
+            confidence_score_map = {"alta": 0.9, "media": 0.6, "baixa": 0.35}
+            confidence_score = confidence_score_map.get(llm_confidence, 0.5)
+            return self._finalize(
+                GapAnalysis(
+                    **result,
+                    confidence_score=confidence_score,
+                ),
+                query,
+            )
         except Exception as e:
             logger.warning(f"LLM gap detection falhou: {e}")
             return GapAnalysis(
@@ -278,6 +291,7 @@ class GapDetector:
                 missing_aspects=[],
                 new_queries=[],
                 confidence="media",
+                confidence_score=0.5,
                 rationale="Heuristicas indicam pesquisa suficiente",
             )
 

@@ -23,6 +23,7 @@ from src.cache.shared_cache import SharedCache
 from src.agent_persona_loader import AgentPersonaLoader
 from src.types import ResearchMetadata, SynthesizedResult
 from src.pipeline.pipeline import PipelineContext, PipelineStage
+from src.research_score import ResearchScore
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +270,20 @@ class ReportStage(PipelineStage):
                 )
                 # Adiciona notas de auditoria ao contexto
                 context.audit_result = audit_result
+                # FEAT-007 (Bloco 7): Armazena gaps detectados pelo auditor para
+                # alimentar o loop de verificação de cobertura (Task #9).
+                # Esses gaps podem ser convertidos em novas queries de busca
+                # na próxima iteração do loop de verificação do pipeline.
+                if hasattr(context, "extra"):
+                    audit_gaps: list[str] = (
+                        getattr(audit_result, "gaps_detected", []) or []
+                    )
+                    context.extra["audit_gaps"] = audit_gaps
+                    if audit_gaps:
+                        logger.info(
+                            f"ReportStage: auditor detectou {len(audit_gaps)} gaps "
+                            f"que podem alimentar o loop de verificação"
+                        )
                 # Se o auditor enriqueceu o report_text, usar o enriquecido
                 if (
                     hasattr(audit_result, "enriched_content")
@@ -286,6 +301,75 @@ class ReportStage(PipelineStage):
         # Salva resultados no contexto do pipeline
         context.report = report_md
         context.set("report_sections", sections)
+
+        # FEAT-005 (Bloco 5): Ativar ResearchScoreAggregator no ReportStage.
+        # Calcula o ResearchScore agregado (coverage, diversity, quality, reliability,
+        # recency, conflicts, grade A+→F) e injeta no relatório final.
+        try:
+            orchestrator = (
+                context.extras.get("orchestrator") if context.extras else None
+            )
+            if (
+                orchestrator
+                and hasattr(orchestrator, "score_aggregator")
+                and orchestrator.score_aggregator
+            ):
+                score_aggregator = orchestrator.score_aggregator
+
+                # Reúne parâmetros para o cálculo.
+                # `metadata` já foi definido acima (linha ~169) no escopo do
+                # método run(); reusamos o mesmo objeto sem re-declarar.
+                ranked_results = context.ranked_results or []
+                all_raw_results = context.raw_results or []
+
+                # Gap analysis já pode ter sido populado pelo GapFillStage
+                gap_analysis = (
+                    context.extra.get("gap_analysis")
+                    if hasattr(context, "extra")
+                    else None
+                )
+
+                # Fontes planejadas pelo SourcePlanner, se disponíveis
+                planned_sources: list[str] | None = None
+                if hasattr(context, "extra") and context.extra.get("planned_sources"):
+                    planned_sources = context.extra["planned_sources"]
+
+                # Relatório do Peer Review, se disponível
+                peer_review_report: Any | None = None
+                if hasattr(context, "extra") and context.extra.get(
+                    "peer_review_section"
+                ):
+                    peer_review_report = context.extra["peer_review_section"]
+
+                # Calcula o score agregado
+                score: ResearchScore = score_aggregator.calculate(
+                    results=ranked_results,
+                    metadata=metadata,
+                    all_raw_results=all_raw_results,
+                    gap_analysis=gap_analysis,
+                    planned_sources=planned_sources,
+                    peer_review_report=peer_review_report,
+                )
+
+                # Injeta o bloco de score no relatório
+                report_md = score_aggregator.inject_into_report(report_md, score)
+
+                # Armazena o score no contexto para consumidores downstream
+                context.set("research_score", score)
+                logger.info(
+                    f"ReportStage: ResearchScore calculado - grade: {score.grade} "
+                    f"(overall: {score.overall:.1%}, coverage: {score.coverage:.0%})"
+                )
+            else:
+                logger.debug(
+                    "ReportStage: ResearchScoreAggregator não disponível no orchestrator; "
+                    "score não injetado no relatório."
+                )
+        except Exception as e:
+            logger.warning(
+                "ReportStage: falha ao calcular/injetar ResearchScore (non-fatal): %s",
+                e,
+            )
 
         # FEAT-002 (Resiliência Bloco 2): sinal visível de falha de geração
         # estruturada. Se o LLM falhou ao produzir JSON válido (generate_structured

@@ -254,6 +254,23 @@ class Orchestrator:
                 # ferramentas que queiram inspecionar ranked_results/custo sem
                 # acoplar o Orchestrador ao protocolo do PipelineContext.
                 self.last_context = context
+
+                # FASE 4: expõe métricas de confiança do gap analysis para o
+                # Decision Engine / ReAct. O usuário/interface pode ler
+                # context.extra["gap_analysis"].confidence_score e
+                # context.extra["gap_analysis"].confidence para decidir se
+                # deve parar, continuar buscando ou apresentar alerta.
+                gap_analysis = context.extra.get("gap_analysis")
+                if gap_analysis is not None:
+                    context.extra["gap_confidence_score"] = getattr(
+                        gap_analysis, "confidence_score", 0.5
+                    )
+                    context.extra["gap_confidence"] = getattr(
+                        gap_analysis, "confidence", "media"
+                    )
+                    context.extra["gap_is_complete"] = getattr(
+                        gap_analysis, "is_complete", True
+                    )
                 await self.close_searchers()
                 # Bloco 10 (E7-T1): registra a pesquisa no Audit Log (best-effort).
                 self._audit_research(context)

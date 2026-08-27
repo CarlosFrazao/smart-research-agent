@@ -320,6 +320,7 @@ class ResearchPipeline:
         *,
         name: str = "research_pipeline",
         dlq: Any | None = None,
+        max_iterations: int = 3,
     ) -> None:
         """
         Args:
@@ -337,6 +338,7 @@ class ResearchPipeline:
         self.stages: list[PipelineStage] = list(stages)
         self.name = name
         self.dlq = dlq
+        self.max_iterations = max_iterations
 
         names = [s.name for s in self.stages]
         duplicates = {n for n in names if names.count(n) > 1}
@@ -440,9 +442,171 @@ class ResearchPipeline:
                 ) from exc
 
         logger.info(
-            f"[{self.name}] execução concluída em {context.elapsed_seconds():.2f}s "
+            f"[{self.name}] passo 1 concluído em {context.elapsed_seconds():.2f}s "
             f"({len(context.completed_stages)}/{len(self.stages)} stages, "
             f"{len(context.errors)} erro(s) não-crítico(s))"
+        )
+
+        # ── POST-PIPELINE VERIFICATION LOOP (Bloco 5 / E2-T1) ──────────────────
+        # Após a primeira passagem completa, verifica se o GapFillStage
+        # detectou lacunas. Se is_complete=False e há novas queries, dispara
+        # iterações adicionais focadas em search→rank→score→gap.
+        # Esta loop também consome expanded_queries (GraphExplorerStage) e
+        # audit_gaps (ReportStage) para cobertura mais completa.
+        # FASE 3: também expõe métricas de confiança para o usuário/interface
+        # ler via context.extra["gap_confidence_score"] e context.extra["gap_confidence"].
+        coverage_loop_history: list[dict[str, Any]] = []
+        iteration = 1
+
+        while True:
+            gap_analysis = context.extra.get("gap_analysis")
+            is_complete = context.extra.get("is_complete", True)
+
+            # Coleta gap_queries de todas as fontes disponíveis:
+            # 1. GapFillStage (produtor canônico)
+            gap_from_fill = (
+                getattr(gap_analysis, "new_queries", None) or [] if gap_analysis else []
+            )
+            # 2. GraphExplorerStage expanded_queries
+            gap_from_graph = getattr(context, "expanded_queries", []) or []
+            # 3. ReportStage audit_gaps
+            gap_from_audit = context.extra.get("audit_gaps", []) or []
+
+            # Combina todas as fontes de queries de gap (dedup por query string)
+            seen_queries: set[str] = set()
+            all_gap_queries: list[Any] = []
+            for q in gap_from_fill + gap_from_graph + gap_from_audit:
+                q_str = getattr(q, "query", str(q))
+                if q_str not in seen_queries:
+                    seen_queries.add(q_str)
+                    all_gap_queries.append(q)
+
+            if not all_gap_queries:
+                logger.info(
+                    f"[{self.name}] verification loop: nenhuma query de gap encontrada "
+                    f"(fill={len(gap_from_fill)}, graph={len(gap_from_graph)}, audit={len(gap_from_audit)}); finalizando."
+                )
+                break
+
+            # Verifica completude considerando todas as fontes de gap
+            # Se GapFillStage disse que está completo, consideramos completo
+            # a menos que houver gaps de outras fontes que não foram detectidos pelo FillStage
+            is_complete = (
+                getattr(gap_analysis, "is_complete", True) if gap_analysis else True
+            )
+
+            if is_complete and not gap_from_audit:
+                # Se o FillStage completou E não há gaps auditivos extras, finaliza
+                logger.info(
+                    f"[{self.name}] verification loop: gap_analysis is_complete=True "
+                    f"(e sem audit_gaps extras); finalizando."
+                )
+                break
+
+            if iteration >= self.max_iterations:
+                logger.warning(
+                    f"[{self.name}] verification loop: max_iterations "
+                    f"({self.max_iterations}) atingido; cobertura incompleta."
+                )
+                context.extra["coverage_loop_max_iter_reached"] = True
+                break
+
+            iteration += 1
+            logger.info(
+                f"[{self.name}] verification loop: iter {iteration} — "
+                f"re-running search/rank/score/gap para fechar lacunas "
+                f"(total gap_queries: {len(all_gap_queries)})."
+            )
+
+            # ETAPA 9 (Task #9): Injeta gap queries em context.expanded_queries
+            # para que a SearchStage as processe na re-busca iterativa.
+            existing_query_strs = {
+                getattr(q, "query", str(q))
+                for q in getattr(context, "expanded_queries", [])
+            }
+            injected_count = 0
+            for gq in all_gap_queries:
+                gq_str = getattr(gq, "query", str(gq))
+                if gq_str not in existing_query_strs:
+                    context.expanded_queries.append(gq)
+                    existing_query_strs.add(gq_str)
+                    injected_count += 1
+            if injected_count > 0:
+                logger.info(
+                    f"[{self.name}] verification loop: injetadas {injected_count} "
+                    f"gap queries em context.expanded_queries para re-busca."
+                )
+
+            # Etapas de re-busca iterativa (sem re-rodar intent/storm/expand/synthesize)
+            re_search_names = ["search", "rank", "score", "gap"]
+            # Fallback: tenta nomes alternativos
+            re_search_names = [
+                n if n in self._by_name else None for n in re_search_names
+            ]
+            re_search_names = [n for n in re_search_names if n is not None]
+
+            if not re_search_names:
+                logger.warning(
+                    f"[{self.name}] verification loop: stages de re-busca não "
+                    f"encontradas; finalizando."
+                )
+                break
+
+            try:
+                for stage_name in re_search_names:
+                    stage = self._by_name.get(stage_name)
+                    if stage is None:
+                        continue
+                    stage_start = time.monotonic()
+                    try:
+                        new_context = await self._run_stage_with_retry(stage, context)
+                        if new_context is not None:
+                            context = new_context
+                        duration = time.monotonic() - stage_start
+                        context.mark_complete(stage.name, duration)
+                    except Exception as exc:
+                        is_crit = getattr(stage, "critical", True)
+                        context.record_error(stage.name, exc, critical=is_crit)
+                        if not is_crit:
+                            logger.warning(
+                                f"[{self.name}] verification loop: stage "
+                                f"'{stage_name}' falhou ({exc}) — prosseguindo."
+                            )
+                            continue
+                        logger.error(
+                            f"[{self.name}] verification loop: stage crítica "
+                            f"'{stage_name}' falhou — abortando."
+                        )
+                        break
+
+                coverage_loop_history.append(
+                    {
+                        "iteration": iteration,
+                        "gap_queries_used": [
+                            getattr(q, "query", str(q)) for q in all_gap_queries
+                        ],
+                        "gap_sources": {
+                            "gap_fill": len(gap_from_fill),
+                            "graph_explorer": len(gap_from_graph),
+                            "audit": len(gap_from_audit),
+                        },
+                        "is_complete": context.extra.get("is_complete", True),
+                    }
+                )
+            except Exception as exc:
+                logger.error(
+                    f"[{self.name}] verification loop: erro na iteração "
+                    f"{iteration}: {exc}"
+                )
+                break
+
+        context.extra["coverage_loop_history"] = coverage_loop_history
+
+        logger.info(
+            f"[{self.name}] execução concluída em {context.elapsed_seconds():.2f}s "
+            f"({len(context.completed_stages)}/{len(self.stages)} stages originais, "
+            f"{len(context.errors)} erro(s) não-crítico(s), "
+            f"{len(coverage_loop_history)} iteração(ões) de verificação)"
         )
         return context
 

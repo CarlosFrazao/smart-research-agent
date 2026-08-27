@@ -97,10 +97,11 @@ class GraphExplorerStage(PipelineStage):
             logger.warning(f"[GraphExplorerStage] traverse() falhou (ignorado): {e}")
             return context
 
-        # Reaproveita o campo tipado já existente em PipelineContext — ver
-        # motivação no docstring do módulo (ele existe, mas hoje nada o
-        # preenche).
-        context.gap_analysis = report
+        # Não sobrescreve context.gap_analysis se já foi preenchido pelo GapFillStage
+        # (produtor canônico). GraphExplorerStage apenas enriquece com informações
+        # de densidade do grafo, sem dominar o GapAnalysis.
+        if context.gap_analysis is None:
+            context.gap_analysis = report
 
         if not report.has_gaps:
             logger.info(

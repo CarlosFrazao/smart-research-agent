@@ -399,6 +399,7 @@ class GapAnalysis(SRAModel):
         missing_aspects: Lista de aspectos da query ainda não cobertos.
         new_queries: Sugestões de queries para fechar as lacunas.
         confidence: Nível de confiança da análise (``"alta"``, ``"media"``, ``"baixa"``).
+        confidence_score: Score numérico de confiança (0.0 a 1.0) para exibição ao usuário.
         rationale: Justificativa para a classificação de completude.
     """
 
@@ -406,6 +407,7 @@ class GapAnalysis(SRAModel):
     missing_aspects: list[str] = Field(default_factory=list)
     new_queries: list[str] = Field(default_factory=list)
     confidence: ConfidenceLevel
+    confidence_score: float = Field(default=0.5)
     rationale: str = ""
 
 

@@ -19,6 +19,9 @@ from src.pipeline.stages.quant_analysis_stage import QuantAnalysisStage
 from src.pipeline.stages.graph_explorer_stage import GraphExplorerStage
 from src.pipeline.stages.synthesize_stage import SynthesizeStage
 from src.pipeline.stages.report_stage import ReportStage
+from src.pipeline.stages.planning_stage import PlanningStage
+from src.pipeline.stages.conflict_resolution_stage import ConflictResolutionStage
+from src.pipeline.stages.gap_fill_stage import GapFillStage
 
 logger = logging.getLogger(__name__)
 
@@ -28,34 +31,13 @@ RankingStage = RankStage
 SynthesisStage = SynthesizeStage
 
 
-# Stubs de compatibilidade temporária para o pipeline de 9 estágios legado
+# ── HealthCheckStage (mantida inline — depende de método opcional do orquestrador) ──
 class HealthCheckStage(PipelineStage):
     name = "health_check"
 
     async def run(self, context: PipelineContext) -> PipelineContext:
         if hasattr(self.orchestrator, "_health_check"):
             await self.orchestrator._health_check()
-        return context
-
-
-class PlanningStage(PipelineStage):
-    name = "planning"
-
-    async def run(self, context: PipelineContext) -> PipelineContext:
-        return context
-
-
-class ConflictResolutionStage(PipelineStage):
-    name = "conflict_resolution"
-
-    async def run(self, context: PipelineContext) -> PipelineContext:
-        return context
-
-
-class GapFillStage(PipelineStage):
-    name = "gap"
-
-    async def run(self, context: PipelineContext) -> PipelineContext:
         return context
 
 
@@ -119,24 +101,4 @@ class SanitizationStage(PipelineStage):
         return context
 
 
-__all__ = [
-    "IntentStage",
-    "StormStage",
-    "ExpandStage",
-    "SearchStage",
-    "RankingStage",
-    "RankStage",
-    "ScoreStage",
-    "VerificationStage",
-    "GraphExplorerStage",
-    "SynthesisStage",
-    "SynthesizeStage",
-    "HealthCheckStage",
-    "PlanningStage",
-    "ConflictResolutionStage",
-    "GapFillStage",
-    "SanitizationStage",
-    "MediaIngestionStage",
-    "QuantAnalysisStage",
-    "ReportStage",
-]
+# __all__ já definido abaixo após as imports

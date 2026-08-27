@@ -212,15 +212,17 @@ class StageFactory:
             "intent",
             "storm",
             "expand",
+            "planning",  # ← PlanningStage: gera source_plan para a busca
             "search",
             "rank",
+            "conflict_resolution",  # ← ConflictResolutionStage: detecta contradições
             "score",
             "lineage",  # ← FASE 3: linhagem de citação (após clustering no rank)
             "adversarial_pass",  # ← FASE 3: passada adversarial anti viés de confirmação
             "verification",  # ← NOVA LINHA
-            "graph_explorer",
-            "gap",
-            "synthesize",
+            "gap",  # ← GapFillStage: produtor canônico de context.gap_analysis
+            "graph_explorer",  # ← consumidor de gap_analysis (não sobrescreve)
+            "synthesize",  # ← consumidor de gap_analysis (não sobrescreve)
             "quality_gate",
             "peer_review",  # ← BLOCO 9: revisão de pares adversarial pós-síntese
             "media_ingestion",
@@ -272,6 +274,12 @@ class StageFactory:
 
         # Registra factories built-in
         self._register_builtin_factories()
+
+        # Registra stages de planejamento e resolução de conflitos
+        self.register("planning", self._create_planning_stage, lazy=True)
+        self.register(
+            "conflict_resolution", self._create_conflict_resolution_stage, lazy=True
+        )
 
         logger.info("StageFactory inicializada")
 
@@ -523,6 +531,30 @@ class StageFactory:
         analyzer = IntentAnalyzer(llm_client=self._deps.get("llm_client"))
         return IntentStage(intent_analyzer=analyzer)
 
+    def _create_planning_stage(self) -> PipelineStage:
+        """Factory para PlanningStage (Bloco 5 / E2-T1).
+
+        Injeta o SourcePlanner do orchestrador.
+        """
+        from src.pipeline.stages.planning_stage import PlanningStage
+
+        orch = self._deps.get("orchestrator")
+        source_planner = getattr(orch, "source_planner", None) if orch else None
+        return PlanningStage(source_planner=source_planner)
+
+    def _create_conflict_resolution_stage(self) -> PipelineStage:
+        """Factory para ConflictResolutionStage (Bloco 5 / E2-T1).
+
+        Injeta o ConflictDetector do orchestrador.
+        """
+        from src.pipeline.stages.conflict_resolution_stage import (
+            ConflictResolutionStage,
+        )
+
+        orch = self._deps.get("orchestrator")
+        conflict_detector = getattr(orch, "conflict_detector", None) if orch else None
+        return ConflictResolutionStage(conflict_detector=conflict_detector)
+
     def _create_storm_stage(self) -> PipelineStage:
         """Factory para StormStage (perspectivas multi-especialista STORM)."""
         from src.pipeline.stages.storm_stage import StormStage
@@ -667,10 +699,12 @@ class StageFactory:
         return GraphExplorerStage(graph_explorer_agent=agent)
 
     def _create_gap_stage(self) -> PipelineStage:
-        """Factory para GapFillStage."""
+        """Factory para GapFillStage — injeta o GapDetector real do orchestrador."""
         from src.pipeline.stages import GapFillStage
 
-        return GapFillStage()
+        orch = self._deps.get("orchestrator")
+        gap_detector = getattr(orch, "gap_detector", None) if orch else None
+        return GapFillStage(gap_detector=gap_detector)
 
     def _create_synthesize_stage(self) -> PipelineStage:
         """Factory para SynthesizeStage."""

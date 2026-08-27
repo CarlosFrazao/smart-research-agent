@@ -102,27 +102,48 @@ class SynthesizeStage(PipelineStage):
                 except Exception as e:
                     logger.warning(f"Falha no ConflictDetector em SynthesizeStage: {e}")
 
-            # 2. Gap Detector (Lacunas)
-            gap_detector = getattr(orchestrator, "gap_detector", None)
-            if gap_detector and context.intent:
-                try:
-                    gap_analysis = await gap_detector.detect(
-                        results=results,
-                        query=context.query,
-                        intent=context.intent,
-                    )
-                    for gap in getattr(gap_analysis, "gaps", []):
-                        findings.append(
-                            {
-                                "type": "gap",
-                                "content": f"Lacuna identificada: {gap.description} (aspecto: {gap.aspect})",
-                                "urgency": 0.80
-                                if gap.severity in ("critical", "high")
-                                else 0.50,
-                            }
+            # 2. Gap Detector (Lacunas) — consome gap_analysis existente se houver,
+            # senão detecta novos gaps (compatibilidade: GapFillStage agora é o
+            # produtor canônico, mas mantemos fallback por segurança).
+            gap_analysis = context.extra.get("gap_analysis")
+            if gap_analysis is None:
+                gap_detector = getattr(orchestrator, "gap_detector", None)
+                if gap_detector and context.intent:
+                    try:
+                        gap_analysis = await gap_detector.detect(
+                            results=results,
+                            query=context.query,
+                            intent=context.intent,
                         )
-                except Exception as e:
-                    logger.warning(f"Falha no GapDetector em SynthesizeStage: {e}")
+                        for gap in getattr(gap_analysis, "gaps", []):
+                            findings.append(
+                                {
+                                    "type": "gap",
+                                    "content": f"Lacuna identificada: {gap.description} (aspecto: {gap.aspect})",
+                                    "urgency": 0.80
+                                    if gap.severity in ("critical", "high")
+                                    else 0.50,
+                                }
+                            )
+                    except Exception as e:
+                        logger.warning(f"Falha no GapDetector em SynthesizeStage: {e}")
+            else:
+                # gap_analysis já existe do GapFillStage/verificação loop;
+                # registra gaps encontrados para o loop de findings.
+                for gap in getattr(gap_analysis, "gaps", []):
+                    findings.append(
+                        {
+                            "type": "gap",
+                            "content": f"Lacuna identificada: {gap.description} (aspecto: {gap.aspect})",
+                            "urgency": 0.80
+                            if gap.severity in ("critical", "high")
+                            else 0.50,
+                        }
+                    )
+                logger.debug(
+                    f"SynthesizeStage: consumindo gap_analysis existente "
+                    f"(is_complete={gap_analysis.is_complete})"
+                )
 
             # 3. Misinformation Detector (Fontes Suspeitas)
             try:

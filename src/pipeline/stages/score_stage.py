@@ -202,7 +202,42 @@ class ScoreStage(PipelineStage):
     # ── Interface do Pipeline ───────────────────────────────────────────────
 
     async def run(self, context: PipelineContext) -> PipelineContext:
-        """Executa o stage no contexto de pesquisa do pipeline runner."""
+        """Executa o stage no contexto de pesquisa do pipeline runner.
+
+        FEAT-006 (Bloco 6): Unificar ScoreStage com ConfidenceScorerV2.
+        Quando o orchestrator fornecer um `confidence_scorer` (injectado via
+        stage_factory.py:157), delegamos a ele para o scoring principal, usando
+        as heurísticas do ScoreStage apenas como fallback quando o scorer
+        não está disponível ou quando há dados estruturados que ele não processa.
+        """
+        # Tente usar o ConfidenceScorerV2 do orchestrator se disponível
+        orchestrator = context.extras.get("orchestrator") if context.extras else None
+        if (
+            orchestrator
+            and hasattr(orchestrator, "confidence_scorer")
+            and orchestrator.confidence_scorer
+        ):
+            try:
+                scorer = orchestrator.confidence_scorer
+                # O ConfidenceScorerV2.score_batch aceita lista de resultados
+                # e retorna resultados com confidence_score preenchidos
+                scored = await scorer.score_batch(context.ranked or [])
+                context.ranked = scored
+                logger.info(
+                    f"ScoreStage: Usando ConfidenceScorerV2 do orchestrator "
+                    f"(len={len(scored)})"
+                )
+                return context
+            except Exception as e:
+                logger.warning(
+                    "ScoreStage: falha ao usar ConfidenceScorerV2, caindo para heurísticas: %s",
+                    e,
+                )
+
+        # Fallback: scoring heurístico nativo do ScoreStage
+        logger.debug(
+            "ScoreStage: ConfidenceScorerV2 indisponível; usando scoring heurístico nativo"
+        )
         scored = await self.execute(
             context.ranked,
             context={"query": context.query, "intent": context.intent},
