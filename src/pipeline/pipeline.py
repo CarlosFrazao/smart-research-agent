@@ -600,6 +600,13 @@ class ResearchPipeline:
                 )
                 break
 
+        # Exportar campos de confiança para a skill (backward compatibility)
+        # Estes são os mesmos valores de gap_analysis, mas acessíveis separadamente
+        # para facilitar consultas da skill sem navegar no objeto GapAnalysis
+        if gap_analysis:
+            context.extra["gap_confidence_score"] = gap_analysis.confidence_score
+            context.extra["gap_is_complete"] = gap_analysis.is_complete
+
         context.extra["coverage_loop_history"] = coverage_loop_history
 
         logger.info(
