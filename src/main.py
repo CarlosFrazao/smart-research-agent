@@ -12,7 +12,7 @@ import sys
 
 from src.config import Config
 from src.deep_researcher import DeepResearcher
-from src.orchestrator import Orchestrator
+from src.orchestrator_factory import create_orchestrator
 from src.utils.logging import setup_logger
 
 logger = setup_logger("main")
@@ -127,7 +127,7 @@ async def cmd_research(args):
 
     config.validate_config()
 
-    orchestrator = Orchestrator(config)
+    orchestrator = create_orchestrator(config)
     orchestrator.operation_mode = OperationModes.get_mode(op_mode)
 
     mode = getattr(args, "mode", "standard")
@@ -245,7 +245,7 @@ async def cmd_schedule(args):
     from src.scheduler import ResearchScheduler
 
     config = Config()
-    orchestrator = Orchestrator(config)
+    orchestrator = create_orchestrator(config)
     scheduler = ResearchScheduler(orchestrator)
 
     subcmd = getattr(args, "schedule_command", None)
