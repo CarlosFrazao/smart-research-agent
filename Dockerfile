@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
+COPY src/ ./src/
+COPY api/ ./api/
 # Gera wheels das dependências na pasta /wheels (preferindo binários pré-compilados)
 # sse-starlette/starlette pinados (<3.0 / <0.42) no pyproject para compatibilidade
 # com streamlit; sem repetir as restricoes aqui, mcp[fastapi] baixa versoes novas
@@ -22,10 +24,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install only the wheels from builder stage (excluding smart-research-agent which we'll copy)
+# Copia os wheels compilados do stage anterior
 COPY --from=builder /wheels /wheels
-RUN pip install --no-index --find-links=/wheels /wheels/*.whl --no-deps && \
-    pip install --no-index --find-links=/wheels /wheels/smart_research_agent*.whl --force-reinstall && \
+RUN pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \
     apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
@@ -35,6 +36,7 @@ ENV TIKTOKEN_CACHE_DIR=/root/.cache/tiktoken
 RUN python -c "import tiktoken; tiktoken.encoding_for_model('gpt-4')" 2>/dev/null || \
     python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 
+# Copy source files (ensures api/ and all modules are present in the image)
 COPY src/ ./src/
 COPY api/ ./api/
 COPY prompts/ ./prompts/
