@@ -334,33 +334,52 @@ class Container:
     # ── FastAPI Integration ───────────────────────────────────────────────────
 
     def setup_fastapi(self, app: Any) -> "Container":
-        """Integra o container com FastAPI via app.state."""
+        """Integra o container com FastAPI via ``app.state``.
+
+        Apenas registra o container na aplicação. Para lifecycle (startup
+        e shutdown), use :meth:`setup_fastapi_lifespan` ao instanciar::
+
+            container = DependencyContainer()
+            app = FastAPI(lifespan=container.setup_fastapi_lifespan())
+            container.setup_fastapi(app)
+        """
         try:
             from fastapi import FastAPI
         except ImportError:
             raise ImportError("FastAPI não instalado. Instale com: pip install fastapi")
 
         app.state.container = self  # type: ignore
+        logger.info("Container: integrado com FastAPI app.state")
+        return self
 
-        @app.on_event("startup")
-        async def startup():
+    def setup_fastapi_lifespan(self):
+        """Retorna um context manager ``lifespan`` compatível com FastAPI.
+
+        No startup, pré-inicializa singletons registrados; no shutdown, libera
+        recursos via :meth:`shutdown`. Substitui o uso deprecado de
+        ``@app.on_event``.
+        """
+        from contextlib import asynccontextmanager
+
+        container = self
+
+        @asynccontextmanager
+        async def lifespan(app: Any):
             logger.info("Container: FastAPI startup — inicializando serviços singleton")
-            for name, reg in self._registry.items():
+            for name, reg in container._registry.items():
                 if reg.lifecycle == Lifecycle.SINGLETON and reg.instance is None:
                     try:
-                        self.resolve(name)
+                        container.resolve(name)
                     except Exception as e:
                         logger.warning(
                             f"Container: falha ao pré-inicializar '{name}': {e}"
                         )
-
-        @app.on_event("shutdown")
-        async def shutdown():
+            app.state.container = container  # type: ignore
+            yield
             logger.info("Container: FastAPI shutdown — liberando recursos")
-            await self.shutdown()
+            await container.shutdown()
 
-        logger.info("Container: integrado com FastAPI app.state")
-        return self
+        return lifespan
 
     def get_fastapi_dependency(self, name: str):
         """Retorna função para uso com FastAPI Depends()."""
