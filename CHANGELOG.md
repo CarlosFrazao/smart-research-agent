@@ -4,6 +4,9 @@ All notable changes to the Smart Research Agent (SRA) project will be documented
 
 ## [1.0.0] - 2026-08-28 — Audit Corrections (P0–P3)
 
+### Fixed (Post-Audit — 2026-08-29)
+- **P1-11**: `src/dependencies.py` — replaced deprecated `@app.on_event("startup"/"shutdown")` in `setup_fastapi()` with `@asynccontextmanager lifespan` pattern; added `setup_fastapi_lifespan()` method returning a lifespan context manager.
+
 ### Fixed
 - **P0-1**: `requirements.txt` — added `; sys_platform == "win32"` platform marker to `pywin32==312`, making the file installable on Linux. CI now runs `pip install -r requirements.txt` on `ubuntu-latest`.
 - **P0-2**: Fail-fast in production — `SRA_ENV=production` now requires `SRA_API_KEY` and rejects `CORS_ALLOWED_ORIGINS="*"`. Process refuses to start via `SystemExit` if conditions are not met.
