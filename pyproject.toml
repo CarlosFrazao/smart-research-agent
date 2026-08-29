@@ -94,7 +94,7 @@ all = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "api*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

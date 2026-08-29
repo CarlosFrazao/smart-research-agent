@@ -22,9 +22,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copia os wheels compilados do stage anterior
+# Install only the wheels from builder stage (excluding smart-research-agent which we'll copy)
 COPY --from=builder /wheels /wheels
-RUN pip install --no-index --find-links=/wheels /wheels/*.whl && \
+RUN pip install --no-index --find-links=/wheels /wheels/*.whl --no-deps && \
+    pip install --no-index --find-links=/wheels /wheels/smart_research_agent*.whl --force-reinstall && \
     rm -rf /wheels && \
     apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
@@ -35,6 +36,7 @@ RUN python -c "import tiktoken; tiktoken.encoding_for_model('gpt-4')" 2>/dev/nul
     python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 
 COPY src/ ./src/
+COPY api/ ./api/
 COPY prompts/ ./prompts/
 COPY config/ ./config/
 COPY static/ ./static/
