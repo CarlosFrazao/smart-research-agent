@@ -348,7 +348,14 @@ class LLMClient:
             except ImportError:
                 logger.warning("groq SDK não instalado. Groq indisponível.")
                 self._client = None
-            self.model = self.config.get("model", "llama-3.3-70b-versatile")
+            # Usa o primeiro modelo da lista de rotação (self._models) em vez
+            # do config bruto, que pode ser CSV ("model1,model2"). O split já
+            # foi feito em __init__; aqui apenas selecionamos o ativo.
+            self.model = (
+                self._models[self._current_model_idx]
+                if self._models
+                else self.config.get("model", "openai/gpt-oss-20b")
+            )
 
         elif self.provider == LLMProvider.OLLAMA:
             import httpx

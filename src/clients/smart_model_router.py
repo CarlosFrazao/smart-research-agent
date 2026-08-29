@@ -45,11 +45,17 @@ _ANTHROPIC_MODELS: dict[ModelTier, str] = {
 }
 
 # IDs de modelo por tier (provider OpenRouter)
+# CORRIGIDO 29/08/2026: meta-llama/llama-3.1-8b-instruct:free foi removido do free tier
+# (agora pago). stealth/ox-alpha também removido (era ZAI GLM-5.3 Flash, redirecionado).
+# Modelos verificados via https://openrouter.ai/api/v1/models (price=0 confirmado):
+#   nvidia/nemotron-3.5-lightning:free — MoE 30B, 1M ctx, high-throughput [GRÁTIS]
+#   thinkingmachines/inkling-small:free — MoE 276B, 262K ctx, multimodal [GRÁTIS]
+#   dots-studio/dots-3-note-preview:free — MoE 280B, 512K ctx (preview) [GRÁTIS]
 _OPENROUTER_MODELS: dict[ModelTier, str] = {
-    "free": "meta-llama/llama-3.1-8b-instruct:free",
-    "haiku": "anthropic/claude-haiku-4-5",
-    "sonnet": "anthropic/claude-sonnet-4-6",
-    "opus": "anthropic/claude-opus-4-8",
+    "free": "nvidia/nemotron-3.5-lightning:free",
+    "haiku": "nvidia/nemotron-3.5-lightning:free",
+    "sonnet": "thinkingmachines/inkling-small:free",
+    "opus": "thinkingmachines/inkling-small:free",
 }
 
 # IDs de modelo por tier (provider Gemini)
@@ -61,11 +67,14 @@ _GEMINI_MODELS: dict[ModelTier, str] = {
 }
 
 # IDs de modelo por tier (provider Groq)
+# CORRIGIDO 29/08/2026: llama-3.3-70b e llama-3.1-8b retornam 404 nesta conta.
+# Modelos verificados via GET /models: openai/gpt-oss-120b (131K ctx, reasoning)
+# e openai/gpt-oss-20b (~1000 t/s). O .env GROQ_MODEL usa estes mesmos modelos.
 _GROQ_MODELS: dict[ModelTier, str] = {
-    "free": "llama-3.3-70b-versatile",
-    "haiku": "llama-3.1-8b-instant",
-    "sonnet": "llama-3.3-70b-versatile",
-    "opus": "llama-3.3-70b-versatile",
+    "free": "openai/gpt-oss-20b",
+    "haiku": "openai/gpt-oss-20b",
+    "sonnet": "openai/gpt-oss-120b",
+    "opus": "openai/gpt-oss-120b",
 }
 
 # IDs de modelo por tier (provider Ollama)
