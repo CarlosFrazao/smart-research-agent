@@ -2,6 +2,23 @@
 
 All notable changes to the Smart Research Agent (SRA) project will be documented in this file.
 
+## [Unreleased] - 2026-08-29 — Repo Cleanup + Model Routing Fix
+
+### Fixed
+- **Groq/OpenRouter model routing**: `smart_model_router.py` hardcoded model names that return 404 on this account (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant` for Groq; `meta-llama/llama-3.1-8b-instruct:free`, `stealth/ox-alpha` for OpenRouter). Updated to active models: `openai/gpt-oss-120b`, `openai/gpt-oss-20b` (Groq) and `nvidia/nemotron-3.5-lightning:free`, `thinkingmachines/inkling-small:free` (OpenRouter).
+- **`llm_client.py` `_init_client()`**: was using the raw CSV config string as the model name (e.g. `"openai/gpt-oss-120b,openai/gpt-oss-20b"`), causing Groq to return 404 on all keys. Now uses `self._models[self._current_model_idx]` (the first model from the split list).
+
+### Removed (stale/orphaned files)
+- `EXPERIMENTAL_MODULES.md`, `PLANO_FECHAR_GAPS.md` — obsolete plan documents
+- `memory/F1D_implementation.md` — orphaned doc not referenced by any code
+- `migrate_memory_v1_to_v2.py`, `start_proxy_server.py`, `test_sources.py` — orphaned scripts
+- `report_super_stress_test.md` — old benchmark artifact
+- `specs/plan-sra-audit-corrections.md` — completed audit plan (all 31 issues resolved)
+
+### Cleanup (disk only, gitignored)
+- `.mypy_cache/` (209 MB), `.pytest_cache/`, `.cache/` (137 MB) — regenerated on demand by tooling
+- Old July 2026 logs and ~100 stale report files from `logs/` and `reports/`
+
 ## [1.0.0] - 2026-08-28 — Audit Corrections (P0–P3)
 
 ### Fixed (Post-Audit — 2026-08-29)
@@ -25,7 +42,7 @@ All notable changes to the Smart Research Agent (SRA) project will be documented
 - `ci.yml` — added `install-check` job (pip install -r requirements.txt on ubuntu-latest); test job now uses `-m "not integration"` to exclude integration tests; added nightly `integration` job on schedule.
 
 ### Documentation
-- `.env.example` — added `SRA_ENV`, `SRA_RATE_LIMIT`, `REDIS_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `CHROMA_AUTH_SECRET`; updated CORS and Redis URL comments for production.
+- `.env.example` — added `SRA_ENV`, `SRA_RATE_LIMIT`, `REDIS_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `CHROMA_AUTH_SECRET`; updated CORS and Redis URL comments for production. # pragma: allowlist secret
 
 ### Backend Neo4j (Legado Opcional)
 O backend Neo4j foi substituído pelo KuzuDB (v6.2.0) como padrão.
