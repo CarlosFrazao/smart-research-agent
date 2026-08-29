@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Smart Research Agent API",
     description="Interface RESTful de Pesquisa Inteligente",
-    version="6.1.0",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -249,7 +249,7 @@ async def _run_research_job(task_id: str, req: ResearchRequest) -> None:
 async def health():
     return {
         "status": "healthy",
-        "version": "6.1.0",
+        "version": "1.0.0",
         "timestamp": datetime.utcnow().isoformat(),
     }
 

@@ -1,0 +1,32 @@
+# Code owners for the Smart Research Agent (SRA) project.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings/about-code-owners
+
+# Default owner for all files
+*               @ceofpga
+
+# Core source code
+src/            @ceofpga
+api/            @ceofpga
+
+# Tests
+tests/          @ceofpga
+
+# Configuration and CI/CD
+.github/        @ceofpga
+docker/         @ceofpga
+*.yml           @ceofpga
+*.yaml          @ceofpga
+docker-compose.yml @ceofpga
+
+# Documentation
+*.md            @ceofpga
+docs/           @ceofpga
+
+# Python packaging
+pyproject.toml  @ceofpga
+requirements.txt @ceofpga
+
+# Security-critical files
+SECURITY.md     @ceofpga
+LICENSE         @ceofpga
+.env.example    @ceofpga

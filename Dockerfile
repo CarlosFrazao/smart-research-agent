@@ -29,6 +29,11 @@ RUN pip install --no-index --find-links=/wheels /wheels/*.whl && \
     apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
+# Pre-populate tiktoken encoding cache (avoids runtime download in Docker)
+ENV TIKTOKEN_CACHE_DIR=/root/.cache/tiktoken
+RUN python -c "import tiktoken; tiktoken.encoding_for_model('gpt-4')" 2>/dev/null || \
+    python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+
 COPY src/ ./src/
 COPY prompts/ ./prompts/
 COPY config/ ./config/

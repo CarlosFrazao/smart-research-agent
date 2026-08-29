@@ -1,4 +1,4 @@
-# Smart Research Agent (SRA) v6.0 🚀
+# Smart Research Agent (SRA) v1.0 🚀
 
 O **Smart Research Agent (SRA)** é um ecossistema autônomo de pesquisa inteligente projetado para obter, verificar, persistir e analisar informações técnicas a partir de múltiplas fontes distribuídas (GitHub, HN, Reddit, ArXiv, ProductHunt, Web scraping via Firecrawl e Jina) de forma assíncrona, robusta e resiliente contra bloqueios de rede.
 
