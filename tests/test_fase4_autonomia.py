@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from src.operation_modes import OperationModes, OperationConfig
 
 
-def test_operation_modes_all_seven_exist():
-    """Verifica que os 7 modos estão registrados."""
+def test_operation_modes_all_nine_exist():
+    """Verifica que os 9 modos estão registrados."""
     modes = OperationModes.list_modes()
-    assert len(modes) == 7
+    assert len(modes) == 9
     expected = {
         "guerrilha",
         "cirurgia",
@@ -23,6 +23,8 @@ def test_operation_modes_all_seven_exist():
         "concorrencia",
         "black_ops",
         "debate",
+        "academico",
+        "mito",
     }
     assert set(modes) == expected
 

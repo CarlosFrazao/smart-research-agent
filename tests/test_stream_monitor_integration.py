@@ -2,10 +2,14 @@
 """
 from __future__ import annotations
 
+import pytest
+
+# Todos os testes neste módulo são de integração.
+pytestmark = pytest.mark.integration
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -53,9 +57,9 @@ async def test_orchestrator_initialization():
     with patch("src.pipeline.stage_factory.StageFactory.initialize_components") as mock_init_comp, \
          patch("src.pipeline.stage_factory.StageFactory.build_pipeline") as mock_build_pipe, \
          patch("src.orchestrator.FallbackManager") as mock_fallback:
-        
+
         orchestrator = Orchestrator(config=config)
-        
+
         assert orchestrator.stream_monitor is not None
         assert len(orchestrator.stream_monitor._feeds) == 1
         assert any(f.name == "HN" for f in orchestrator.stream_monitor._feeds)
@@ -68,13 +72,13 @@ async def test_orchestrator_lifecycle():
     with patch("src.pipeline.stage_factory.StageFactory.initialize_components"), \
          patch("src.pipeline.stage_factory.StageFactory.build_pipeline"), \
          patch("src.orchestrator.FallbackManager"):
-        
+
         orchestrator = Orchestrator(config=config)
         orchestrator.operation_mode = MagicMock()
         orchestrator.operation_mode.name = "cirurgia"
         orchestrator.operation_mode.enable_debate = False
         orchestrator.memory = None  # Evita AttributeError no close()
-        
+
         mock_monitor = AsyncMock(spec=StreamMonitorAgent)
         mock_monitor._running = False
         orchestrator.stream_monitor = mock_monitor
@@ -103,7 +107,7 @@ async def test_search_stage_injection():
     context.intent = MagicMock()       # Satisfaz validação do SearchStage
     orchestrator_mock = MagicMock()
     context.extras["orchestrator"] = orchestrator_mock
-    
+
     # Mock do stream_monitor
     mock_monitor = AsyncMock()
     mock_monitor.events_as_search_results.return_value = [
@@ -132,7 +136,7 @@ async def test_search_stage_injection():
     stage._build_tasks.return_value.set_result(([], []))
 
     res_context = await stage.run(context)
-    
+
     # Verifica que o evento foi injetado nos resultados
     assert len(res_context.raw_results) == 1
     assert res_context.raw_results[0].title == "Evento do Monitor"

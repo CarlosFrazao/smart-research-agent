@@ -16,6 +16,10 @@ Notas de adaptação à assinatura real do codebase:
   instancia ``Config()`` internamente), então o teste injeta um ``MagicMock`` como
   ``orchestrator.config`` com todas as credenciais opcionais ativadas.
 """
+import pytest
+
+# Todos os testes neste módulo são de integração.
+pytestmark = pytest.mark.integration
 import re
 from pathlib import Path
 

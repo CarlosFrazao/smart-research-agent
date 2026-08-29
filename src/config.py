@@ -184,21 +184,41 @@ class Config(BaseSettings):
     sharepoint_client_secret: str | None = None
     sharepoint_tenant_id: str | None = None
 
+    # ── Ambiente de execução (P0-2: fail-fast em produção) ───────────────────
+    # development (padrão): comportamento permissivo — CORS "*", API key opcional.
+    # production: exige SRA_API_KEY e CORS configurado; falha se faltar.
+    sra_env: str = Field(
+        default="development",
+        validation_alias="SRA_ENV",
+        description="Ambiente de execução (development|production). Em production, exige SRA_API_KEY e restringe CORS.",
+    )
+
     # ── Segurança da API REST (Auditoria Parte 2 — Fase 3) ──────────────────────
     # Chave de API própria do SRA. Quando configurada (via SRA_API_KEY no .env),
     # todos os endpoints de pesquisa passam a exigir o header
     # `X-API-Key: <valor>`. Quando None/ausente, a autenticação é desabilitada
     # (compatibilidade com uso local sem configuração — apenas um warning no startup).
+    # Em production (SRA_ENV=production), este campo é OBRIGATÓRIO.
     sra_api_key: str | None = Field(
         default=None,
-        description="Chave de API do SRA. Se definida, endpoints de pesquisa exigem o header X-API-Key.",
+        validation_alias="SRA_API_KEY",
+        description="Chave de API do SRA. Se definida, endpoints de pesquisa exigem o header X-API-Key. Obrigatório em production.",
     )
 
     # Lista de origens permitidas pelo CORS. Lê de CORS_ALLOWED_ORIGINS (csv) no
     # .env. Default ["*"] preserva o comportamento anterior em dev local.
-    cors_allowed_origins: list[str] = Field(
-        default_factory=lambda: ["*"],
-        description="Origens permitidas pelo CORS (lidas de CORS_ALLOWED_ORIGINS, csv).",
+    # Em production, default é [] (nenhuma origem) — configurar explicitamente.
+    cors_allowed_origins: list[str] | None = Field(
+        default=None,
+        validation_alias="CORS_ALLOWED_ORIGINS",
+        description="Origens permitidas pelo CORS (lidas de CORS_ALLOWED_ORIGINS, csv). '*' apenas em development; [] em production.",
+    )
+
+    # Rate limit configurável via SRA_RATE_LIMIT (P0-6).
+    rate_limit: str = Field(
+        default="10/minute",
+        validation_alias="SRA_RATE_LIMIT",
+        description="Limite de requisições por IP para endpoints de pesquisa (slowapi format, ex: '10/minute').",
     )
 
     # ── Stream Monitor (Monitoramento em tempo real) ─────────────────────────
@@ -381,11 +401,20 @@ class Config(BaseSettings):
         string csv quanto uma lista já parseada. Se o valor for inválido/vazio,
         retorna ``["*"]`` (comportamento de dev local).
         """
+        if v is None:
+            return None  # deixa o model_validator "after" decidir o default
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
         if isinstance(v, (list, tuple)):
             return [str(o).strip() for o in v if str(o).strip()]
         return ["*"]
+
+    @model_validator(mode="after")
+    def _cors_default_by_env(self) -> "Config":
+        """Aplica default de CORS baseado no ambiente: ``*`` em dev, ``[]`` em prod."""
+        if self.cors_allowed_origins is None:
+            self.cors_allowed_origins = ["*"] if self.sra_env != "production" else []
+        return self
 
     @field_validator("captcha_provider")
     @classmethod
@@ -581,6 +610,28 @@ class Config(BaseSettings):
                 "A chave de API do Firecrawl está configurada como 'fc-placeholder'. "
                 "Por favor, configure uma chave válida no seu arquivo .env ou no ambiente."
             )
+
+    def validate_production(self) -> None:
+        """Fail-fast: em produção (SRA_ENV=production), exige SRA_API_KEY e CORS restrito.
+
+        Raises:
+            SystemExit(1): If SRA_ENV=production and sra_api_key is None.
+                           Caller should catch and handle, or let it crash the process.
+        """
+        if self.sra_env == "production":
+            if not self.sra_api_key:
+                raise SystemExit(
+                    "FATAL: SRA_ENV=production but SRA_API_KEY is not configured. "
+                    "Set SRA_API_KEY in your environment or .env file before starting "
+                    "in production mode. Refusing to start for security."
+                )
+            # CORS must not be ["*"] in production — that's a security risk.
+            if "*" in self.cors_allowed_origins:
+                raise SystemExit(
+                    "FATAL: SRA_ENV=production but CORS_ALLOWED_ORIGINS contains '*'. "
+                    "In production, list explicit origins (e.g. https://your-app.com). "
+                    "Refusing to start for security."
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════

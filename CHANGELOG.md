@@ -2,6 +2,28 @@
 
 All notable changes to the Smart Research Agent (SRA) project will be documented in this file.
 
+## [1.0.0] - 2026-08-28 — Audit Corrections (P0–P3)
+
+### Fixed
+- **P0-1**: `requirements.txt` — added `; sys_platform == "win32"` platform marker to `pywin32==312`, making the file installable on Linux. CI now runs `pip install -r requirements.txt` on `ubuntu-latest`.
+- **P0-2**: Fail-fast in production — `SRA_ENV=production` now requires `SRA_API_KEY` and rejects `CORS_ALLOWED_ORIGINS="*"`. Process refuses to start via `SystemExit` if conditions are not met.
+- **P0-3**: Added `LICENSE` file (MIT) with copyright holder from git config.
+- **P0-4**: Added "Production Deployment" section to README.md documenting env-var injection via Docker/K8s secrets.
+- **P0-5**: Hardened `docker-compose.yml` — Redis now requires password (`REDIS_PASSWORD`), ChromaDB has auth configuration documented, Grafana no longer has a plaintext default password.
+- **P0-6**: Rate limit is now configurable via `SRA_RATE_LIMIT` env var (default `"10/minute"`).
+
+### Changed
+- `src/config.py` — `sra_env` field defaults to `"development"`; CORS default is `["*"]` in dev, `[]` in production.
+- `src/mcp_server.py` — replaced deprecated `@app.on_event` with `@asynccontextmanager lifespan`; calls `validate_production()` on startup.
+- `api/main.py` — lifespan calls `validate_production()`; rate limit decorators read from `SRA_RATE_LIMIT`.
+- `requirements.txt` — 312 entries audited; `pywin32` platform marker added; `colorama`, `concurrent-log-handler`, `tiktoken` confirmed present.
+
+### CI
+- `ci.yml` — added `install-check` job (pip install -r requirements.txt on ubuntu-latest); test job now uses `-m "not integration"` to exclude integration tests; added nightly `integration` job on schedule.
+
+### Documentation
+- `.env.example` — added `SRA_ENV`, `SRA_RATE_LIMIT`, `REDIS_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `CHROMA_AUTH_SECRET`; updated CORS and Redis URL comments for production.
+
 ### Backend Neo4j (Legado Opcional)
 O backend Neo4j foi substituído pelo KuzuDB (v6.2.0) como padrão.
 As referências ao Neo4j mantidas no código são intencionais e habilitadas

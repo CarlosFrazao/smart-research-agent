@@ -1,5 +1,9 @@
-import asyncio
 import pytest
+
+# Todos os testes neste módulo são de integração — exigidos de rede/busca reais.
+pytestmark = pytest.mark.integration
+
+import asyncio
 from src.mcp_server import create_app
 from src.hitl_manager import HITLManager
 from src.orchestrator import Orchestrator

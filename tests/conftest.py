@@ -65,11 +65,16 @@ def pytest_collection_modifyitems(
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Registra o marker 'heavy' para evitar warnings desconhecidos."""
+    """Registra os markers 'heavy' e 'integration' para evitar warnings desconhecidos."""
     config.addinivalue_line(
         "markers",
         "heavy: testes que requerem chromadb/pyarrow/sentence_transformers/kuzu. "
         "Pulados automaticamente quando essas libs não importam corretamente.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "integration: testes de integração que usam buscadoras reais e/ou "
+        "fazem chamadas de rede. Excluídos da CI padrão (`pytest -m 'not integration'`).",
     )
 
 
@@ -141,4 +146,3 @@ def mock_llm_client():
         }
     )
     return client
-

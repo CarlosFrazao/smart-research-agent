@@ -120,6 +120,31 @@ def _resolve_field(item: Any, field_path: str | None) -> str:
     return str(value)
 
 
+def _strip_html(text: str) -> str:
+    """Remove tags HTML de um trecho de texto.
+
+    Usa ``bleach`` se disponível (remoção segura de tags e atributos perigosos);
+    caso contrário, recorre a regex simples que remove tudo entre ``<`` e ``>``.
+
+    Args:
+        text: String que pode conter markup HTML (ex: snippets da Wikipedia
+            com ``<span class="searchmatch">``).
+
+    Returns:
+        Texto sem tags HTML, com espaços normalizados.
+    """
+    if not text:
+        return ""
+    try:
+        import bleach
+
+        return bleach.clean(text, tags=[], strip=True)
+    except ImportError:
+        # Fallback regex: remove tags HTML e normaliza espaços.
+        cleaned = re.sub(r"<[^>]+>", "", text)
+        return " ".join(cleaned.split())
+
+
 def _resolve_placeholders(template: str, source: Any) -> str:
     """Substitui ``{chave}`` em ``template`` por valores resolvidos de ``source``.
 
@@ -394,8 +419,10 @@ class GenericAPISearcher(BaseSearcher):
             :class:`SearchResult` normalizado (campos ausentes viram "").
         """
         defn = self.source_def
-        title = _resolve_field(raw_result, defn.get("title_field", "title"))
-        snippet = _resolve_field(raw_result, defn.get("snippet_field"))
+        title = _strip_html(
+            _resolve_field(raw_result, defn.get("title_field", "title"))
+        )
+        snippet = _strip_html(_resolve_field(raw_result, defn.get("snippet_field")))
         item_url = _resolve_placeholders(defn.get("url_template", ""), raw_result)
 
         result = SearchResult(

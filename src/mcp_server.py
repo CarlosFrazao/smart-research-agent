@@ -133,53 +133,6 @@ def get_confidence_scorer(config: Config | None = None) -> ConfidenceScorer:
     return _confidence_scorer
 
 
-def _apply_rest_security(app: FastAPI, cfg: Config) -> None:
-    """Aplica CORS, rate limiting e auth ao servidor oficial (§15.2).
-
-    Espelha as defesas implementadas em ``api/main.py`` (Auditoria Parte 2 —
-    Fase 3) neste servidor, que é o que de fato roda em produção via Docker:
-
-    - **CORS:** origens lidas de ``cfg.cors_allowed_origins`` (env), não ``*``.
-    - **Rate limiting:** por IP via slowapi (``app.state.limiter``); as rotas do
-      ``rest_router`` já declaram ``@limiter.limit`` e passam a ser efetivas.
-    - **Auth:** o ``verify_api_key`` de ``api/main.py`` já é dependência das
-      rotas do ``rest_router``; aqui garantimos que o ``get_config`` resolva a
-      mesma ``Config``.
-
-    Falhas de import (ambiente sem slowapi, por ex.) degradam para no-op com
-    aviso, sem impedir o servidor de subir.
-
-    Args:
-        app: Instância FastAPI recém-criada.
-        cfg: Configuração efetiva desta instância.
-    """
-    try:
-        from fastapi.middleware.cors import CORSMiddleware
-        from slowapi import Limiter, _rate_limit_exceeded_handler
-        from slowapi.errors import RateLimitExceeded
-        from slowapi.util import get_remote_address
-
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=getattr(cfg, "cors_allowed_origins", ["*"]),
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-        limiter = Limiter(key_func=get_remote_address)
-        app.state.limiter = limiter
-        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-        if not getattr(cfg, "sra_api_key", None):
-            logger.warning(
-                "SRA_API_KEY não configurada. Rotas /api/v2 sem autenticação. "
-                "Defina SRA_API_KEY no .env para uso em produção."
-            )
-    except Exception as exc:  # pragma: no cover - defensivo
-        logger.warning("mcp_server: não foi possível aplicar segurança REST: %s", exc)
-
-
 def create_app(config: Config | None = None) -> FastAPI:
     """Cria uma instância independente do servidor MCP do Smart Research Agent.
 
@@ -196,14 +149,37 @@ def create_app(config: Config | None = None) -> FastAPI:
     Returns:
         FastAPI: Aplicação pronta para servir via uvicorn/ASGI.
     """
-    app = FastAPI(title="Smart Research Agent MCP Server")
-
     cfg = config or Config()
+
+    # P0-2: fail-fast — em produção, exige SRA_API_KEY e CORS restrito.
+    cfg.validate_production()
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Bloco 13 / E8-T1: expõe as métricas Prometheus em :8001/metrics para o
+        # Grafana fazer scrape. Fail-open: se o prometheus_client não estiver
+        # instalado ou a porta estiver ocupada, apenas loga e segue. Idempotente
+        # (start_metrics_server guarda contra múltiplos tenants no mesmo processo).
+        try:
+            from src.observability.metrics import start_metrics_server
+
+            start_metrics_server(port=8001)
+        except Exception as exc:  # pragma: no cover - defensivo
+            logger.warning("MCP Server: não foi possível subir Metrics Server: %s", exc)
+        yield
+        logger.info("MCP Server: Encerrando conexões no shutdown...")
+        await app.state.container.close()
+
+    app = FastAPI(title="Smart Research Agent MCP Server", lifespan=lifespan)
 
     # ── Segurança REST (Plano Parte 3 — Fase 1, §15.2) ──
     # Aplica no servidor oficial as mesmas defesas já existentes em api/main.py:
     # CORS por env, rate limiting por IP (slowapi) e autenticação X-API-Key.
-    _apply_rest_security(app, cfg)
+    from api.security import apply_rest_security
+
+    apply_rest_security(app, cfg)
 
     container = DependencyContainer()
     container.register_instance("config", cfg)
@@ -234,24 +210,6 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     if os.path.isdir(_STATIC_DIR):
         app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
-
-    @app.on_event("startup")
-    async def startup_event():
-        # Bloco 13 / E8-T1: expõe as métricas Prometheus em :8001/metrics para o
-        # Grafana fazer scrape. Fail-open: se o prometheus_client não estiver
-        # instalado ou a porta estiver ocupada, apenas loga e segue. Idempotente
-        # (start_metrics_server guarda contra múltiplos tenants no mesmo processo).
-        try:
-            from src.observability.metrics import start_metrics_server
-
-            start_metrics_server(port=8001)
-        except Exception as exc:  # pragma: no cover - defensivo
-            logger.warning("MCP Server: não foi possível subir Metrics Server: %s", exc)
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        logger.info("MCP Server: Encerrando conexoes no shutdown...")
-        await app.state.container.close()
 
     _register_rest_endpoints(app)
     _register_mcp_tools(app)

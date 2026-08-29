@@ -10,6 +10,10 @@ Testa:
 """
 
 import pytest
+
+# Todos os testes neste módulo são de integração.
+pytestmark = pytest.mark.integration
+
 from unittest.mock import MagicMock, patch, AsyncMock
 
 from src.evaluation.trulens_integration import (

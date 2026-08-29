@@ -7,6 +7,10 @@ FeedbackRanker.apply() → combined_score alterado funciona de ponta a ponta.
 Este teste teria pego o bug dos IDs incompatíveis imediatamente.
 """
 import pytest
+
+# Todos os testes neste módulo são de integração.
+pytestmark = pytest.mark.integration
+
 import tempfile
 from datetime import datetime
 

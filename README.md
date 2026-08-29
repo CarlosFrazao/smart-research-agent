@@ -54,7 +54,7 @@ docker-compose up -d
 ### 4. Configurar Variáveis de Ambiente (`.env`)
 Configure chaves de API, endereços de bancos de dados (Redis, ChromaDB, KuzuDB) e credenciais no arquivo `.env`.
 
-> **Configuração de pesos e fontes (`config/`):** Os arquivos `config/scoring_weights.yaml` e `config/sources.yaml` são **documentação de referência de design** e **NÃO são lidos por nenhum código**. Os pesos reais do ranker híbrido vivem em constantes hardcoded em `src/ranking/hybrid_ranker.py` (`DEFAULT_BM25_WEIGHT`, etc., em `HybridRankerConfig`), e os searchers são instanciados pela `SearcherFactory` (`src/search/factory.py`). Para alterar pesos/fontes reais, edite esses módulos — não estes YAMLs. (Ver `MISSAO_PARTE2_FASE2_CONFIG_E_HITL.md`, Tarefa 2.1 — Opção B.)
+> **Configuração de pesos e fontes (`config/`):** Os arquivos `config/scoring_weights.yaml` e `config/sources.yaml` **são lidos em runtime** por `src/config_loader.py` (`load_scoring_weights()` com cache LRU) e aplicados pelo `HybridRanker` via `_apply_yaml_weights()` em `src/ranking/hybrid_ranker.py`. Para alterar os pesos de ranqueamento, edite `config/scoring_weights.yaml` — não há necessidade de recompilar código.
 
 > **Orquestrador padrão (v7.0+):** A partir da SRA v7.0, o **`ReActOrchestrator`** (loop dinâmico ReAct) é o orquestrador **padrão** — a flag `ENABLE_DYNAMIC_LOOP` tem `default=True`. Ele decide dinamicamente quais etapas do pipeline executar com base no contexto (confiança, lacunas, claims pendentes). Para reverter ao pipeline sequencial clássico (DAG fixo), defina `ENABLE_DYNAMIC_LOOP=false` no `.env`.
 
@@ -238,10 +238,16 @@ apenas em dev local.
 
 ### 3. Rate Limiting por IP
 
-Os endpoints de pesquisa aplicam rate limiting de **10 requisições/minuto por
-IP** (via `slowapi`). Exceder o limite retorna `429 Too Many Requests`. Ajuste
-o valor em `api/main.py` (decorador `@limiter.limit(...)`) conforme o custo
-esperado por requisição.
+Os endpoints de pesquisa aplicam rate limiting via `slowapi`. O limite padrão
+é **10 requisições/minuto por IP**. Ajuste o valor via variável de ambiente
+`SRA_RATE_LIMIT` (formato slowapi):
+
+```dotenv
+SRA_RATE_LIMIT=10/minute   # padrão
+SRA_RATE_LIMIT=100/hour   # para uso mais pesado
+```
+
+Exceder o limite retorna `429 Too Many Requests`.
 
 ### 4. Proxy Reverso (recomendado)
 
@@ -254,6 +260,24 @@ Não exponha o `uvicorn` diretamente. Coloque um proxy reverso (nginx ou Caddy)
 
 > ⚠️ A configuração padrão (sem `SRA_API_KEY`, CORS `*`) é apenas para
 > desenvolvimento local. Nunca a deixe assim em produção.
+
+### 5. Deploy em Produção
+
+Para produção, configure as variáveis de ambiente abaixo. O processo
+**recusa a inicialização** (`SystemExit`) se `SRA_ENV=production` e
+`SRA_API_KEY` estiver ausente ou se `CORS_ALLOWED_ORIGINS` contiver `*`:
+
+| Variável | Produção | Descrição |
+|---|---|---|
+| `SRA_ENV` | `production` | Ativa fail-fast security checks. |
+| `SRA_API_KEY` | **obrigatório** | Gere com `python -c "import secrets; print(secrets.token_urlsafe(32))"`. |
+| `CORS_ALLOWED_ORIGINS` | lista explícita | Ex: `https://app.exemplo.com,https://admin.exemplo.com`. Nunca `*`. |
+| `REDIS_PASSWORD` | **obrigatório** | Protege o serviço Redis via Docker Compose. |
+| `GRAFANA_ADMIN_PASSWORD` | **obrigatório** | Substitui o default `admin`. |
+
+**Injeção via segredos do Docker:** use `env_file` ou `--env-file` com um
+arquivo `.env.production` mantido fora do repositório (já no `.gitignore`).
+Para Kubernetes, use `Secrets` e mapeie como variáveis de ambiente no `Deployment`.
 
 ---
 
